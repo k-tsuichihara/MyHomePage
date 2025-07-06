@@ -1,0 +1,151 @@
+/*履歴書*/
+#rireki{
+	position:relative;
+	/*border:1px solid black;*/
+	float:left;
+	width:50%;
+	margin-left:130px;
+}
+.myphoto{
+	/*border:1px solid black;*/
+	width:30%;
+	height:auto;
+	margin:50px 40px 20px 40px;
+	float:right;
+	display:block;
+	position:relative;
+	padding:5px;
+}
+.psize{
+	width:90%;
+}
+.rirekihyo{
+	width:100%;
+	padding:5px;
+	margin-top:100px;
+}
+.rirekihyo th{
+	font-size:18px;
+	font-weight:normal;
+	text-align : center;
+	padding:5px;
+	background-color:#E4E4E4;
+}
+.rirekihyo td{
+	font-size:15px;
+	padding:10px 5px;
+	border-bottom:1px solid #e4e4e4;
+}
+/*資格*/
+#shikaku{
+	position:relative;
+	/*border:1px solid black;*/
+	float:right;
+	width:27%;
+	margin-right:100px;	
+}
+.sikakuhyou{
+	width:100%;
+	border : none;
+	margin-top:40px;
+}
+.sikakuhyou th{
+	font-size:18px;
+	font-weight:normal;
+	text-align : center;
+	padding:5px;
+	background-color:#E4E4E4;
+}
+.sikakuhyou td{
+	font-size:15px;
+	padding:10px 5px;
+	border-bottom:1px solid #e4e4e4;
+}
+
+/*********これからページ*************/
+/*************キャリアデザインの表***************/
+.career{
+	width:100%;
+	padding:5px;
+	margin-top:40px;
+}
+.career th{
+	font-size:18px;
+	font-weight:normal;
+	text-align : center;
+	padding:5px;
+	background-color:#E4E4E4;
+	
+}
+.career td{
+	font-size:15px;
+	padding:15px 5px;
+	text-align:center;
+	border-bottom:1px solid #e4e4e4;
+}
+/********とりたい資格表**********/
+.tShikaku{
+	width:100%;
+	border : none;
+	margin-top:40px;
+}
+.tShikaku th{
+	font-size:17px;
+	font-weight:normal;
+	text-align : center;
+	padding:5px;
+	background-color:#E4E4E4;
+}
+.tShikaku td{
+	font-size:15px;
+	padding:10px;
+	text-align:center;
+	border-bottom:1px solid #e4e4e4;
+}
+
+/**********みちしるべ**************/
+.t_photo{
+	width:100%;
+	/*border:1px solid black;*/
+	margin-top:40px;
+	padding-left:130px;
+	paddinf-right:150px;
+	display:inline-block;
+}
+.mozi{
+	width:40%;
+	float:left;
+	margin:30px;
+}
+.hitoPhoto{
+	width:100%;
+	border:1px solid black;
+}
+
+/***********標語、一文字表************/
+.Mozihyo{
+	width:100%;
+	/*border:1px solid black;*/
+	margin-top:40px;
+	padding-left:130px;
+	paddinf-right:150px;
+	display:inline-block;
+}
+.mozihyo{
+	width:80%;
+	margin-left:40px;
+}
+.mozihyo th{
+	font-size:17px;
+	font-weight:normal;
+	text-align : center;
+	padding:5px;
+	background-color:#E4E4E4;
+}
+.mozihyo td{
+	font-size:15px;
+	padding:10px;
+	text-align:center;
+	border-bottom:1px solid #e4e4e4;
+	
+}
