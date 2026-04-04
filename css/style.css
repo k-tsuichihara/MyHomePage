@@ -1,5 +1,27 @@
 @charset "utf-8";
-/***ヘッダー部分***/
+
+/* インラインスタイルから移行したクラス */
+html.scroll-hidden {
+	overflow-x: hidden;
+}
+
+.img-responsive {
+	width: 100%;
+	height: auto;
+}
+
+.img-responsive-lg {
+	width: 120%;
+	height: auto;
+}
+
+.footer-logo {
+	width: 100%;
+	height: auto;
+	padding-left: 30px;
+}
+
+/* ヘッダー部分 */
 .logo {
 	display : inline-block;
 	padding:10px;
@@ -139,7 +161,7 @@
 .dropmenu li:hover ul li:last-child a{
   border-radius: 0 0 3px 3px;
 }
-/***写真部分***/
+/* 写真部分 */
 #topPhoto{
 	width : 100vw;
 	height:auto;
@@ -151,7 +173,7 @@
 	height:auto;
 }
 
-/**お知らせ部分**/
+/* お知らせ部分 */
 #news{
 	width:60%;
 	float:left;
@@ -190,7 +212,7 @@
 	margin-left:300px;
 	
 }
-/**カウントダウン用**/
+/* カウントダウン用 */
 #countdown{
 	background-color:#484848;
 	width : 400px;
@@ -206,7 +228,7 @@
 	font-size:30px;
 	padding:15px;
 }
-/**メモ（リマインダー）**/
+/* メモ（リマインダー） */
 #memo{
 	float:right;
 	display : block;
@@ -218,7 +240,7 @@
 	bottom : 200px;
 }
 
-/**作品集（画像を流す）**/
+/* 作品集（画像を流す） */
 #workDis{
 	width:100vw;
 	height : auto;
@@ -226,7 +248,7 @@
 	
 }
 
-/**フッター**/
+/* フッター */
 #obi{
 	padding:5px;
 	width:100vw;
@@ -286,8 +308,8 @@
 	background-color:#e6e6e6;
 }
 
-/****下層ページ***/
-/**トップの写真**/
+/* 下層ページ */
+/* トップの写真 */
 .headerPhoto{
 	width : 100vw;
 	float:left;
