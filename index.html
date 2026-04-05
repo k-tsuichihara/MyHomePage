@@ -20,36 +20,48 @@
 	<header>
 		<div id="topPhoto">
 			<img src="images/lukas-blazek-GnvurwJsKaY-unsplash.jpg" alt="" class="photoSize">
+			<div class="hero-overlay">
+				<div class="hero-title">Kana Tsuichihara</div>
+				<div class="hero-subtitle">Portfolio</div>
+			</div>
 		</div>
 		<div class="fix-header">
 			<div class="fix-header-contents">
 			<!-- ロゴはfloat左寄せで表示 -->
+				<!-- ローカルはこのまま、ポートフォリオは差し替え--> 
 				<div id="fix-header-logo">
-				<a href="index.html"><img src="images/1_Primary_logo_on_transparent_172x71.png" alt="" class="img-responsive"></a>
+				<a href="index.html" class="site-brand">
+					<span class="brand-name">Kana Tsuichihara</span>
+					<span class="brand-subtitle">Portfolio</span>
+				</a>
 				</div>
 			<!-- メニューのブロックはfloatで右寄せ -->
 				<div id="fix-header-menus">
 					<ul class="menu">
-					<li><a href="aboutme/past.html">自分について</a></li>
-					<li><a href="works/digital.html">作品集</a></li>
-					<li><a href="links.html">リンク集</a></li>
+					<li><a href="aboutme/past.html">About Me</a></li>
+					<li><a href="works/digital.html">WORKS</a></li>
+				<li><a href="#">Tools</a></li>
 					</ul>
 				</div>
 			</div>
 		</div>
 		<nav id="menu_st">
 			<div class="logo">
-				<a href="index.html"><img src="images/1_Primary_logo_on_transparent_172x71.png" alt="" class="img-responsive-lg"></a>
+				<a href="index.html">
+					<!-- ローカルはこのまま、ポートフォリオは差し替え--> 
+					<div>Kana Tsuichihara<br>Portfolio</div>
+					<!--<img src="images/1_Primary_logo_on_transparent_172x71.png" alt="" class="img-responsive-lg">-->
+				</a>
 			</div>
 				<ul class="dropmenu">
-					<li><a href="#">自分について</a>
+					<li><a href="#">About Me</a>
 						<ul>
 								<li><a href="aboutme/past.html">いままで</a></li>
 								<li><a href="aboutme/future.html">これから</a></li>
 								<li><a href="aboutme/token.html">みちしるべ</a></li>
 						</ul>
 					</li>
-					<li><a href="#">作品集</a>
+					<li><a href="#">WORKS</a>
 						<ul>
 								<li><a href="works/digital.html">デジタル</a></li>
 								<li><a href="works/handmade.html">ハンドメイド</a></li>
@@ -58,63 +70,57 @@
 								<li><a href="works/photo.html">シャシン</a></li>
 						</ul>
 					</li>
-					<li><a href="links.html" class="linkoff">リンク集</a></li>
+					<li><a href="#" class="linkoff">Tools</a></li>
 				</ul>
 		</nav>
 	</header>
 	<main>
-		<div id="news">
-			<div class="osirase">
-				お知らせ
-			</div>
+		<section id="content-grid">
+			<section id="news" class="panel">
+				<div class="panel-header">
+					<h2>Update Info</h2>
+					<p>WORKSやToolsの更新日時をここに表示します。</p>
+				</div>
 				<div class="newsbox">
 					<div class="newscate">カテゴリ</div>
-					<div class="newsday">日付 </div>
+					<div class="newsday">日付</div>
 					<div class="newssen">本文</div>
 				</div>
 				<div class="newsbox">
 					<div class="newscate">カテゴリ</div>
-					<div class="newsday">日付 </div>
+					<div class="newsday">日付</div>
 					<div class="newssen">本文</div>
 				</div>
 				<div class="newsbox">
 					<div class="newscate">カテゴリ</div>
-					<div class="newsday">日付 </div>
+					<div class="newsday">日付</div>
 					<div class="newssen">本文</div>
 				</div>
 				<div class="newsbox">
 					<div class="newscate">カテゴリ</div>
-					<div class="newsday">日付 </div>
+					<div class="newsday">日付</div>
 					<div class="newssen">本文</div>
 				</div>
 				<div id="motto">もっと見る</div>
-		</div>
-		<aside id="countdown">
-			<div class="couTex">カウントダウン用<br>あと00：00：00<br></div>
-		</aside>
-	  	<aside id="memo">新規 aside タグの内容がここに入ります</aside>
-		<div id="workDis">
-			作品の画像集
-		</div>
+			</section>
+			<section id="work-panel" class="panel">
+				<div class="panel-header">
+					<h2>WORKS Preview</h2>
+					<p>ここにはWORKSの画像を表示します。</p>
+				</div>
+				<div class="work-preview">
+					<img src="images/lukas-blazek-GnvurwJsKaY-unsplash.jpg" alt="WORKS preview" class="work-image">
+				</div>
+			</section>
+		</section>
     </main>
 	<footer>
 		<div id="obi">
-			<div class="logo">
-				<img src="images/1_Primary_logo_on_transparent_172x71.png" alt="" class="footer-logo">
-				<div class="sakuseisya">作成者　：　Kana Tsuichihara</div>
-			</div>
-			<div class="toiawase">
-				<div class="toiawase-s">
-					お問い合わせはこちらから
-				</div>
-				<a href="otoiawase.html" alt="">
-					<div class="otoiawase-b">
-						お問い合わせ　＞
-					</div>
-				</a>
+			<div class="footer-content">
+				<div class="footer-title">Kana Tsuichihara Portfolio</div>
+				<div class="footer-tagline">Learning by building</div>
 			</div>
 		</div>
-		<div class="cpr">copyright sonnamonhanee Thank you!</div>
 	</footer>
 <script src="js/jquery-3.5.0.min.js"></script>
 <script src="js/popper.min.js"></script>
