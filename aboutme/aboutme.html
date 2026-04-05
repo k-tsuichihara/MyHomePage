@@ -1,239 +1,324 @@
 <!DOCTYPE html>
-<html lang ="ja" style="overflow-x :hidden;">
+<html lang="ja" class="scroll-hidden">
 
 <!--ヘッダー-->
 <head>
 <meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>いままで</title>
+	<title>About Me</title>
+	<meta name="description" content="Kana Tsuichihara の自己紹介ページ">
 	<meta name="author" content="Kana Tsuichihara">
 
 	<!--Bootstrap-->
-	<link href ="../css/style.css" rel="stylesheet" type="text/css">
-	<link href ="css/style.css" rel="stylesheet" type="text/css">
-	<link href ="../css/kasou_menu.css" rel="stylesheet" type="text/css">
-	<link href ="../css/bootstrap-4.0.0.css" rel="stylesheet">
+	<link href="../css/style.css" rel="stylesheet" type="text/css">
+	<link href="../css/bootstrap-4.0.0.css" rel="stylesheet">
+	<style>
+		/* Keep aboutme overlay menu consistent with index styles. */
+		#menu_st .dropmenu li a {
+			padding: 14px 24px;
+			line-height: 1.2;
+			font-size: 21px;
+			color: #fff;
+			background: rgba(0, 0, 0, 0.32);
+		}
+		#menu_st .dropmenu li:hover > a {
+			color: #fff;
+			background: rgba(0, 0, 0, 0.42);
+		}
+		#topPhoto {
+			min-height: 0;
+			height: auto;
+		}
+		#topPhoto .photoSize {
+			height: auto;
+			object-fit: cover;
+		}
+		#main {
+			width: 100%;
+			max-width: 1200px;
+			margin: 24px auto 40px;
+			padding: 0 16px;
+			float: none;
+			display: block;
+			top: 0 !important;
+			margin-top: 0 !important;
+			padding-top: 0;
+			margin-bottom: 40px;
+		}
+		#main::after {
+			content: "";
+			display: block;
+			clear: both;
+		}
+		.about-grid {
+			display: grid;
+			grid-template-columns: 1.25fr 1fr;
+			gap: 24px;
+			align-items: start;
+		}
+		.about-card {
+			background: #fff;
+			border-radius: 20px;
+			box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+			padding: 24px;
+		}
+		.about-card .title {
+			margin-top: 0;
+		}
+		.intro-profile {
+			display: flex;
+			justify-content: center;
+			margin: 18px 0 8px;
+		}
+		.intro-profile-image {
+			width: min(260px, 100%);
+			height: auto;
+			border-radius: 14px;
+		}
+		.intro-facts {
+			margin-top: 14px;
+		}
+		.intro-fact {
+			display: flex;
+			gap: 10px;
+			padding: 6px 0;
+		}
+		.intro-label {
+			min-width: 90px;
+			font-weight: 700;
+		}
+		.skill-list {
+			margin: 8px 0 0;
+			padding-left: 18px;
+		}
+		.skill-list li {
+			margin: 8px 0;
+		}
+		.pr-text {
+			margin: 10px 0 0;
+			line-height: 1.9;
+		}
+		main {
+			margin-top: 0;
+			padding-top: 0;
+		}
+		@media screen and (max-width: 1100px) {
+			.about-grid {
+				grid-template-columns: 1fr;
+			}
+			.about-card {
+				padding: 20px;
+			}
+		}
+	</style>
 	
 </head>
 <body>
-	<header style="position:relative;">
+	<header>
+		<div id="topPhoto">
+			<img src="../images/past_head.jpeg" alt="About Me header" class="photoSize">
+			<div class="hero-overlay">
+				<div class="hero-title">About Me</div>
+			</div>
+		</div>
 		<div class="fix-header">
 			<div class="fix-header-contents">
-			<!-- ロゴはfloat左寄せで表示 -->
 				<div id="fix-header-logo">
-					<a href="../index.html"><img src="../images/1_Primary_logo_on_transparent_172x71.png" alt="" style="width : 100%; height : auto;"></a>
+					<a href="../index.html" class="site-brand">
+						<span class="brand-name">Kana Tsuichihara</span>
+						<span class="brand-subtitle">Portfolio</span>
+					</a>
 				</div>
-			<!-- メニューのブロックはfloatで右寄せ -->
 				<div id="fix-header-menus">
 					<ul class="menu">
-					<li><a href ="aboutme.html" >自分について</a></li>
-					<li><a href="../works/works.html">作品集</a></li>
-					<li><a href="#">リンク集</a></li>
+						<li><a href="aboutme.html">About Me</a></li>
+						<li><a href="../works/works.html">WORKS</a></li>
+						<li><a href="#">Tools</a></li>
 					</ul>
 				</div>
 			</div>
 		</div>
-		<nav id ="menu_st">
-			<div class="back">
-			<div class="logo">
-				<a href="../index.html"><img src="../images/1_Primary_logo_on_transparent_172x71.png" alt="" style="width : 120%; height : auto;"></a>
-			</div>
-				<ul class="dropmenu">
-					<li><a href ="#">自分について</a>
-						<ul>
-							<li><a href ="aboutme.html" >いままで</a></li>
-							<li><a href ="#" >これから</a></li>
-							<li><a href ="#" >みちしるべ</a></li>
-						</ul>
-					</li>
-					<li><a href="#">作品集</a>
-						<ul>
-							<li><a href ="../works/works.html" >一覧へ</a></li>
-						</ul>
-					</li>
-					<li><a href="#" class="linkoff">リンク集</a></li>
-				</ul>
-			</div>
+		<nav id="menu_st">
+			<ul class="dropmenu">
+				<li><a href="aboutme.html">About Me</a></li>
+				<li><a href="../works/works.html">WORKS</a></li>
+				<li><a href="#">Tools</a></li>
+			</ul>
 		</nav>
-		<div class="pankuzu" style="background-color:#EBEBEB;">
-				<div class="toppage">トップページ</div>
-				<div class="aboutme">私について</div>
-				<div class ="past">いままで</div>
-		</div>
 	</header>
+
 	<main>
-		<div id ="main">
-		<div class="headerPhoto">
-			<img src="images/past_head.jpeg" alt="" class="hPhoto">
-		</div>
-			<div id="rireki">
+		<div id="main">
+			<div class="about-grid">
+				<section class="about-card">
 					<div class="title">自己紹介</div>
-					<div class="myphoto">
-						<img src="images/myphoto.webp" alt="" class="psize">
+					<div class="intro-profile">
+						<img src="../images/myphoto.webp" alt="プロフィール写真" class="intro-profile-image">
 					</div>
-				<div class="contentbox" style="margin-top:50px;">
-					<div class="middle">名前：</div>
-					<div class="middle">築地原佳奈</div>
-				</div>
-				<div class="contentbox">
-					<div class="middle">生年月日 : </div>
-					<div class="middle">1997年（平成9年）9月23日</div>
-				</div>
-				<div class="contentbox">
-					<div class="middle">居場所 : </div>
-					<div class="middle">福岡⇒長崎⇒大阪</div>
-				</div>
-				<div class="contentbox">
-					<div class="middle">一言 : </div>
-					<div class="middle">ハシビロコウはかわいい</div>
-				</div>
-				
-				<!--履歴表-->
-				<table class="rirekihyo">
-					<tr>
-						<th>年</th>
-						<th>月</th>
-						<th>学歴・職歴</th>
-					</tr>
-					<tr>
-						<td>2010(平成22年)</td>
-						<td>3</td>
-						<td>みやま市立山川小学校　卒業</td>
-					</tr>
-					<tr>
-						<td>2010(平成22年)</td>
-						<td>4</td>
-						<td>みやま市立山川中学校　入学</td>
-					</tr>
-					<tr>
-						<td>2013(平成25年)</td>
-						<td>3</td>
-						<td>みやま市立山川中学校　卒業</td>
-					</tr>
-					<tr>
-						<td>2013(平成25年)</td>
-						<td>4</td>
-						<td>福岡県立伝習館高等学校　入学</td>
-					</tr>
-					<tr>
-						<td>2016(平成28年)</td>
-						<td>3</td>
-						<td>福岡県立伝習館高等学校　卒業</td>
-					</tr>
-					<tr>
-						<td>2016(平成28年)</td>
-						<td>4</td>
-						<td>長崎県立大学　情報システム学部情報システム学科　入学</td>
-					</tr>
-					<tr>
-						<td>2020(令和2年)</td>
-						<td>3</td>
-						<td>長崎県立大学　情報システム学部情報システム学科　卒業</td>
-					</tr>
-					<tr>
-						<td>2020(令和2年)</td>
-						<td>4</td>
-						<td>アバンテック株式会社　入社</td>
-					</tr>
-				</table>
-			</div>
-			<div id="shikaku">
-				<div class="title">所有資格一覧</div>
-				<table class="sikakuhyou">
-					<tr>
-						<th>資格名</th>
-						<th>取得年</th>
-						<th>月</th>
-					</tr>
-					<tr>
-						<td>ITパスポート</td>
-						<td>2016（平成28年)</td>
-						<td>8</td>
-					</tr>
-					<tr>
-						<td>漢字検定　2級</td>
-						<td>2016（平成28年)</td>
-						<td>9</td>
-					</tr>
-					<tr>
-						<td>MOS 2013<br> Excelスペシャリスト</td>
-						<td>2017（平成29年)</td>
-						<td>5</td>
-					</tr>
-					<tr>
-						<td>MOS 2013<br> Wordスペシャリスト</td>
-						<td>2017（平成29年)</td>
-						<td>5</td>
-					</tr>
-					<tr>
-						<td>基本情報技術者試験</td>
-						<td>2018（平成30年)</td>
-						<td>4</td>
-					</tr>
-					<tr>
-						<td>普通車AT限定　運転免許</td>
-						<td>2019（令和元年)</td>
-						<td>4</td>
-					</tr>
-					<tr>
-						<td>TOEIC<br>(最高スコア)　770</td>
-						<td>2019（令和元年)</td>
-						<td>9</td>
-					</tr>
-					<tr>
-						<td>色彩検定　2級</td>
-						<td>2019（令和元年)</td>
-						<td>10</td>
-					</tr>
-					<tr>
-						<td>CG-ARTS協会<br>CGクリエイター検定<br>エキスパート</td>
-						<td>2019（令和元年)</td>
-						<td>11</td>
-					</tr>
-					<tr>
-						<td>秘書検定　2級</td>
-						<td>2020（令和2年)</td>
-						<td>2</td>
-					</tr>
-					<tr>
-						<td>応用情報技術者試験</td>
-						<td>2020（令和2年)</td>
-						<td>10</td>
-					</tr>
-					<tr>
-						<td>CGエンジニア　エキスパート</td>
-						<td>2021（令和3年)</td>
-						<td>7</td>
-					</tr>
-					<tr>
-						<td>FP3級</td>
-						<td>2023（令和5年)</td>
-						<td>5</td>
-					</tr>
-				</table>
+					<div class="intro-facts">
+						<div class="intro-fact"><span class="intro-label">名前：</span><span>築地原佳奈</span></div>
+						<div class="intro-fact"><span class="intro-label">生年月日：</span><span>1997年（平成9年）9月23日</span></div>
+						<div class="intro-fact"><span class="intro-label">居場所：</span><span>福岡⇒長崎⇒大阪</span></div>
+						<div class="intro-fact"><span class="intro-label">一言：</span><span>ハシビロコウはかわいい</span></div>
+					</div>
+					<table class="rirekihyo">
+						<tr>
+							<th>年</th>
+							<th>月</th>
+							<th>学歴・職歴</th>
+						</tr>
+						<tr>
+							<td>2010(平成22年)</td>
+							<td>3</td>
+							<td>みやま市立山川小学校 卒業</td>
+						</tr>
+						<tr>
+							<td>2010(平成22年)</td>
+							<td>4</td>
+							<td>みやま市立山川中学校 入学</td>
+						</tr>
+						<tr>
+							<td>2013(平成25年)</td>
+							<td>3</td>
+							<td>みやま市立山川中学校 卒業</td>
+						</tr>
+						<tr>
+							<td>2013(平成25年)</td>
+							<td>4</td>
+							<td>福岡県立伝習館高等学校 入学</td>
+						</tr>
+						<tr>
+							<td>2016(平成28年)</td>
+							<td>3</td>
+							<td>福岡県立伝習館高等学校 卒業</td>
+						</tr>
+						<tr>
+							<td>2016(平成28年)</td>
+							<td>4</td>
+							<td>長崎県立大学 情報システム学部情報システム学科 入学</td>
+						</tr>
+						<tr>
+							<td>2020(令和2年)</td>
+							<td>3</td>
+							<td>長崎県立大学 情報システム学部情報システム学科 卒業</td>
+						</tr>
+						<tr>
+							<td>2020(令和2年)</td>
+							<td>4</td>
+							<td>アバンテック株式会社 入社</td>
+						</tr>
+					</table>
+				</section>
+
+				<section class="about-card">
+					<div class="title">スキルセット</div>
+					<ul class="skill-list">
+						<li>HTML / CSS / JavaScript の基本実装</li>
+						<li>Python を使ったツール作成</li>
+						<li>情報設計とレイアウト改善</li>
+						<li>画像編集・デザイン調整（色彩検定2級の知見）</li>
+						<li>継続的な学習と改善サイクル</li>
+					</ul>
+				</section>
+
+				<section class="about-card">
+					<div class="title">所有資格一覧</div>
+					<table class="sikakuhyou">
+						<tr>
+							<th>資格名</th>
+							<th>取得年</th>
+							<th>月</th>
+						</tr>
+						<tr>
+							<td>ITパスポート</td>
+							<td>2016（平成28年)</td>
+							<td>8</td>
+						</tr>
+						<tr>
+							<td>漢字検定 2級</td>
+							<td>2016（平成28年)</td>
+							<td>9</td>
+						</tr>
+						<tr>
+							<td>MOS 2013<br>Excelスペシャリスト</td>
+							<td>2017（平成29年)</td>
+							<td>5</td>
+						</tr>
+						<tr>
+							<td>MOS 2013<br>Wordスペシャリスト</td>
+							<td>2017（平成29年)</td>
+							<td>5</td>
+						</tr>
+						<tr>
+							<td>基本情報技術者試験</td>
+							<td>2018（平成30年)</td>
+							<td>4</td>
+						</tr>
+						<tr>
+							<td>普通車AT限定 運転免許</td>
+							<td>2019（令和元年)</td>
+							<td>4</td>
+						</tr>
+						<tr>
+							<td>TOEIC<br>(最高スコア) 770</td>
+							<td>2019（令和元年)</td>
+							<td>9</td>
+						</tr>
+						<tr>
+							<td>色彩検定 2級</td>
+							<td>2019（令和元年)</td>
+							<td>10</td>
+						</tr>
+						<tr>
+							<td>CG-ARTS協会<br>CGクリエイター検定<br>エキスパート</td>
+							<td>2019（令和元年)</td>
+							<td>11</td>
+						</tr>
+						<tr>
+							<td>秘書検定 2級</td>
+							<td>2020（令和2年)</td>
+							<td>2</td>
+						</tr>
+						<tr>
+							<td>応用情報技術者試験</td>
+							<td>2020（令和2年)</td>
+							<td>10</td>
+						</tr>
+						<tr>
+							<td>CGエンジニア エキスパート</td>
+							<td>2021（令和3年)</td>
+							<td>7</td>
+						</tr>
+						<tr>
+							<td>FP3級</td>
+							<td>2023（令和5年)</td>
+							<td>5</td>
+						</tr>
+					</table>
+				</section>
+
+				<section class="about-card">
+					<div class="title">自己PR</div>
+					<p class="pr-text">
+						「まず作ってみる」「使いながら改善する」を大切にしています。<br>
+						学習した内容を手を動かして形にし、課題を見つけて改修するサイクルを継続しています。<br>
+						相手に伝わる設計と、見やすく使いやすいUIづくりを今後も磨いていきます。
+					</p>
+				</section>
 			</div>
 		</div>
     </main>
+
 	<footer>
 		<div id="obi">
-			<div class="logo">
-				<img src="images/1_Primary_logo_on_transparent_172x71.png" alt="" style="width : 100%; height : auto; padding-left:30px;">
-				<div class ="sakuseisya">作成者　：　Kana Tsuichihara</div>
-			</div>
-			<div class="toiawase">
-				<div class="toiawase-s">
-					お問い合わせはこちらから
-				</div>
-				<a href ="otoiawase.html" alt="">
-					<div class="otoiawase-b">
-						お問い合わせ　＞
-					</div
-				</a>
+			<div class="footer-content">
+				<div class="footer-title">Kana Tsuichihara Portfolio</div>
+				<div class="footer-tagline">Learning by building</div>
 			</div>
 		</div>
-		<div class="cpr">copyright sonnamonhanee Thank you!</div>
 	</footer>
+
 <script src="../js/jquery-3.5.0.min.js"></script>
 <script src="../js/popper.min.js"></script>
 <script src="../js/menuScroll.js"></script>
