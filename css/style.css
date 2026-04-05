@@ -440,11 +440,17 @@ header {
 
 	#content-grid {
 		grid-template-columns: 1fr;
-		padding: 24px 16px 40px;
+		padding: 12px 16px 40px;
 	}
 
 	#topPhoto {
-		min-height: 420px;
+		min-height: 0;
+		height: auto;
+	}
+
+	#topPhoto .photoSize {
+		height: auto;
+		object-fit: contain;
 	}
 
 	#news,
