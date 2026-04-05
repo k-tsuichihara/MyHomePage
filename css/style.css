@@ -405,12 +405,7 @@ header {
 	}
 
 	#menu_st {
-		position: absolute;
-		top: 18px;
-		left: 0;
-		right: 0;
-		width: 100%;
-		padding: 0 12px;
+		display: none;
 	}
 
 	.dropmenu {
@@ -492,7 +487,7 @@ header {
 	}
 
 	#menu_st {
-		margin-bottom: 10px;
+		display: none;
 	}
 }
 /* カウントダウン用 */
