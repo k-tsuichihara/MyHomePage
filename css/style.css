@@ -372,13 +372,6 @@ header {
 	height: auto;
 	border-radius: 16px;
 }
-.footer-tagline {
-	margin-top: 18px;
-	text-align: center;
-	font-size: 0.95rem;
-	color: #444;
-	opacity: 0.85;
-}
 @media screen and (max-width: 900px) {
 	.fix-header-contents {
 		flex-direction: row;
