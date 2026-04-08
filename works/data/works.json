@@ -1,0 +1,138 @@
+[
+{
+    "id": "template-000",
+    "title": "テンプレート（この行は表示されません）",
+    "tech": ["HTML", "CSS", "JavaScript"],
+    "background": "ここに背景/課題内容を書きます。",
+    "description": "ここに紹介文を書きます。",
+    "images": [
+      "../images/work-001-01.jpg",
+      "../images/work-001-02.jpg"
+    ],
+    "publishedAt": "YYYY-MM-DD",
+    "published": false,
+    "howTo": "1件追加するときは、このテンプレートを複製して id / title / tech / background / description / images / publishedAt を埋め、published を true に変更してください。images は最大6件。見切れ対策は fitIndices に contain 指定したい画像の番号（0始まり）を入れます（例: [0,2]）。"
+  },
+  {
+    "id": "works-0008",
+    "title": "本番リリース時のチェックシート及びCSVデータ作成シート",
+    "tech": ["VBA(Excel)"],
+    "background": "新卒時、ユーザー情報の変更業務を日次で対応しており、チェック項目が多く、手作業によるミスや対応漏れのリスクがありました。\nまた、リモートワーク環境下での作業が多く、確認・相談が即時に行えない状況でした。\nそのため、作業手順およびチェック内容を整理し、対応漏れやミスを防止する仕組みが必要と考え、ツールを作成しました。",
+    "description": "※情報漏洩の観点から詳細な項目等は伏せています。\n対象ユーザーの情報を入力後、定義したSTEPに従って作業を進めることで、作業状況を一元管理できるチェックシートを作成しました。\n各STEPごとに「未対応 / 作業中 / 完了」のステータスを設定し、環境ごとの対応状況を可視化することで、リリース漏れの防止を実現しています。\nまた、追加対応が必要なケースについては個別のチェック項目として管理し、対応不要の場合は理由を選択できる仕組みとすることで、判断基準の統一と作業効率の向上を図りました。",
+    "images": [
+      "images/0008-01.png",
+      "images/0008-02.png",
+      "images/0008-03.png",
+      "images/0008-04.png"
+    ],
+    "fitIndices": [0, 1, 2, 3],
+    "publishedAt": "2022-1-31",
+    "published": true
+  },
+  {
+    "id": "works-0007",
+    "title": "大学卒業時のポートフォリオ",
+    "tech": ["Shade3D"],
+    "background": "大学生時代に授業で作成した課題を集めたポートフォリオ集",
+    "description": "大学で作ったCGなどをあつめたポートフォリオ集。本来は紙媒体で見れるよう製本したものがありますが、ここではページの一部のみを掲載します。",
+    "images": [
+      "images/0007-01.jpg",
+      "images/0007-02.jpg",
+      "images/0007-03.jpg",
+      "images/0007-04.jpg"
+    ],
+    "fitIndices": [0, 1, 2, 3],
+    "publishedAt": "2019-3-24",
+    "published": true
+  },
+  {
+    "id": "works-0006",
+    "title": "某アニメの家の3Dモデル",
+    "tech": ["Shade3D"],
+    "background": "大学生時代に授業で作成した課題。",
+    "description": "授業で作った作品。某アニメの家を作りました。家の中までは作りこめていませんが、アニメ内で映り込んだ外観部分はしっかり作っています。（家の右側は隣の家があって見えなかったので窓がありませんが...。）",
+    "images": [
+      "images/0006-01.jpg",
+      "images/0006-02.jpg",
+      "images/0006-03.jpg"
+    ],
+    "fitIndices": [],
+    "publishedAt": "2017-12-1",
+    "published": true
+  },
+  {
+    "id": "works-0005",
+    "title": "日本家屋の3Dモデル",
+    "tech": ["CG(MAYA)"],
+    "background": "大学生時代に授業で作成した課題。",
+    "description": "授業で作った作品。とある日本家屋をモチーフとして外観と内観を作っています。映りこんでいる生き物は...？",
+    "images": [
+      "images/0005-01.jpg",
+      "images/0005-02.jpg",
+      "images/0005-03.jpg",
+      "images/0005-04.jpg",
+      "images/0005-05.jpg",
+      "images/0005-06.jpg"
+    ],
+    "fitIndices": [],
+    "publishedAt": "2019-3-11",
+    "published": true
+  },
+  {
+    "id": "works-0004",
+    "title": "メカモンスター襲来",
+    "tech": ["CG(MAYA)"],
+    "background": "大学生時代に授業で作成した課題。",
+    "description": "授業で作った作品。メカモンスター自体は「メカゴジラ」をモチーフに作成、モンスターの動きは同級生のモーションをキャプチャーしてつけています。レンダリングに使用したPCのスペックが悪かったため、画質は粗目になっているところがおしいところです。",
+    "images": [
+      "images/0004-01.png",
+      "images/0004-02.png",
+      "images/0004-03.png",
+      "images/0004-04.mp4"
+    ],
+    "fitIndices": [],
+    "publishedAt": "2019-1-27",
+    "published": true
+  },
+  {
+    "id": "works-0003",
+    "title": "作成した画像集",
+    "tech": ["photoshop","illustrator"],
+    "background": "大学生時代に授業で作成した課題。",
+    "description": "授業でphotoshopやillustratorを使うことがあったので、個人的に作成した合成画像集です。ふざけて作ったものがほとんどです。",
+    "images": [
+      "images/0003-01.png",
+      "images/0003-04.jpg",
+      "images/0003-03.jpg"
+    ],
+    "fitIndices": [0, 2],
+    "publishedAt": "2020-3-11",
+    "published": true
+  },
+  {
+    "id": "works-0002",
+    "title": "某リズムゲームの再現",
+    "tech": ["VRML"],
+    "background": "大学生時代に授業で作成した課題。",
+    "description": "Webで動く3DCGであるVRML（今となってはあまりない？）を使って大学自体に作成した作品。当時ハマっていた某リズムゲームの画面を再現してみました。ちなみに、VRMLはコードで3Dを作る技術だそうです。今となっては古いものとなってしまったので、ブラウザでアニメーションを再生することもできなくなりました...。",
+    "images": [
+      "images/0002-01.jpg",
+      "images/0002-02.jpg"
+    ],
+    "publishedAt": "2018-7-31",
+    "published": true
+  },
+  {
+    "id": "works-0001",
+    "title": "アームjr",
+    "tech": ["CG(Maya)"],
+    "background": "大学生時代に授業で作成した課題。",
+    "description": "アームはMayaのテンプレートでアニメーションだけつけました。（2枚目に動画があります。）「ルクソーjr」をイメージして作成しています。",
+    "images": [
+    "images/0001-01.png",
+    "images/0001-02.mp4"
+    ],
+    "publishedAt": "2018-8-11",
+    "published": true
+  }
+]

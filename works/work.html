@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-hidden">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WORKS Detail</title>
+  <meta name="description" content="作品詳細ページ">
+  <link href="../css/style.css" rel="stylesheet" type="text/css">
+  <link href="../css/bootstrap-4.0.0.css" rel="stylesheet">
+  <link href="css/works.css" rel="stylesheet" type="text/css">
+</head>
+<body>
+  <header>
+    <div id="topPhoto">
+      <img src="../images/digitalHeader.jpg" alt="WORKS header" class="photoSize">
+      <div class="hero-overlay">
+        <div class="hero-title">WORKS</div>
+        <div class="hero-subtitle">Detail</div>
+      </div>
+    </div>
+    <div class="fix-header">
+      <div class="fix-header-contents">
+        <div id="fix-header-logo">
+          <a href="../index.html" class="site-brand">
+            <span class="brand-name">Kana Tsuichihara</span>
+            <span class="brand-subtitle">Portfolio</span>
+          </a>
+        </div>
+        <div id="fix-header-menus">
+          <ul class="menu">
+            <li><a href="../aboutme/aboutme.html">About Me</a></li>
+            <li><a href="works.html">WORKS</a></li>
+            <li><a href="#">Tools</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <nav id="menu_st">
+      <ul class="dropmenu">
+        <li><a href="../aboutme/aboutme.html">About Me</a></li>
+        <li><a href="works.html">WORKS</a></li>
+        <li><a href="#">Tools</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main class="works-main">
+    <section class="works-panel">
+      <div class="panel-header">
+        <h1 id="work-title">作品詳細</h1>
+        <div class="work-meta-row">
+          <p id="work-tech" class="work-tech-line">-</p>
+          <p id="work-date" class="work-date-line">公開日: -</p>
+        </div>
+      </div>
+      <div class="work-detail-layout">
+        <div>
+          <div class="work-gallery-main-wrap">
+            <button id="work-prev" class="work-gallery-arrow work-gallery-prev" type="button" aria-label="前の画像">&#8249;</button>
+            <img id="work-main-image" class="work-gallery-main" src="../images/digitalHeader.jpg" alt="work image">
+            <video id="work-main-video" class="work-gallery-main" controls muted playsinline preload="metadata" hidden></video>
+            <button id="work-next" class="work-gallery-arrow work-gallery-next" type="button" aria-label="次の画像">&#8250;</button>
+          </div>
+          <p id="work-media-note" class="work-media-note" hidden>この動画形式はブラウザで再生できない可能性があります（mp4/webm 推奨）。</p>
+          <div id="work-thumbs" class="work-gallery-thumbs"></div>
+        </div>
+        <div>
+          <h2>背景 / 課題内容</h2>
+          <p id="work-background">-</p>
+          <h2>紹介文</h2>
+          <p id="work-description">-</p>
+          <div class="work-back-link-wrap">
+            <a class="work-back-link" href="works.html">一覧へ戻る</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="work-zoom-modal" class="work-zoom-modal" hidden>
+    <div id="work-zoom-backdrop" class="work-zoom-backdrop"></div>
+    <div class="work-zoom-dialog" role="dialog" aria-modal="true" aria-label="拡大画像">
+      <button id="work-zoom-close" class="work-zoom-close" type="button" aria-label="閉じる">&times;</button>
+      <img id="work-zoom-image" class="work-zoom-image" src="" alt="拡大画像">
+    </div>
+  </div>
+
+  <footer>
+    <div id="obi">
+      <div class="footer-content">
+        <div class="footer-title">Kana Tsuichihara Portfolio</div>
+        <div class="footer-tagline">Learning by building</div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="../js/jquery-3.5.0.min.js"></script>
+  <script src="../js/popper.min.js"></script>
+  <script src="../js/menuScroll.js"></script>
+  <script src="js/work-detail.js?v=20260408-2"></script>
+</body>
+</html>
