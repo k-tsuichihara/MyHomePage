@@ -100,10 +100,13 @@
 			<section id="work-panel" class="panel">
 				<div class="panel-header">
 					<h2>WORKS Preview</h2>
-					<p>ここにはWORKSの画像を表示します。</p>
+					<p>WORKSの画像をランダムで表示します（クリックで詳細へ）。</p>
 				</div>
 				<div class="work-preview">
-					<img src="images/lukas-blazek-GnvurwJsKaY-unsplash.jpg" alt="WORKS preview" class="work-image">
+					<a id="works-preview-link" class="work-preview-link" href="works/works.html" aria-label="WORKSの詳細を見る">
+						<img id="works-preview-image" src="images/lukas-blazek-GnvurwJsKaY-unsplash.jpg" alt="WORKS preview" class="work-image">
+					</a>
+					<p id="works-preview-title" class="works-preview-title">画像を読み込み中...</p>
 				</div>
 			</section>
 		</section>
@@ -119,5 +122,6 @@
 <script src="js/jquery-3.5.0.min.js"></script>
 <script src="js/popper.min.js"></script>
 <script src="js/menuScroll.js"></script>
+<script src="js/index-works-preview.js?v=20260409-2"></script>
 </body>
 </html>

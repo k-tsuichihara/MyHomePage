@@ -367,10 +367,36 @@ header {
 	margin-top: 26px;
 }
 
+.work-preview-link {
+	display: block;
+	border-radius: 16px;
+	overflow: hidden;
+	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+	transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.work-preview-link:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 16px 32px rgba(0, 0, 0, 0.16);
+}
+
 .work-image {
 	width: 100%;
-	height: auto;
-	border-radius: 16px;
+	aspect-ratio: 4 / 3;
+	object-fit: cover;
+	border-radius: 0;
+	opacity: 1;
+	transition: opacity 0.9s ease-in-out;
+}
+
+.work-image.is-fading {
+	opacity: 0.15;
+}
+
+.works-preview-title {
+	margin: 12px 2px 0;
+	font-size: 0.95rem;
+	color: #555;
 }
 @media screen and (max-width: 900px) {
 	.fix-header-contents {

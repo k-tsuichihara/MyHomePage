@@ -71,6 +71,13 @@
     document.body.classList.add("work-zoom-open");
   }
 
+  function toMultilineText(value) {
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).join("\n") || "-";
+    }
+    return value || "-";
+  }
+
   function normalizeMediaList(work) {
     const list = Array.isArray(work.images) ? work.images : [];
     const containSet = new Set(
@@ -165,8 +172,8 @@
     titleEl.textContent = work.title || "無題";
     techEl.textContent = (work.tech || []).join(" / ") || "-";
     dateEl.textContent = "公開日: " + (work.publishedAt || "-");
-    backgroundEl.textContent = work.background || "-";
-    descriptionEl.textContent = work.description || "-";
+    backgroundEl.textContent = toMultilineText(work.background);
+    descriptionEl.textContent = toMultilineText(work.description);
 
     const mediaList = normalizeMediaList(work);
     currentMedia = mediaList;
