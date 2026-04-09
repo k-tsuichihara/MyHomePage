@@ -73,29 +73,10 @@
 			<section id="news" class="panel">
 				<div class="panel-header">
 					<h2>Update Info</h2>
-					<p>WORKSやToolsの更新日時をここに表示します。</p>
+					<p>更新履歴の最新情報を表示します。</p>
 				</div>
-				<div class="newsbox">
-					<div class="newscate">カテゴリ</div>
-					<div class="newsday">日付</div>
-					<div class="newssen">本文</div>
-				</div>
-				<div class="newsbox">
-					<div class="newscate">カテゴリ</div>
-					<div class="newsday">日付</div>
-					<div class="newssen">本文</div>
-				</div>
-				<div class="newsbox">
-					<div class="newscate">カテゴリ</div>
-					<div class="newsday">日付</div>
-					<div class="newssen">本文</div>
-				</div>
-				<div class="newsbox">
-					<div class="newscate">カテゴリ</div>
-					<div class="newsday">日付</div>
-					<div class="newssen">本文</div>
-				</div>
-				<div id="motto">もっと見る</div>
+				<div id="update-info-list"></div>
+				<button id="update-more-btn" type="button" class="update-more-btn">もっと見る</button>
 			</section>
 			<section id="work-panel" class="panel">
 				<div class="panel-header">
@@ -111,6 +92,21 @@
 			</section>
 		</section>
     </main>
+	<div id="update-modal" class="update-modal" hidden>
+		<div id="update-modal-backdrop" class="update-modal-backdrop"></div>
+		<div class="update-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="update-modal-title">
+			<div class="update-modal-header">
+				<h3 id="update-modal-title">更新履歴一覧</h3>
+				<button id="update-modal-close" type="button" class="update-modal-close" aria-label="閉じる">&times;</button>
+			</div>
+			<div id="update-modal-list" class="update-modal-list"></div>
+			<div class="update-modal-pager">
+				<button id="update-prev-btn" type="button" class="update-pager-btn">前へ</button>
+				<span id="update-page-info" class="update-page-info">1 / 1</span>
+				<button id="update-next-btn" type="button" class="update-pager-btn">次へ</button>
+			</div>
+		</div>
+	</div>
 	<footer>
 		<div id="obi">
 			<div class="footer-content">
@@ -122,6 +118,7 @@
 <script src="js/jquery-3.5.0.min.js"></script>
 <script src="js/popper.min.js"></script>
 <script src="js/menuScroll.js"></script>
+<script src="js/index-update-info.js?v=20260409-2"></script>
 <script src="js/index-works-preview.js?v=20260409-3"></script>
 </body>
 </html>
