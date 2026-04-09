@@ -397,6 +397,12 @@ header {
 	margin: 12px 2px 0;
 	font-size: 0.95rem;
 	color: #555;
+	opacity: 1;
+	transition: opacity 0.45s ease-in-out;
+}
+
+.works-preview-title.is-fading {
+	opacity: 0.2;
 }
 @media screen and (max-width: 900px) {
 	.fix-header-contents {

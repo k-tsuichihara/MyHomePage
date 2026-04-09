@@ -20,6 +20,29 @@
   let currentMedia = [];
   let currentIndex = 0;
 
+  function preloadImage(src) {
+    if (!src) {
+      return;
+    }
+    const img = new Image();
+    img.decoding = "async";
+    img.src = src;
+  }
+
+  function preloadUpcomingImages(fromIndex) {
+    if (!currentMedia.length) {
+      return;
+    }
+
+    for (let step = 1; step <= 2; step += 1) {
+      const nextIndex = (fromIndex + step) % currentMedia.length;
+      const nextMedia = currentMedia[nextIndex];
+      if (nextMedia && nextMedia.type === "image") {
+        preloadImage(nextMedia.src);
+      }
+    }
+  }
+
   function detectMediaType(src) {
     const value = (src || "").split("?")[0].toLowerCase();
     if (/\.(mp4|webm|ogv|ogg|avi|mov|m4v)$/.test(value)) {
@@ -151,9 +174,14 @@
       mainImageEl.hidden = false;
       mainImageEl.classList.add("is-zoomable");
       mainImageEl.setAttribute("tabindex", "0");
+      mainImageEl.loading = "eager";
+      mainImageEl.decoding = "async";
       applyFitClass(mainImageEl, current.fit);
       mainImageEl.src = current.src;
       mediaNoteEl.hidden = true;
+
+      // Prime next images while the current one is shown.
+      preloadUpcomingImages(currentIndex);
     }
 
     Array.from(thumbsEl.children).forEach((thumbWrap, index) => {
@@ -192,11 +220,13 @@
         thumb.src = media.src;
         thumb.muted = true;
         thumb.playsInline = true;
-        thumb.preload = "metadata";
+        thumb.preload = "none";
       } else {
         thumb = document.createElement("img");
         thumb.src = media.src;
         thumb.alt = (work.title || "work") + " " + (index + 1);
+        thumb.loading = "lazy";
+        thumb.decoding = "async";
       }
 
       applyFitClass(thumb, media.fit);

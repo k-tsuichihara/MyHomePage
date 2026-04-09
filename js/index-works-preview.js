@@ -9,12 +9,14 @@
 
   const ROTATE_MS = 7000;
   const FADE_OUT_MS = 520;
+  const LOAD_TIMEOUT_MS = 1800;
   const VIDEO_EXT_RE = /\.(mp4|webm|ogv|ogg|avi|mov|m4v)$/i;
   const FALLBACK_IMAGE = "images/lukas-blazek-GnvurwJsKaY-unsplash.jpg";
 
   let timerId = null;
   let pool = [];
   let lastIndex = -1;
+  let isTransitioning = false;
 
   function normalizeImageSrc(src) {
     if (!src || typeof src !== "string") {
@@ -111,6 +113,10 @@
       return;
     }
 
+    if (isTransitioning) {
+      return;
+    }
+
     const nextIndex = pickNextIndex();
     const item = pool[nextIndex];
 
@@ -121,6 +127,8 @@
       titleEl.textContent = item.title;
       lastIndex = nextIndex;
       imageEl.classList.remove("is-fading");
+      titleEl.classList.remove("is-fading");
+      isTransitioning = false;
     };
 
     if (!withFade) {
@@ -128,8 +136,28 @@
       return;
     }
 
+    isTransitioning = true;
     imageEl.classList.add("is-fading");
-    window.setTimeout(update, FADE_OUT_MS);
+    titleEl.classList.add("is-fading");
+
+    window.setTimeout(function () {
+      let settled = false;
+      const preloaded = new Image();
+
+      const settle = function () {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        update();
+      };
+
+      preloaded.onload = settle;
+      preloaded.onerror = settle;
+      preloaded.src = item.src;
+
+      window.setTimeout(settle, LOAD_TIMEOUT_MS);
+    }, FADE_OUT_MS);
   }
 
   function startRotate() {
