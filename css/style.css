@@ -312,10 +312,6 @@ html.scroll-hidden {
 	.dropmenu > li:hover > .submenu {
 		display: none;
 	}
-
-	.dropmenu > li.has-submenu:focus-within > .submenu {
-		display: block;
-	}
 }
 
 .dropmenu > li > .submenu > li > a:hover{

@@ -33,46 +33,54 @@
 		dropMenu.innerHTML = renderMenuHtml();
 	}
 
-	function setupTouchToggle(container) {
+	function isMobileMenuMode() {
+		return window.matchMedia("(max-width: 900px)").matches;
+	}
+
+	function closeOpenSubmenus(container) {
 		if (!container) {
 			return;
 		}
+		container.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
+			node.classList.remove("is-open");
+		});
+	}
 
-		var touchLike = window.matchMedia("(hover: none), (pointer: coarse), (max-width: 900px)").matches;
-		if (!touchLike) {
-			return;
-		}
-
-		container.addEventListener("click", function (event) {
+	if (dropMenu) {
+		dropMenu.addEventListener("click", function (event) {
 			var target = event.target;
 			if (!(target instanceof HTMLElement)) {
 				return;
 			}
 
+			if (!isMobileMenuMode()) {
+				return;
+			}
+
 			var trigger = target.closest(".has-submenu > a");
-			if (!trigger || !container.contains(trigger)) {
+			if (trigger && dropMenu.contains(trigger)) {
+				event.preventDefault();
+				event.stopPropagation();
+
+				var parent = trigger.parentElement;
+				if (!parent) {
+					return;
+				}
+
+				var isOpen = parent.classList.contains("is-open");
+				closeOpenSubmenus(dropMenu);
+				if (!isOpen) {
+					parent.classList.add("is-open");
+				}
 				return;
 			}
 
-			event.preventDefault();
-			var parent = trigger.parentElement;
-			if (!parent) {
-				return;
-			}
-
-			var isOpen = parent.classList.contains("is-open");
-			container.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
-				node.classList.remove("is-open");
-			});
-
-			if (!isOpen) {
-				parent.classList.add("is-open");
+			var submenuLink = target.closest(".submenu a");
+			if (submenuLink && dropMenu.contains(submenuLink)) {
+				closeOpenSubmenus(dropMenu);
 			}
 		});
 	}
-
-	setupTouchToggle(fixedMenu);
-	setupTouchToggle(dropMenu);
 
 	document.addEventListener("click", function (event) {
 		var target = event.target;
@@ -80,16 +88,18 @@
 			return;
 		}
 
-		if (!target.closest("#fix-header-menus") && fixedMenu) {
-			fixedMenu.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
-				node.classList.remove("is-open");
-			});
+		if (!isMobileMenuMode()) {
+			return;
 		}
 
 		if (!target.closest("#menu_st") && dropMenu) {
-			dropMenu.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
-				node.classList.remove("is-open");
-			});
+			closeOpenSubmenus(dropMenu);
+		}
+	});
+
+	window.addEventListener("resize", function () {
+		if (!isMobileMenuMode()) {
+			closeOpenSubmenus(dropMenu);
 		}
 	});
 })();
