@@ -15,7 +15,7 @@
 		return [
 			'<li><a href="' + buildHref("aboutme/aboutme.html") + '">About Me</a></li>',
 			'<li><a href="' + buildHref("works/works.html") + '">WORKS</a></li>',
-			'<li class="has-submenu"><a href="#">Tools</a>',
+			'<li class="has-submenu"><a href="#" data-submenu-trigger="true" aria-expanded="false">Tools</a>',
 			'<ul class="submenu">',
 			'<li><a href="' + buildHref("tools/memo.html") + '">メモ</a></li>',
 			'</ul>',
@@ -39,6 +39,10 @@
 		}
 		container.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
 			node.classList.remove("is-open");
+			var trigger = node.querySelector("a[data-submenu-trigger]");
+			if (trigger) {
+				trigger.setAttribute("aria-expanded", "false");
+			}
 		});
 	}
 
@@ -53,7 +57,7 @@
 				return;
 			}
 
-			var trigger = target.closest(".has-submenu > a");
+			var trigger = target.closest("a[data-submenu-trigger]");
 			if (trigger && container.contains(trigger)) {
 				event.preventDefault();
 				event.stopPropagation();
@@ -67,6 +71,7 @@
 				closeOpenSubmenus(container);
 				if (!isOpen) {
 					parent.classList.add("is-open");
+					trigger.setAttribute("aria-expanded", "true");
 				}
 				return;
 			}
