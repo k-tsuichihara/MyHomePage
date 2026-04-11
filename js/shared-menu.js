@@ -32,4 +32,64 @@
 	if (dropMenu) {
 		dropMenu.innerHTML = renderMenuHtml();
 	}
+
+	function setupTouchToggle(container) {
+		if (!container) {
+			return;
+		}
+
+		var touchLike = window.matchMedia("(hover: none), (pointer: coarse), (max-width: 900px)").matches;
+		if (!touchLike) {
+			return;
+		}
+
+		container.addEventListener("click", function (event) {
+			var target = event.target;
+			if (!(target instanceof HTMLElement)) {
+				return;
+			}
+
+			var trigger = target.closest(".has-submenu > a");
+			if (!trigger || !container.contains(trigger)) {
+				return;
+			}
+
+			event.preventDefault();
+			var parent = trigger.parentElement;
+			if (!parent) {
+				return;
+			}
+
+			var isOpen = parent.classList.contains("is-open");
+			container.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
+				node.classList.remove("is-open");
+			});
+
+			if (!isOpen) {
+				parent.classList.add("is-open");
+			}
+		});
+	}
+
+	setupTouchToggle(fixedMenu);
+	setupTouchToggle(dropMenu);
+
+	document.addEventListener("click", function (event) {
+		var target = event.target;
+		if (!(target instanceof HTMLElement)) {
+			return;
+		}
+
+		if (!target.closest("#fix-header-menus") && fixedMenu) {
+			fixedMenu.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
+				node.classList.remove("is-open");
+			});
+		}
+
+		if (!target.closest("#menu_st") && dropMenu) {
+			dropMenu.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
+				node.classList.remove("is-open");
+			});
+		}
+	});
 })();
