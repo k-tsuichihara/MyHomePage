@@ -53,10 +53,6 @@
 				return;
 			}
 
-			if (!isMobileMenuMode()) {
-				return;
-			}
-
 			var trigger = target.closest(".has-submenu > a");
 			if (trigger && dropMenu.contains(trigger)) {
 				event.preventDefault();
@@ -85,10 +81,6 @@
 	document.addEventListener("click", function (event) {
 		var target = event.target;
 		if (!(target instanceof HTMLElement)) {
-			return;
-		}
-
-		if (!isMobileMenuMode()) {
 			return;
 		}
 
