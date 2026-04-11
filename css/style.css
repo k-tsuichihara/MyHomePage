@@ -195,6 +195,10 @@ html.scroll-hidden {
 	display: block;
 }
 
+#fix-header-menus .menu .has-submenu.is-open > .submenu {
+	display: block;
+}
+
 #menu_st{
 	width: 100%;
 	height: auto;
@@ -306,11 +310,26 @@ html.scroll-hidden {
 	display: block;
 }
 
-@media (hover: none), (pointer: coarse) {
+@media screen and (max-width: 900px), (hover: none), (pointer: coarse) {
+	.fix-header {
+		display: block !important;
+		visibility: visible;
+		pointer-events: auto;
+	}
+
+	#menu_st {
+		display: none !important;
+	}
+
+	#fix-header-menus .menu .has-submenu:hover > .submenu {
+		display: none;
+	}
+
 	.dropmenu > li:hover > .submenu {
 		display: none;
 	}
 
+	#fix-header-menus .menu .has-submenu:focus-within > .submenu,
 	.dropmenu > li.has-submenu:focus-within > .submenu {
 		display: block;
 	}
@@ -587,10 +606,6 @@ body.update-modal-open {
 	opacity: 0.2;
 }
 @media screen and (max-width: 900px) {
-	.fix-header {
-		display: none;
-	}
-
 	.fix-header-contents {
 		flex-direction: row;
 		align-items: center;
@@ -616,8 +631,7 @@ body.update-modal-open {
 	}
 
 	#menu_st {
-		display: flex;
-		justify-content: center;
+		display: none;
 	}
 
 	.dropmenu {
@@ -702,17 +716,12 @@ body.update-modal-open {
 }
 
 @media screen and (max-width: 600px) {
-	.fix-header {
-		display: none;
-	}
-
 	.fix-header-contents {
 		padding: 0 14px;
 	}
 
 	#menu_st {
-		display: flex;
-		justify-content: center;
+		display: none;
 	}
 }
 /* カウントダウン用 */

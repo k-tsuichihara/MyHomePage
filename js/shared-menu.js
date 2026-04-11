@@ -33,10 +33,6 @@
 		dropMenu.innerHTML = renderMenuHtml();
 	}
 
-	function isMobileMenuMode() {
-		return window.matchMedia("(max-width: 900px)").matches;
-	}
-
 	function closeOpenSubmenus(container) {
 		if (!container) {
 			return;
@@ -46,15 +42,19 @@
 		});
 	}
 
-	if (dropMenu) {
-		dropMenu.addEventListener("click", function (event) {
+	function setupSubmenuToggle(container) {
+		if (!container) {
+			return;
+		}
+
+		container.addEventListener("click", function (event) {
 			var target = event.target;
 			if (!(target instanceof HTMLElement)) {
 				return;
 			}
 
 			var trigger = target.closest(".has-submenu > a");
-			if (trigger && dropMenu.contains(trigger)) {
+			if (trigger && container.contains(trigger)) {
 				event.preventDefault();
 				event.stopPropagation();
 
@@ -64,7 +64,7 @@
 				}
 
 				var isOpen = parent.classList.contains("is-open");
-				closeOpenSubmenus(dropMenu);
+				closeOpenSubmenus(container);
 				if (!isOpen) {
 					parent.classList.add("is-open");
 				}
@@ -72,16 +72,23 @@
 			}
 
 			var submenuLink = target.closest(".submenu a");
-			if (submenuLink && dropMenu.contains(submenuLink)) {
-				closeOpenSubmenus(dropMenu);
+			if (submenuLink && container.contains(submenuLink)) {
+				closeOpenSubmenus(container);
 			}
 		});
-	}
+ 	}
+
+	setupSubmenuToggle(fixedMenu);
+	setupSubmenuToggle(dropMenu);
 
 	document.addEventListener("click", function (event) {
 		var target = event.target;
 		if (!(target instanceof HTMLElement)) {
 			return;
+		}
+
+		if (!target.closest("#fix-header-menus") && fixedMenu) {
+			closeOpenSubmenus(fixedMenu);
 		}
 
 		if (!target.closest("#menu_st") && dropMenu) {
@@ -90,8 +97,7 @@
 	});
 
 	window.addEventListener("resize", function () {
-		if (!isMobileMenuMode()) {
-			closeOpenSubmenus(dropMenu);
-		}
+		closeOpenSubmenus(fixedMenu);
+		closeOpenSubmenus(dropMenu);
 	});
 })();
