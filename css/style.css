@@ -587,6 +587,10 @@ body.update-modal-open {
 	opacity: 0.2;
 }
 @media screen and (max-width: 900px) {
+	.fix-header {
+		display: none;
+	}
+
 	.fix-header-contents {
 		flex-direction: row;
 		align-items: center;
@@ -699,8 +703,7 @@ body.update-modal-open {
 
 @media screen and (max-width: 600px) {
 	.fix-header {
-		height: auto;
-		padding: 12px 0;
+		display: none;
 	}
 
 	.fix-header-contents {
