@@ -1,0 +1,161 @@
+.memo-page {
+	max-width: 1100px;
+	margin: 0 auto;
+	padding: 36px 20px 64px;
+}
+
+.memo-shell {
+	background: #ffffff;
+	border-radius: 18px;
+	box-shadow: 0 14px 34px rgba(0, 0, 0, 0.08);
+	padding: 24px;
+}
+
+.memo-header h1 {
+	margin: 0;
+	font-size: 2rem;
+}
+
+.memo-header p {
+	margin: 8px 0 0;
+	color: #666;
+}
+
+.memo-form {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin-top: 20px;
+}
+
+.memo-form label {
+	font-weight: 700;
+	font-size: 0.95rem;
+}
+
+.memo-form textarea {
+	width: 100%;
+	resize: vertical;
+	min-height: 110px;
+	padding: 12px;
+	border: 1px solid #cccccc;
+	border-radius: 10px;
+	font-size: 1rem;
+	line-height: 1.6;
+}
+
+.memo-form textarea:focus {
+	outline: none;
+	border-color: #888;
+	box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+}
+
+.memo-form-actions {
+	display: flex;
+	gap: 10px;
+}
+
+.memo-form-actions button,
+.memo-list-header button,
+.memo-item-actions button {
+	appearance: none;
+	border: 1px solid #222;
+	background: #fff;
+	color: #111;
+	padding: 8px 14px;
+	border-radius: 999px;
+	cursor: pointer;
+	font-size: 0.9rem;
+}
+
+.memo-form-actions button:hover,
+.memo-list-header button:hover,
+.memo-item-actions button:hover {
+	background: #f0f0f0;
+}
+
+.memo-list-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-top: 26px;
+	gap: 12px;
+}
+
+.memo-list-header h2 {
+	margin: 0;
+	font-size: 1.25rem;
+}
+
+.memo-list {
+	list-style: none;
+	padding: 0;
+	margin: 14px 0 0;
+	display: grid;
+	gap: 12px;
+}
+
+.memo-item {
+	border: 1px solid #e1e1e1;
+	border-radius: 12px;
+	padding: 12px;
+	background: #fafafa;
+}
+
+.memo-item-text {
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+	line-height: 1.6;
+	color: #333;
+}
+
+.memo-item-meta {
+	margin-top: 10px;
+	font-size: 0.82rem;
+	color: #777;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+}
+
+.memo-item-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.memo-list-header button.danger,
+.memo-item-actions button.danger {
+	border-color: #a11;
+	color: #a11;
+}
+
+.memo-empty {
+	margin: 14px 0 0;
+	color: #777;
+}
+
+.memo-empty[hidden] {
+	display: none;
+}
+
+@media screen and (max-width: 900px) {
+	.memo-page {
+		padding: 18px 14px 40px;
+	}
+
+	.memo-shell {
+		padding: 18px;
+	}
+
+	.memo-list-header {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+
+	.memo-item-meta {
+		flex-direction: column;
+		align-items: flex-start;
+	}
+}

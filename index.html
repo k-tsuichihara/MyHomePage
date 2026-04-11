@@ -40,7 +40,11 @@
 					<ul class="menu">
 					    <li><a href="aboutme/aboutme.html">About Me</a></li>
 					    <li><a href="works/works.html">WORKS</a></li>
-				        <li><a href="#">Tools</a></li>
+				        <li class="has-submenu"><a href="#">Tools</a>
+						  <ul class="submenu">
+							<li><a href="tools/memo.html">メモ</a></li>
+						  </ul>
+						</li>
 					</ul>
 				</div>
 			</div>
@@ -56,14 +60,10 @@
 				<ul class="dropmenu">
 					<li><a href="aboutme/aboutme.html">About Me</a></li>
 					<li><a href="works/works.html">WORKS</a></li>
-					<li><a href="#">Tools</a>
-						<!--<ul>
-								<li><a href="works/digital.html">デジタル</a></li>
-								<li><a href="works/handmade.html">ハンドメイド</a></li>
-								<li><a href="works/recipe.html">レシピ</a></li>
-								<li><a href="works/bass.html">ベース</a></li>
-								<li><a href="works/photo.html">シャシン</a></li>
-						</ul>-->					
+					<li class="has-submenu"><a href="#">Tools</a>
+						<ul class="submenu">
+						  <li><a href="tools/memo.html">メモ</a></li>
+						</ul>
 					</li>
 				</ul>
 		</nav>
@@ -118,6 +118,7 @@
 <script src="js/jquery-3.5.0.min.js"></script>
 <script src="js/popper.min.js"></script>
 <script src="js/menuScroll.js"></script>
+<script src="js/shared-menu.js" data-root="."></script>
 <script src="js/index-update-info.js?v=20260409-2"></script>
 <script src="js/index-works-preview.js?v=20260409-3"></script>
 </body>

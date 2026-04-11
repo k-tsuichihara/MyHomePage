@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-hidden">
+
+<!--ヘッダー-->
+<head>
+<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>メモ</title>
+	<meta name="description" content="Tools - メモ">
+	<meta name="keywords" content="">
+	<meta name="author" content="Kana Tsuichihara">
+
+	<!--Bootstrap-->
+	<link href="../css/style.css" rel="stylesheet" type="text/css">
+	<link href="../css/bootstrap-4.0.0.css" rel="stylesheet">
+	<link href="css/memo.css" rel="stylesheet" type="text/css">
+	
+</head>
+<body>
+	<header>
+		<div id="topPhoto">
+			<img src="../images/lukas-blazek-GnvurwJsKaY-unsplash.jpg" alt="" class="photoSize">
+			<div class="hero-overlay">
+				<div class="hero-title">Kana Tsuichihara</div>
+				<div class="hero-subtitle">Memo Tool</div>
+			</div>
+		</div>
+		<div class="fix-header">
+			<div class="fix-header-contents">
+			<!-- ロゴはfloat左寄せで表示 -->
+				<!-- ローカルはこのまま、ポートフォリオは差し替え--> 
+				<div id="fix-header-logo">
+				<a href="../index.html" class="site-brand">
+					<span class="brand-name">Kana Tsuichihara</span>
+					<span class="brand-subtitle">Portfolio</span>
+				</a>
+				</div>
+			<!-- メニューのブロックはfloatで右寄せ -->
+				<div id="fix-header-menus">
+					<ul class="menu">
+					    <li><a href="../aboutme/aboutme.html">About Me</a></li>
+					    <li><a href="../works/works.html">WORKS</a></li>
+				        <li class="has-submenu"><a href="#">Tools</a>
+						  <ul class="submenu">
+							<li><a href="memo.html">メモ</a></li>
+						  </ul>
+						</li>
+					</ul>
+				</div>
+			</div>
+		</div>
+		<nav id="menu_st">
+			<div class="logo">
+				<a href="../index.html">
+					<!-- ローカルはこのまま、ポートフォリオは差し替え--> 
+					<div>Kana Tsuichihara<br>Portfolio</div>
+					<!--<img src="images/1_Primary_logo_on_transparent_172x71.png" alt="" class="img-responsive-lg">-->
+				</a>
+			</div>
+				<ul class="dropmenu">
+					<li><a href="../aboutme/aboutme.html">About Me</a></li>
+					<li><a href="../works/works.html">WORKS</a></li>
+					<li class="has-submenu"><a href="#">Tools</a>
+						<ul class="submenu">
+						  <li><a href="memo.html">メモ</a></li>
+						</ul>
+					</li>
+				</ul>
+		</nav>
+	</header>
+	<main>
+		<section class="memo-page" aria-labelledby="memo-title">
+			<div class="memo-shell">
+				<div class="memo-header">
+					<h1 id="memo-title">メモ</h1>
+					<p>思いついた内容を保存できます。ブラウザに自動保存されます。</p>
+				</div>
+
+				<form id="memo-form" class="memo-form">
+					<label for="memo-text">メモ内容</label>
+					<textarea id="memo-text" name="memoText" rows="4" maxlength="500" placeholder="ここにメモを入力"></textarea>
+					<div class="memo-form-actions">
+						<button type="submit" id="memo-submit-btn">追加</button>
+						<button type="button" id="memo-cancel-btn" hidden>編集キャンセル</button>
+					</div>
+				</form>
+
+				<div class="memo-list-header">
+					<h2>保存済みメモ</h2>
+					<button type="button" id="memo-clear-all-btn" class="danger">すべて削除</button>
+				</div>
+
+				<ul id="memo-list" class="memo-list"></ul>
+				<p id="memo-empty" class="memo-empty">メモはまだありません。</p>
+			</div>
+		</section>
+    </main>
+	<footer>
+		<div id="obi">
+			<div class="footer-content">
+				<div class="footer-title">Kana Tsuichihara Portfolio</div>
+				<div class="footer-tagline">Learning by building</div>
+			</div>
+		</div>
+	</footer>
+<script src="../js/jquery-3.5.0.min.js"></script>
+<script src="../js/popper.min.js"></script>
+<script src="../js/menuScroll.js"></script>
+<script src="../js/shared-menu.js" data-root=".."></script>
+<script src="js/memo.js"></script>
+</body>
+</html>
