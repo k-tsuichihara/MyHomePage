@@ -625,6 +625,14 @@ body.update-modal-open {
 		flex-direction: row;
 	}
 
+	#fix-header-menus .menu .has-submenu > .submenu {
+		top: calc(100% + 4px);
+		left: 50%;
+		right: auto;
+		transform: translateX(-50%);
+		min-width: 150px;
+	}
+
 	#menu_st {
 		display: none;
 	}

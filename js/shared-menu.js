@@ -47,27 +47,52 @@
 			return;
 		}
 
+		var lastTouchToggleAt = 0;
+
+		function handleToggle(event) {
+			var target = event.target;
+			if (!(target instanceof HTMLElement)) {
+				return;
+			}
+
+			if (event.type === "click" && Date.now() - lastTouchToggleAt < 500) {
+				return;
+			}
+
+			var trigger = target.closest(".has-submenu > a");
+			if (!trigger || !container.contains(trigger)) {
+				return;
+			}
+
+			event.preventDefault();
+			event.stopPropagation();
+
+			if (event.type === "touchstart") {
+				lastTouchToggleAt = Date.now();
+			}
+
+			var parent = trigger.parentElement;
+			if (!parent) {
+				return;
+			}
+
+			var isOpen = parent.classList.contains("is-open");
+			closeOpenSubmenus(container);
+			if (!isOpen) {
+				parent.classList.add("is-open");
+			}
+		}
+
+		container.addEventListener("touchstart", handleToggle, { passive: false });
 		container.addEventListener("click", function (event) {
 			var target = event.target;
 			if (!(target instanceof HTMLElement)) {
 				return;
 			}
 
-			var trigger = target.closest(".has-submenu > a");
-			if (trigger && container.contains(trigger)) {
-				event.preventDefault();
-				event.stopPropagation();
+			handleToggle(event);
 
-				var parent = trigger.parentElement;
-				if (!parent) {
-					return;
-				}
-
-				var isOpen = parent.classList.contains("is-open");
-				closeOpenSubmenus(container);
-				if (!isOpen) {
-					parent.classList.add("is-open");
-				}
+			if (event.defaultPrevented) {
 				return;
 			}
 
