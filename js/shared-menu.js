@@ -15,7 +15,7 @@
 		return [
 			'<li><a href="' + buildHref("aboutme/aboutme.html") + '">About Me</a></li>',
 			'<li><a href="' + buildHref("works/works.html") + '">WORKS</a></li>',
-			'<li class="has-submenu"><a href="#" data-submenu-trigger="true" aria-expanded="false">Tools</a>',
+			'<li class="has-submenu"><button type="button" class="submenu-toggle" data-submenu-trigger="true" aria-expanded="false">Tools</button>',
 			'<ul class="submenu">',
 			'<li><a href="' + buildHref("tools/memo.html") + '">メモ</a></li>',
 			'</ul>',
@@ -39,7 +39,7 @@
 		}
 		container.querySelectorAll(".has-submenu.is-open").forEach(function (node) {
 			node.classList.remove("is-open");
-			var trigger = node.querySelector("a[data-submenu-trigger]");
+			var trigger = node.querySelector("[data-submenu-trigger]");
 			if (trigger) {
 				trigger.setAttribute("aria-expanded", "false");
 			}
@@ -57,9 +57,8 @@
 				return;
 			}
 
-			var trigger = target.closest("a[data-submenu-trigger]");
+			var trigger = target.closest("[data-submenu-trigger]");
 			if (trigger && container.contains(trigger)) {
-				event.preventDefault();
 				event.stopPropagation();
 
 				var parent = trigger.parentElement;
