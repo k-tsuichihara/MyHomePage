@@ -33,6 +33,10 @@
 		dropMenu.innerHTML = renderMenuHtml();
 	}
 
+	function isMobileMenuMode() {
+		return window.matchMedia("(max-width: 900px)").matches;
+	}
+
 	function closeOpenSubmenus(container) {
 		if (!container) {
 			return;
@@ -42,78 +46,42 @@
 		});
 	}
 
-	function setupSubmenuToggle(container) {
-		if (!container) {
-			return;
-		}
-
-		var lastTouchToggleAt = 0;
-
-		function handleToggle(event) {
+	if (dropMenu) {
+		dropMenu.addEventListener("click", function (event) {
 			var target = event.target;
 			if (!(target instanceof HTMLElement)) {
-				return;
-			}
-
-			if (event.type === "click" && Date.now() - lastTouchToggleAt < 500) {
 				return;
 			}
 
 			var trigger = target.closest(".has-submenu > a");
-			if (!trigger || !container.contains(trigger)) {
-				return;
-			}
+			if (trigger && dropMenu.contains(trigger)) {
+				event.preventDefault();
+				event.stopPropagation();
 
-			event.preventDefault();
-			event.stopPropagation();
+				var parent = trigger.parentElement;
+				if (!parent) {
+					return;
+				}
 
-			if (event.type === "touchstart") {
-				lastTouchToggleAt = Date.now();
-			}
-
-			var parent = trigger.parentElement;
-			if (!parent) {
-				return;
-			}
-
-			var isOpen = parent.classList.contains("is-open");
-			closeOpenSubmenus(container);
-			if (!isOpen) {
-				parent.classList.add("is-open");
-			}
-		}
-
-		container.addEventListener("touchstart", handleToggle, { passive: false });
-		container.addEventListener("click", function (event) {
-			var target = event.target;
-			if (!(target instanceof HTMLElement)) {
-				return;
-			}
-
-			handleToggle(event);
-
-			if (event.defaultPrevented) {
+				var isOpen = parent.classList.contains("is-open");
+				closeOpenSubmenus(dropMenu);
+				if (!isOpen) {
+					parent.classList.add("is-open");
+				}
 				return;
 			}
 
 			var submenuLink = target.closest(".submenu a");
-			if (submenuLink && container.contains(submenuLink)) {
-				closeOpenSubmenus(container);
+			if (submenuLink && dropMenu.contains(submenuLink)) {
+				closeOpenSubmenus(dropMenu);
 			}
 		});
- 	}
-
-	setupSubmenuToggle(fixedMenu);
-	setupSubmenuToggle(dropMenu);
+	}
 
 	document.addEventListener("click", function (event) {
 		var target = event.target;
 		if (!(target instanceof HTMLElement)) {
 			return;
-		}
-
-		if (!target.closest("#fix-header-menus") && fixedMenu) {
-			closeOpenSubmenus(fixedMenu);
 		}
 
 		if (!target.closest("#menu_st") && dropMenu) {
@@ -122,7 +90,8 @@
 	});
 
 	window.addEventListener("resize", function () {
-		closeOpenSubmenus(fixedMenu);
-		closeOpenSubmenus(dropMenu);
+		if (!isMobileMenuMode()) {
+			closeOpenSubmenus(dropMenu);
+		}
 	});
 })();

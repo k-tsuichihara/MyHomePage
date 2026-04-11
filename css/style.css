@@ -195,10 +195,6 @@ html.scroll-hidden {
 	display: block;
 }
 
-#fix-header-menus .menu .has-submenu.is-open > .submenu {
-	display: block;
-}
-
 #menu_st{
 	width: 100%;
 	height: auto;
@@ -310,23 +306,13 @@ html.scroll-hidden {
 	display: block;
 }
 
-@media screen and (max-width: 900px), (hover: none), (pointer: coarse) {
-	.fix-header {
-		display: block !important;
-		visibility: visible;
-		pointer-events: auto;
-	}
-
-	#menu_st {
-		display: none !important;
-	}
-
-	#fix-header-menus .menu .has-submenu:hover > .submenu {
-		display: none;
-	}
-
+@media (hover: none), (pointer: coarse) {
 	.dropmenu > li:hover > .submenu {
 		display: none;
+	}
+
+	.dropmenu > li.has-submenu:focus-within > .submenu {
+		display: block;
 	}
 }
 
@@ -625,16 +611,9 @@ body.update-modal-open {
 		flex-direction: row;
 	}
 
-	#fix-header-menus .menu .has-submenu > .submenu {
-		top: calc(100% + 4px);
-		left: 50%;
-		right: auto;
-		transform: translateX(-50%);
-		min-width: 150px;
-	}
-
 	#menu_st {
 		display: none;
+		justify-content: center;
 	}
 
 	.dropmenu {
@@ -719,12 +698,18 @@ body.update-modal-open {
 }
 
 @media screen and (max-width: 600px) {
+	.fix-header {
+		height: auto;
+		padding: 12px 0;
+	}
+
 	.fix-header-contents {
 		padding: 0 14px;
 	}
 
 	#menu_st {
 		display: none;
+		justify-content: center;
 	}
 }
 /* カウントダウン用 */
