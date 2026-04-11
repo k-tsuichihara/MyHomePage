@@ -610,7 +610,8 @@ body.update-modal-open {
 	}
 
 	#menu_st {
-		display: none;
+		display: flex;
+		justify-content: center;
 	}
 
 	.dropmenu {
@@ -705,7 +706,8 @@ body.update-modal-open {
 	}
 
 	#menu_st {
-		display: none;
+		display: flex;
+		justify-content: center;
 	}
 }
 /* カウントダウン用 */
