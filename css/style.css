@@ -302,13 +302,11 @@ html.scroll-hidden {
 	display: block;
 }
 
-#fix-header-menus .menu .has-submenu.is-open > .submenu,
 .dropmenu > li.has-submenu.is-open > .submenu {
 	display: block;
 }
 
 @media (hover: none), (pointer: coarse) {
-	#fix-header-menus .menu .has-submenu:hover > .submenu,
 	.dropmenu > li:hover > .submenu {
 		display: none;
 	}
