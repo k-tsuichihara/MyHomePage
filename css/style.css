@@ -712,34 +712,6 @@ body.update-modal-open {
 		justify-content: center;
 	}
 }
-/* カウントダウン用 */
-#countdown{
-	background-color:#484848;
-	width : 400px;
-	display : inline-block;
-	float:right;
-	position : relative;
-	bottom : 250px;
-	opacity : 0.8;
-	text-align: right;
-}
-.couTex{
-	color:#ffffff;
-	font-size:30px;
-	padding:15px;
-}
-/* メモ（リマインダー） */
-#memo{
-	float:right;
-	display : block;
-	width : 30%;
-	height : 400px;
-	background-color : #DC531D;
-	margin-left : 100px;
-	position : relative;
-	bottom : 200px;
-}
-
 /* 作品集（画像を流す） */
 #workDis{
 	width:100vw;
@@ -791,36 +763,19 @@ body.update-modal-open {
 	margin-left:15px;
 	margin-top:5px;
 }
-.toiawase-s{
-	float:left;
-	margin-top:45px;
-	margin-right:40px;
-	font-size:17px;
+#tool-header{
+	margin-top: 0;
+	margin-left:0;
+	padding: 14px;
+	background-color: #dbdbdb;
 }
-.otoiawase-b{
-	float:left;
-	width:auto;
+.tool-name{
 	display:inline-block;
-	margin:35px 60px 0 30px;
-	border : solid #696969 1px;
-	background-color:#f5f5f5;
-	padding : 10px 20px;;
-	font-size:15px;
-	background-color:#f8f8ff;
-	border-bottom:solid 3px #808080;
-	border-radius : 3px;
-	text-decoration:none;
-	color:black;
+	margin:15px;	
+	font-size: 1.2rem;
+	float:right;
+	letter-spacing: 0.08em;
 }
-.otoiawase-b:active{
-	-webkit-transform:translateY(4px);
-	transform:translateY(4px);
-	border-bottom:none;
-}
-.otoiawase-b:hover{
-	background-color:#e6e6e6;
-}
-
 /* 下層ページ */
 /* トップの写真 */
 .headerPhoto{

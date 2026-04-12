@@ -19,67 +19,27 @@
 </head>
 <body>
 	<header>
-		<div id="topPhoto">
-			<img src="../images/lukas-blazek-GnvurwJsKaY-unsplash.jpg" alt="" class="photoSize">
-			<div class="hero-overlay">
-				<div class="hero-title">Kana Tsuichihara</div>
-				<div class="hero-subtitle">Memo Tool</div>
-			</div>
-		</div>
-		<div class="fix-header">
-			<div class="fix-header-contents">
-			<!-- ロゴはfloat左寄せで表示 -->
-				<!-- ローカルはこのまま、ポートフォリオは差し替え--> 
-				<div id="fix-header-logo">
-				<a href="../index.html" class="site-brand">
-					<span class="brand-name">Kana Tsuichihara</span>
-					<span class="brand-subtitle">Portfolio</span>
-				</a>
-				</div>
-			<!-- メニューのブロックはfloatで右寄せ -->
-				<div id="fix-header-menus">
-					<ul class="menu">
-					    <li><a href="../aboutme/aboutme.html">About Me</a></li>
-					    <li><a href="../works/works.html">WORKS</a></li>
-				        <li class="has-submenu"><a href="#">Tools</a>
-						  <ul class="submenu">
-							<li><a href="memo.html">メモ</a></li>
-						  </ul>
-						</li>
-					</ul>
-				</div>
-			</div>
-		</div>
-		<nav id="menu_st">
-			<div class="logo">
-				<a href="../index.html">
-					<!-- ローカルはこのまま、ポートフォリオは差し替え--> 
-					<div>Kana Tsuichihara<br>Portfolio</div>
-					<!--<img src="images/1_Primary_logo_on_transparent_172x71.png" alt="" class="img-responsive-lg">-->
-				</a>
-			</div>
-				<ul class="dropmenu">
-					<li><a href="../aboutme/aboutme.html">About Me</a></li>
-					<li><a href="../works/works.html">WORKS</a></li>
-					<li class="has-submenu"><a href="#">Tools</a>
-						<ul class="submenu">
-						  <li><a href="memo.html">メモ</a></li>
-						</ul>
-					</li>
-				</ul>
-		</nav>
+        <div id="tool-header">
+            <a href="../index.html" class="site-brand">
+                <span class="brand-name">Kana Tsuichihara</span>
+                <span class="brand-subtitle">Portfolio</span>
+            </a>
+            <div class="tool-name">メモツール</div>
+        </div>
 	</header>
 	<main>
 		<section class="memo-page" aria-labelledby="memo-title">
 			<div class="memo-shell">
 				<div class="memo-header">
 					<h1 id="memo-title">メモ</h1>
-					<p>思いついた内容を保存できます。ブラウザに自動保存されます。</p>
+					<p>簡単なメモツールです。入力した内容は端末（ブラウザ）に自動保存されます。</p>
+                    <p>ほかの端末やブラウザが異なる場合は保存したメモは開けません。</p>
 				</div>
-
 				<form id="memo-form" class="memo-form">
-					<label for="memo-text">メモ内容</label>
-					<textarea id="memo-text" name="memoText" rows="4" maxlength="500" placeholder="ここにメモを入力"></textarea>
+					<label for="title">タイトル</label>
+					<input type="text" id="title" placeholder="タイトル">
+					<label for="memo-text">本文</label>
+					<textarea id="memo-text" name="memoText" rows="6" maxlength="500" placeholder="本文"></textarea>
 					<div class="memo-form-actions">
 						<button type="submit" id="memo-submit-btn">追加</button>
 						<button type="button" id="memo-cancel-btn" hidden>編集キャンセル</button>
