@@ -17,7 +17,7 @@
 			'<li><a href="' + buildHref("works/works.html") + '">WORKS</a></li>',
 			'<li class="has-submenu"><a href="#">Tools</a>',
 			'<ul class="submenu">',
-			'<li><a href="' + buildHref("tools/memo.html") + '">メモ</a></li>',
+			'<li><a href="' + buildHref("tools/memo/memo.html") + '">メモ</a></li>',
 			'</ul>',
 			'</li>'
 		].join("");
