@@ -10,7 +10,7 @@
 @media (max-width: 768px) {
     .book-detail-area {
         grid-template-columns: 1fr;
-        gap: 16px;
+        gap: 30px;
     }
 
     .book-cover {
@@ -45,7 +45,13 @@
         min-width: 0;
     }
 }
-.detail-value input,
+.detail-value input {
+    border: 1px solid #888;
+}
+.detail-value input:focus {
+    border-color: #666;
+    outline: none;
+}
 .detail-value select {
     max-width: 100%;
     box-sizing: border-box;
