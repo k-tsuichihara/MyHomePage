@@ -83,7 +83,7 @@ function BookDetailPage(){
             return;
         }
 
-        const { data, error } = await createBook(book);
+        const { error } = await createBook(book);
 
         if(error){
             alert("登録に失敗しました。")
