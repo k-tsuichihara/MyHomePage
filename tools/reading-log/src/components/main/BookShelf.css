@@ -1,0 +1,62 @@
+/* BookShelf */
+.book-shelf{
+    
+}
+.shelf-scroll{
+    display:flex;
+    overflow-x:auto;
+}
+/* BookColumn */
+.book-column{
+    flex-shrink: 0;
+}
+.read-year{
+    font-size:150%;
+    margin:5px;
+}
+.read-month{
+    margin:5px;
+}
+.month-books{
+    display: flex;
+}
+.is-hidden{
+    visibility: hidden;
+}
+/* BookSpine */
+.book-spine{
+    width:65px;
+    height:450px;
+    border: 1px solid #ffffff;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    flex-shrink:0;
+    cursor:pointer;
+}
+.book-title{
+    writing-mode: vertical-rl;
+    margin-top:30%;
+}
+.book-author{
+    writing-mode: vertical-rl;
+    margin-top:auto;
+    margin-bottom:30%;
+}
+.book-rating{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    text-align:center;
+    padding:5%;
+    justify-content:center;
+}
+.rating-star{
+
+}
+.rating-number{
+    font-size:120%;
+}
+.rating-none{
+
+}

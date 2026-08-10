@@ -1,0 +1,21 @@
+/* 共通設定 */
+/* 親要素　内側padding */
+.inside-padding{
+    padding: 12px 16px;
+}
+/* ボタン */
+.common-button{
+    width: 80%;
+    min-width: 100px;
+    padding: 8px 0;
+    border-radius: 8px;
+    cursor: pointer;
+    align-items: center; 
+    margin-left :25px;      
+}
+/* パーティション */
+.section-partition{
+    width:100%;
+    background-color: #696969;
+    height:20px;
+}

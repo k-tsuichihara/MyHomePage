@@ -23,6 +23,7 @@
 - status は want_to_read / reading / read のどれか
 - rating は 1〜5、ただし未評価なら null 可
 - read_date は status = read のときだけ必要
+- 特定ユーザーがログイン後、SELELCT/INSERT/UPDATE/DELETE可能。
 
 ## reading_categories
 
@@ -38,11 +39,12 @@
 
 公開一覧用ビュー（未ログイン）
 
-テーブル「reading_bokks」のうち、一覧画面で使用する情報だけを公開する。
+テーブル「reading_books」のうち、一覧画面で使用する情報だけを公開する。
 感想・メモなどの情報は含めない。
 
 |列名|型|内容|
 |---|---|---|
+|id|uuid|アプリ内ID|
 |title|text|タイトル|
 |author|text|著者|
 |category_id|int|カテゴリID|
@@ -59,3 +61,4 @@
 ### 用途/方針
 - 一覧表示用に必要な情報のみ返したかったため
 - 個人を特定できるような情報（感想など）は含めたくなかったため
+- SELECTに関しては権限設定なし

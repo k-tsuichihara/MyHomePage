@@ -1,0 +1,81 @@
+/* SearchArea.tsx */
+.search-area{
+}
+/* section-partitionは共通部品 */
+/* SearchInput.tsx */
+.search-input-area{
+    display: grid;
+    align-items: center;
+    width:100%;
+    padding-right:15px;
+}
+.search-input{
+}
+/* FilterControls.tsx */
+.filter-area{
+    padding-left:0px;
+    display: flex;
+    align-items: center;
+    gap: 2%;
+}
+.rating-filter{
+    min-width:20%;
+    width:20%;
+}
+.sort-select{
+    min-width:20%;
+    width:20%;
+}
+.date-filter{
+    display:grid;
+    grid-template-columns:10fr 1fr 10fr;
+    align-items:center;
+    gap:10px;
+    width:100%;
+}
+.read-date-start{
+    min-width:100%;
+    width:100%;
+}
+.read-date-end{
+    min-width:100%;
+    width:100%;
+}
+.clear-button{
+    width: 10%;
+    flex: none;
+    margin-left: auto;
+}
+/* FilterControls(スマホ用) */
+@media (max-width: 768px){
+    .filter-area{
+        display:grid;
+        grid-template-columns:1fr 1fr auto;
+        gap:12px;
+    }
+    .rating-filter{
+        grid-column:1;
+        width:100%;
+    }
+    .sort-select{
+        grid-column: 2/ -1;
+        width:100%;
+    }
+    .date-filter{
+        grid-column: 1/ 3;
+        display:frex;
+        align-items:center;
+        gap:8px;
+        width:100%;
+    }
+    .read-date-start,
+    .read-date-end{
+        width:100%;
+        min-width:0;
+    }
+    .serach-button{
+        grid-column:3;
+        width:100px;
+        flex:none;
+    }
+}

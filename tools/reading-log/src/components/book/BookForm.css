@@ -1,0 +1,149 @@
+/* BookForm */
+.book-form-area{
+    padding: 10px;
+}
+.book-main-area{
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+}
+.book-detail-area{
+    display:grid;
+    grid-template-columns: minmax(220px, 1fr) 5fr;
+    align-items: stretch;
+}
+.book-cover{
+    width: 200px;
+    aspect-ratio: 2 / 3;
+
+    border-radius: 8px;
+    border: 1px solid #000000;
+    background-color: #f5f5f5;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.book-detail {
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    border-radius: 8px;
+    border: 1px solid #000000;
+}
+.detail-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
+    padding: 6px 10px;
+}
+.detail-label {
+    font-size: 14px;
+}
+.detail-value {
+    text-align: right;
+
+    overflow-wrap: anywhere;
+}
+.book-rating-area{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+.rating-title{
+    width : 100%;
+    font-size: 28px;
+    text-align: center;
+}
+.rating{
+    padding-top : 5px;
+}
+.input-area{
+
+}
+.input-area{
+    width:100%;
+}
+.input-title{
+    font-size: 23px;
+    margin-bottom : 5px;
+}
+.memoimp-input {
+    width: 100%;
+    height: 250px;
+
+    padding: 10px;
+    box-sizing: border-box;
+
+    resize: none;
+}
+.mobile-text-input {
+    display: none;
+    margin-bottom:20px;
+}
+
+@media (max-width: 768px) {
+
+    .pc-text-input {
+        display: none;
+    }
+
+    .mobile-text-input {
+        display: -webkit-box;
+    }
+}
+
+.text-preview {
+    width: 100%;
+    min-height: 80px;
+
+    padding: 10px;
+    box-sizing: border-box;
+
+    border: 1px solid #000;
+    border-radius: 8px;
+    background: #fff;
+
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.text-preview.empty {
+    color: #888;
+}
+
+.impression-area{
+}
+@media (max-width: 768px) {
+    .book-main-area {
+        grid-template-columns: 1fr;
+    }
+}
+
+.rating-input {
+    display: flex;
+    gap: 10px;
+}
+
+.rating-star {
+    border: none;
+    background: transparent;
+    padding: 0;
+    cursor: pointer;
+
+    font-size: 30px;
+    line-height: 1;
+}
+
+.rating-star.active {
+    color: gold;
+}
+.rating-star:disabled {
+    cursor: default;
+}

@@ -1,0 +1,17 @@
+.action-button-area {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom : 20px;
+}
+
+.action-left,
+.action-right {
+    display: flex;
+    align-items: center;
+}
+.action-button{
+    margin-left:15px;
+    margin-right : 10px;
+}

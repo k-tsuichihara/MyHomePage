@@ -1,0 +1,38 @@
+.main-header{
+    display: grid;
+    grid-template-columns: 4fr 1fr;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+.title-group{
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    align-items: center;
+}
+.title-group::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    z-index:-1;
+
+    background-image: url("../../assets/bookshelf.png");
+    background-repeat: repeat-x;
+    background-position: left top;
+    opacity: 0.3;
+}
+.header-name{
+    justify-self: start;
+    font-size: clamp(1.4rem, 2vw, 2rem);
+    font-weight: 500;
+}
+.book-count{
+    justify-self: end;
+    font-size: clamp(1.7rem, 2.2vw, 2.3rem);
+}
+.login-area{
+    justify-self: end;
+    align-items: center;
+}
+.login-button{
+}

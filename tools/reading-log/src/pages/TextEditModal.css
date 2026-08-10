@@ -1,0 +1,57 @@
+
+/* テキストモーダル */
+
+.text-modal-overlay {
+    position: fixed;
+    inset: 0;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    background: rgba(0, 0, 0, 0.4);
+
+    z-index: 1000;
+}
+.text-edit-modal {
+    width: 90vw;
+    height: 70vh;
+    padding: 20px;
+    box-sizing: border-box;
+
+    background-color: #fff;
+    border-radius: 12px;
+
+    display: flex;
+    flex-direction: column;   /* ← これ超重要 */
+    gap: 10px;
+}
+
+.text-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.text-modal-header h2 {
+    margin: 0;
+}
+
+.text-modal-close {
+    border: none;
+    background: transparent;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.text-modal-input {
+    width: 100%;
+    flex: 1;
+    box-sizing: border-box;
+    resize: none;
+}
+
+.text-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+}

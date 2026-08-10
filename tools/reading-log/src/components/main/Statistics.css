@@ -1,0 +1,53 @@
+.statistics{
+    width:100%;
+    margin-top:5px;
+    border-top:2px solid #000000;
+    background-color: #add8e665;
+}
+.statistics-year{
+    display:flex;
+    align-items:center;
+    gap:30px;
+    font-size:130%;
+}
+.statistics-year button{
+    background:none;
+    border:none;
+    font-size:100%;
+    cursor:pointer;
+}
+.year-button:hover {
+    color: #0000ff;
+    transform: scale(1.15);
+}
+.monthly-counts{
+    display : grid;
+    grid-template-columns: 1fr 1fr;
+    gap : 48px;
+    padding: 0 64px 20px;
+}
+.month-column{
+    display:flex;
+    flex-direction: column;
+    gap:10px;
+}
+.month-column > div{
+    display:flex;
+    justify-content: space-between;
+}
+.last-read-days{
+    display : grid;
+    grid-template-columns: 5fr 1fr;
+    border-top:2px solid #000000;
+    margin-bottom:10px;
+}
+.last-read-title{
+    align-items: center;
+    margin:auto;
+    font-size:120%;
+}
+.read-day{
+    align-items: center;
+    margin:auto;
+    font-size:120%;
+}
