@@ -18,6 +18,7 @@
 			'<li class="has-submenu"><a href="#">Tools</a>',
 			'<ul class="submenu">',
 			'<li><a href="' + buildHref("tools/memo/memo.html") + '">メモ</a></li>',
+			'<li><a href="' + buildHref("tools/reading-log/") + '">読書管理アプリ</a></li>',
 			'</ul>',
 			'</li>'
 		].join("");
