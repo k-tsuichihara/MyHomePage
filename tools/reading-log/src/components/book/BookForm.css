@@ -15,7 +15,7 @@
 
     .book-cover {
         width: min(200px, 70vw);
-        margin: 0 auto;
+        margin: 0 auto 28px;
     }
 }
 .book-cover{
