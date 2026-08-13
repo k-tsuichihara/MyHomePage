@@ -126,18 +126,6 @@
     display: none;
     margin-bottom:20px;
 }
-
-@media (max-width: 768px) {
-
-    .pc-text-input {
-        display: none;
-    }
-
-    .mobile-text-input {
-        display: -webkit-box;
-    }
-}
-
 .text-preview {
     width: 100%;
     min-height: 80px;
@@ -151,14 +139,7 @@
     text-align: left;
     font: inherit;
     cursor: pointer;
-
-    white-space: pre-wrap;
-
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
 }
-
 @media (max-width: 768px) {
     .pc-text-input {
         display: none;
@@ -166,6 +147,12 @@
 
     .mobile-text-input {
         display: -webkit-box;
+
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+
+        overflow: hidden;
+        white-space: pre-wrap;
     }
 }
 
