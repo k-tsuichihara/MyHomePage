@@ -1,7 +1,7 @@
 function AppHeader() {
     return(
         <div id="tool-header">
-            <a href={import.meta.env.VITE_HOME_PATH} className="site-brand">
+            <a href="../../index.html" className="site-brand">
                 <span className="brand-name">Kana Tsuichihara</span>
                 <span className="brand-subtitle">Portfolio</span>
             </a>
