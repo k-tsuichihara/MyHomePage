@@ -19,7 +19,13 @@ function MainPage(){
     // 本の型
     const [books, setBooks] = useState<Book[]>([]);
     const [shelfMode, setShelfMode] = useState<"read" | "wishlist">("read");
-    const [viewMode, setViewMode] = useState<"spine" | "cover">("spine");
+    const [viewMode, setViewMode] = useState<"spine" | "cover">(() => {
+        const savedViewMode = sessionStorage.getItem("readingViewMode");
+
+        return savedViewMode === "cover"
+            ? "cover"
+            : "spine";
+    });
     // 検索条件用
     const [keyword, setKeyword] = useState("");
     const [rating, setRating] = useState("");
@@ -69,6 +75,10 @@ function MainPage(){
             subscription.unsubscribe();
         };
     }, []);
+    // 表示形式切替
+    useEffect(() => {
+        sessionStorage.setItem("readingViewMode",viewMode)
+    }, [viewMode])
 
     // 検索機能（絞り込み）
     const filterBooks = books.filter((book) => {
