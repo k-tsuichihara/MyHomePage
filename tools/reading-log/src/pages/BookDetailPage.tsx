@@ -123,6 +123,9 @@ function BookDetailPage(){
     }
 
     useEffect(() => {
+
+        let isActive = true;
+
         async function loadBook(){
             //新規登録の場合はスルー
             if(!id){
@@ -132,10 +135,16 @@ function BookDetailPage(){
             const fetchedBook = isLoggedIn
                 ? await getBook(id)
                 : await getPublicBook(id);
-            setBook(fetchedBook);
+            if (isActive) {
+                setBook(fetchedBook);
+            }
         }
 
         loadBook();
+
+        return() => {
+            isActive=false;
+        };
     }, [id, isLoggedIn]);
 
     useEffect(() => {

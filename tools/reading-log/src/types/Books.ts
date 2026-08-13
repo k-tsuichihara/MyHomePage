@@ -8,4 +8,5 @@ export type Book = {
     rating         : number | null;
     category_name  : string | null;
     category_color  : string | null;
+    cover_url      : string | null;
 }

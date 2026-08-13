@@ -27,3 +27,12 @@
     top: 8px;
     right: 8px;
 }
+.barcode-camera-button {
+    display: none;
+}
+
+@media (max-width: 768px) {
+    .barcode-camera-button {
+        display: inline-block;
+    }
+}

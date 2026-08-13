@@ -4,6 +4,8 @@ import type { Category } from "../../types/Category";
 import RatingInput from "../book/RatingInput";
 import "./BookForm.css";
 import TextEditModal from "../../pages/TextEditModal";
+import BookSearchModal from "../../pages/BookSearchModal";
+import type {BookSearchResult } from "../../types/BookSearchResult";
 
 type BookFormProps = {
     book: BookDetail | null;
@@ -20,12 +22,29 @@ function BookForm({ book, onChange, isNew, categories, isLoggedIn }: BookFormPro
     const canChangeStatus =
         isLoggedIn &&
         (isNew || book?.status === "want_to_read");
+    const [ isSearchModalOpen, setIsSearchModalOpen ] = useState(false);
 
     return(
         <div className="book-form-area">
             <div className="book-main-area">
                 <div className="book-detail-area">
-                    <div className="book-cover">ほんの表紙</div>
+                    <div 
+                        className="book-cover"
+                        onClick={() => {
+                            if(isLoggedIn){
+                                setIsSearchModalOpen(true);
+                            }
+                        }}
+                    >
+                        {book?.cover_url ? (
+                            <img
+                                src={book.cover_url}
+                                alt={book.title}
+                            />
+                        ) : (
+                            "NO IMAGE"
+                        )}
+                    </div>
                     <div className="book-detail">
                         <div className="detail-row">
                             <div className="detail-label">タイトル</div>
@@ -284,6 +303,42 @@ function BookForm({ book, onChange, isNew, categories, isLoggedIn }: BookFormPro
                         }
                     }}
                     onClose={() => setEditingField(null)}
+                />
+            )}
+            {/* 本の表紙モーダル */}
+            {isLoggedIn && isSearchModalOpen && (
+                <BookSearchModal
+                    onSelect={(result: BookSearchResult) => {
+                        if(!book){
+                            return;
+                        }
+                        if(isNew){
+                            onChange({
+                                ...book,
+                                title: result.title || book.title,
+                                author: result.author || book.author,
+                                isbn: result.isbn ?? book.isbn,
+                                cover_url:result.cover_url
+                            });
+                        } else{
+                            onChange({
+                                ...book,
+                                cover_url:result.cover_url
+                            });
+                        }
+                        setIsSearchModalOpen(false);
+                    }}
+                    onClearCover={() => {
+                        if(!book){
+                            return;
+                        }
+                        onChange({
+                            ...book,
+                            cover_url:null,
+                        })
+                    }}
+                    onClose={() => setIsSearchModalOpen(false)}
+                    hasCover={!!book?.cover_url}
                 />
             )}
         </div>

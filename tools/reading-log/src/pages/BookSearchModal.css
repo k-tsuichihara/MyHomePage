@@ -1,0 +1,114 @@
+.book-search-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+.book-search-modal-content {
+    width: min(90vw, 600px);
+    max-height: 80vh;
+    padding: 20px;
+    box-sizing: border-box;
+
+    background-color: #fff;
+    border-radius: 12px;
+
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+
+    overflow-y: auto;
+}
+
+.book-search-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.book-search-modal-header h2 {
+    margin: 0;
+}
+
+.book-search-area {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 10px;
+}
+
+.barcode-camera-area {
+    grid-column: 1 / -1;
+}
+
+.book-search-results {
+    grid-column: 1 / -1;
+}
+
+.book-search-area input {
+    min-width: 0;
+}
+
+.book-search-results {
+    grid-column: 1 / -1;
+
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.book-search-result {
+    width: 100%;
+    padding: 10px;
+
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 12px;
+    align-items: center;
+
+    border: 1px solid #aaa;
+    border-radius: 8px;
+    background-color: #fff;
+
+    text-align: left;
+    cursor: pointer;
+}
+
+.book-search-result-cover {
+    width: 80px;
+    aspect-ratio: 2 / 3;
+}
+
+.book-search-result-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.book-search-result-info {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+.book-search-close-button {
+    border: none;
+    background: transparent;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.book-cover-clear-button {
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: 15px;
+
+    position: relative;
+    top: 3px;
+}

@@ -7,6 +7,12 @@
     grid-template-columns: 1fr;
     gap: 20px;
 }
+.book-detail-area {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) 5fr;
+    gap: 20px;
+    align-items: stretch;
+}
 @media (max-width: 768px) {
     .book-detail-area {
         grid-template-columns: 1fr;
@@ -29,6 +35,12 @@
     display: flex;
     justify-content: center;
     align-items: center;
+}
+.book-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
 }
 @media (max-width: 768px) {
     .book-detail {
@@ -129,7 +141,6 @@
 .text-preview {
     width: 100%;
     min-height: 80px;
-
     padding: 10px;
     box-sizing: border-box;
 
@@ -141,9 +152,21 @@
     font: inherit;
     cursor: pointer;
 
+    white-space: pre-wrap;
+
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .pc-text-input {
+        display: none;
+    }
+
+    .mobile-text-input {
+        display: -webkit-box;
+    }
 }
 
 .text-preview.empty {

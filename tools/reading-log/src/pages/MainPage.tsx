@@ -4,7 +4,6 @@ import { getBooks } from "../services/bookService";
 import { supabase } from "../lib/supabase";
 import { logout } from "../services/authService"; 
 
-
 import AppHeader from "../components/common/AppHeader";
 import MainPageHeader from "../components/main/MainPageHeader";
 import SearchArea from "../components/main/SearchArea";
@@ -45,6 +44,7 @@ function MainPage(){
 
     };
 
+    
     // 画面を開いたタイミングで処理
     useEffect(() => {
         async function loadBooks(){

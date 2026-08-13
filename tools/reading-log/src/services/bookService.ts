@@ -114,11 +114,12 @@ export async function getPublicBook(
             status:fetchedBook.status,
             read_date:fetchedBook.read_date,
             rating:fetchedBook.rating,
+            cover_url: fetchedBook.cover_url,
 
             // 公開しない
             memo:null,
             impression:null,
-            cover_url:null,
+            
             // viewにないのでnull
             created_at:null,
             updated_at:null,
@@ -141,6 +142,7 @@ export async function updateBook(book: BookDetail){
         rating: book.rating,
         memo: book.memo,
         impression: book.impression,
+        cover_url: book.cover_url,
         updated_at: new Date().toISOString(),
     })
     .eq("id", book.id)
@@ -170,11 +172,14 @@ export async function createBook(book: BookDetail){
     return { data, error };
 }
 
-// 本の削除
+// 本の削除(論理削除)
 export async function deleteBook(id: string){
     const { error } = await supabase
         .from("reading_books")
-        .delete()
+        .update({
+            is_deleted: true,
+            updated_at: new Date().toISOString(),
+        })
         .eq("id",id);
 
     return {error};
