@@ -1,7 +1,7 @@
 import { useRef, useState} from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { BookSearchResult } from "../types/BookSearchResult";
-import { searchBooksByTitle} from "../services/bookSearchService";
+import { searchBooksByIsbn, searchBooksByTitle} from "../services/bookSearchService";
 import "./BookSearchModal.css";
 
 type BookSearchModalProps = {
@@ -73,12 +73,42 @@ function BookSearchModal({
                             },
                             videoRef.current,
                             (result) => {
-                                if (result) {
-                                    console.log(
-                                        "バーコード読み取り:",
-                                        result.getText()
-                                    );
+                                if(!result){
+                                    return;
                                 }
+
+                                const barcode = result.getText();
+                                // ISBN-13だけ採用
+                                if (!/^(978|979)\d{10}$/.test(barcode)) {
+                                    return;
+                                }
+                                // 読み取り成功でカメラ停止
+                                controlRef.current?.stop();
+                                controlRef.current = null;
+                                setIsCameraOpen(false);
+
+                                // GoogleBooksで検索
+                                setIsLoading(true);
+                                setErrorMessage("");
+
+                                searchBooksByIsbn(barcode)
+                                    .then((books) => {
+                                        setResults(books);
+
+                                        if(books.length === 0){
+                                            setErrorMessage(
+                                                "このISBNに該当する本が見つかりませんでした。"
+                                            );
+                                        }
+                                    })
+                                    .catch((error) => {
+                                        console.error("ISBN検索エラー:",error);
+                                        setResults([]);
+                                        setErrorMessage("本の検索に失敗しました。");
+                                    })
+                                    .finally(() => {
+                                        setIsLoading(false);
+                                    });
                             }
                         );
 

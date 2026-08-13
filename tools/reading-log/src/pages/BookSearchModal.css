@@ -112,3 +112,14 @@
     position: relative;
     top: 3px;
 }
+.barcode-camera-area {
+    grid-column: 1 / -1;
+    position: relative;
+}
+
+.barcode-camera-area > button {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1;
+}
