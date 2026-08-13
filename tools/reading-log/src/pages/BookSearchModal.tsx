@@ -48,6 +48,24 @@ function BookSearchModal({
 
     };
 
+    const handleCloseModal = () => {
+        controlRef.current?.stop();
+        controlRef.current = null;
+
+        const stream = videoRef.current?.srcObject as MediaStream | null;
+
+        if(stream){
+            stream.getTracks().forEach((track) => {
+                track.stop();
+            });
+        }
+
+        if(videoRef.current){
+            videoRef.current.srcObject = null;
+        }
+
+        setIsCameraOpen(false);
+    };
     const handleOpenCamera = async () => {
         setIsCameraOpen(true);
         setErrorMessage("");
@@ -83,9 +101,7 @@ function BookSearchModal({
                                     return;
                                 }
                                 // 読み取り成功でカメラ停止
-                                controlRef.current?.stop();
-                                controlRef.current = null;
-                                setIsCameraOpen(false);
+                                handleCloseModal();
 
                                 // GoogleBooksで検索
                                 setIsLoading(true);
@@ -126,14 +142,6 @@ function BookSearchModal({
             setErrorMessage("バーコード読み取りを開始できませんでした。");
             setIsCameraOpen(false);
         }
-    };
-
-    const handleCloseModal = () => {
-        controlRef.current?.stop();
-        controlRef.current = null;
-        setIsCameraOpen(false);
-
-        onClose();
     };
 
     return(

@@ -1,0 +1,141 @@
+.book-cover-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px;
+}
+
+.book-cover-list-item {
+    width: 100%;
+
+    display: grid;
+    grid-template-columns: 80px minmax(0, 1fr) auto 50px;
+    gap: 16px;
+    align-items: center;
+
+    padding: 12px;
+
+    border: 1px solid #aaa;
+    border-radius: 10px;
+    background-color: #fff;
+
+    text-align: left;
+    cursor: pointer;
+}
+
+.book-cover-list-image {
+    width: 80px;
+    aspect-ratio: 2 / 3;
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+
+    border: 1px solid #aaa;
+    border-radius: 6px;
+    background-color: #f5f5f5;
+
+    overflow: hidden;
+}
+
+.book-cover-list-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.book-cover-list-image span {
+    font-size: 12px;
+    text-align: center;
+}
+
+.book-cover-list-info {
+    min-width: 0;
+
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+}
+
+.book-cover-list-title {
+    font-size: 18px;
+    font-weight: bold;
+
+    overflow-wrap: anywhere;
+}
+
+.book-cover-list-author {
+    font-size: 14px;
+    color: #555;
+
+    overflow-wrap: anywhere;
+}
+
+.book-cover-list-rating {
+    min-width: 40px;
+    text-align: center;
+    font-size: 18px;
+    white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .book-cover-list {
+        padding: 8px;
+        gap: 10px;
+    }
+
+    .book-cover-list-item {
+        grid-template-columns: 60px minmax(0, 1fr) 42px;
+        gap: 10px;
+        padding: 10px;
+    }
+
+    .book-cover-list-image {
+        width: 60px;
+    }
+
+    .book-cover-list-title {
+        font-size: 15px;
+    }
+
+    .book-cover-list-author {
+        font-size: 13px;
+    }
+
+    .book-cover-list-rating {
+        min-width: 36px;
+        font-size: 16px;
+    }
+}
+.book-cover-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px;
+
+    max-height: 720px;
+    overflow-y: auto;
+}
+@media (max-width: 768px) {
+    .book-cover-list {
+        padding: 8px;
+        gap: 10px;
+
+        max-height: 550px;
+        overflow-y: auto;
+    }
+}
+.book-cover-list-date {
+    font-size: 14px;
+    white-space: nowrap;
+    color: #555;
+}
+@media (max-width: 768px) {
+    .book-cover-list-item {
+        grid-template-columns: 60px minmax(0, 1fr) auto 36px;
+    }
+
+    .book-cover-list-date {
+        font-size: 11px;
+    }
+}

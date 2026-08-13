@@ -12,12 +12,14 @@ import FooterMenu from "../components/main/FooterMenu";
 import Statistics from "../components/main/Statistics";
 import AppFooter from  "../components/common/AppFooter";
 import LoginModal from "./LoginModal";
+import BookCoverList from "../components/main/BookCoverList";
 import "../index.css";
 
 function MainPage(){
     // 本の型
     const [books, setBooks] = useState<Book[]>([]);
     const [shelfMode, setShelfMode] = useState<"read" | "wishlist">("read");
+    const [viewMode, setViewMode] = useState<"spine" | "cover">("spine");
     // 検索条件用
     const [keyword, setKeyword] = useState("");
     const [rating, setRating] = useState("");
@@ -173,13 +175,23 @@ function MainPage(){
                 onEndDateChange={setEndDate}
                 onClear={handleClear}
             />
-            <BookShelf 
-                books={sortedBooks} 
-                shelfMode={shelfMode}
-            />
+            {viewMode === "spine" ? (
+                <BookShelf 
+                    books={sortedBooks} 
+                    shelfMode={shelfMode}
+                />
+            ) : (
+                <BookCoverList
+                    books={sortedBooks} 
+                    shelfMode={shelfMode}
+                />
+            )}
+
             <FooterMenu
                 shelfMode={shelfMode}
                 onShelfModeChange={setShelfMode}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
                 isLoggedIn={isLoggedIn}
             />
         </main>

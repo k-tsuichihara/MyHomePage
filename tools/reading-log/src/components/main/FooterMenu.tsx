@@ -5,12 +5,16 @@ import "./FooterMenu.css";
 type FooterMenuProps = {
     shelfMode: "read" | "wishlist";
     onShelfModeChange: (mode:"read" | "wishlist") => void;
+    viewMode: "spine" | "cover";
+    onViewModeChange:(mode: "spine" | "cover") => void;
     isLoggedIn: boolean;
 };
 
 function FooterMenu({
   shelfMode,
   onShelfModeChange,
+  viewMode,
+  onViewModeChange,
   isLoggedIn
 } :FooterMenuProps) {
     
@@ -29,6 +33,13 @@ function FooterMenu({
         onShelfModeChange("read");
       }
     }
+    const handleViewModeChange = () => {
+      if(viewMode === "spine"){
+        onViewModeChange("cover");
+      } else{
+        onViewModeChange("spine");
+      }
+    }
 
     return(
       <div className="footer">
@@ -39,6 +50,17 @@ function FooterMenu({
             onClick={handleRegisterClick}
           >
             + 本を登録
+          </button>
+          <button
+            className="common-button view-mode-button"
+            type="button"
+            onClick={handleViewModeChange}
+          >
+            {
+              viewMode === "spine"
+                ? "本棚形式"
+                : "カバー一覧"
+            }
           </button>
           <button className="common-button wishlist-button" type="button" onClick={handleShelfModeChange}>
             {
