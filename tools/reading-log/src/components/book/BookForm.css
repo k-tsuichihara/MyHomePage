@@ -122,9 +122,23 @@
 
     resize: none;
 }
-.mobile-text-input {
-    display: none;
-    margin-bottom:20px;
+@media (max-width: 768px) {
+    .pc-text-input {
+        display: none;
+    }
+
+    .mobile-text-input {
+        display: block;
+    }
+}
+
+.text-preview-content {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+
+    overflow: hidden;
+    white-space: pre-wrap;
 }
 .text-preview {
     width: 100%;

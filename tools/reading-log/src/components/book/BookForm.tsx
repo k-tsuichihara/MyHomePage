@@ -241,7 +241,9 @@ function BookForm({ book, onChange, isNew, categories, isLoggedIn }: BookFormPro
                                 }`}
                                 onClick={() => setEditingField("memo")} 
                             >
-                                {book?.memo || "メモを入力"}
+                                <span className="text-preview-content">
+                                    {book?.memo || "メモを入力"}
+                                </span>
                             </button>
                         </div>
                         <div className="input-title">感想</div>
@@ -268,7 +270,9 @@ function BookForm({ book, onChange, isNew, categories, isLoggedIn }: BookFormPro
                                 }`}
                                 onClick={() => setEditingField("impression")} 
                             >
-                                {book?.impression || "感想を入力"}
+                                <span className="text-preview-content">
+                                    {book?.impression || "感想を入力"}
+                                </span>
                             </button>
                         </div>
                     </div>
