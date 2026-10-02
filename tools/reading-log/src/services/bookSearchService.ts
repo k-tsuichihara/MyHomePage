@@ -4,7 +4,7 @@ export async function searchBooksByTitle(
     title : string
 ) : Promise<BookSearchResult[]>{
     
-    const query = encodeURIComponent(`intitle:${title}`);
+    const query = encodeURIComponent(title);;
     const apiKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY;
     const response = await fetch(
         `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=10&langRestrict=ja&key=${apiKey}`
