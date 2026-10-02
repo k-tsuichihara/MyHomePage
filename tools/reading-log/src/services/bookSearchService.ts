@@ -62,7 +62,7 @@ export async function searchBooksByIsbn(
     const apiKey = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY;
 
     const response = await fetch(
-        `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=10&langRestrict=ja&key=${apiKey}`
+        `https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=10&key=${apiKey}`
     );
 
     if(!response.ok){
