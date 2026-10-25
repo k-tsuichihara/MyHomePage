@@ -6,6 +6,12 @@ globalThis.fetch=()=>{throw new Error('network forbidden');};
 async function simulate(mode=''){
   const base={p_id:'memo',p_request_id:'create',p_expected_revision:null,p_title:'private title',p_body:'private body',p_tag_ids:['a']};
   const state={memos:[{id:'old',body:'private existing'}],tags:[{id:'old-tag',name:'existing'}],memoTags:[]};
+
+  if(mode==='order-only'){
+    if(!state.memos.length)state.memos.push({id:'old',user_id:'u',deleted_at:null,body:'existing'});
+    if(!state.tags.length)state.tags.push({id:'old-tag',user_id:'u',name:'existing'});
+    state.memoTags.push({user_id:'u',memo_id:'old',tag_id:'old-tag'});
+  }
   const names=memoTagNames('01234567-89ab-4cde-8fab-0123456789ab');
   if(mode==='collision')state.tags[0].name=names[0].toLowerCase();
   const calls=[],confirmations=[],records=[],receipts=new Map();let result,error;
@@ -24,6 +30,7 @@ async function simulate(mode=''){
             if(mode==='wrong-owner')s.memoTags[0].user_id='other';
             if(mode==='snapshot-body')s.memos[1].body='wrong';
           }
+          if(mode==='order-only')for(const k of ['memos','tags','memoTags'])s[k]=s[k].reverse().map(row=>Object.fromEntries(Object.entries(row).reverse()));
           return s;
         }
         if(name==='memo_save_tag'){
@@ -47,7 +54,7 @@ async function simulate(mode=''){
           if(mode==='pinned')m.pinned_at=m.updated_at;
           state.memos[1]=structuredClone(m);
         }else state.memos.push(structuredClone(m));
-        state.memoTags=[{user_id:'u',memo_id:'memo',tag_id:update?'b':'a'}];
+        state.memoTags=[...state.memoTags.filter(r=>r.memo_id!=='memo'),{user_id:'u',memo_id:'memo',tag_id:update?'b':'a'}];
         const saved={memo:m,tagIds:mode==='response-tags'&&update?['a']:payload.p_tag_ids};
         receipts.set(payload.p_request_id,{payload:structuredClone(payload),result:structuredClone(saved)});return saved;
       }});
@@ -84,3 +91,7 @@ for(const mode of ['ok','http','network','timeout','json']){
     assert.equal(count,1);await assert.rejects(rpc('memo_delete_tag',{}));assert.equal(count,1);
   });
 }
+
+test('既存関連あり・全snapshotのキー順/配列順だけが異なっても完走',async()=>{
+  const r=await simulate('order-only');assert.ifError(r.error);assert.ok(r.result);
+});

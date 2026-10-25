@@ -22,6 +22,11 @@ for(const mode of ['duplicate','orphan-memo','orphan-tag','owner','missing-delet
 }
 async function simulate(mode=''){
   const state={memos:[],tags:[],memoTags:[]},calls=[],confirmations=[],records=[],stages=[];let result,error;
+  if(mode==='order-only'){
+    if(!state.memos.length)state.memos.push({id:'old',user_id:'u',deleted_at:null,body:'existing'});
+    if(!state.tags.length)state.tags.push({id:'old-tag',user_id:'u',name:'existing'});
+    state.memoTags.push({user_id:'u',memo_id:'old',tag_id:'old-tag'});
+  }
   try{
     result=await runTagUsageCase({runId:'01234567-89ab-4cde-8fab-0123456789ab',tagIds:['used','unused'],memoIds:['m1','m2'],requestIds:['c1','c2','trash-id','restore-id'],userId:'u',
       setStage:(s)=>stages.push(s),
@@ -35,7 +40,7 @@ async function simulate(mode=''){
             if(mode==='lost-relation')s.memoTags.pop();if(mode==='extra-relation')s.memoTags.push({user_id:'u',memo_id:'m1',tag_id:'unused'});
             if(mode==='tag-change')s.tags[0].revision=2;if(mode==='body-change')s.memos[0].body='changed';
             if(mode==='unknown-field')s.memos[0]['private-unknown-key']='private-value';
-          }return s;
+          }if(mode==='order-only')for(const k of ['memos','tags','memoTags'])s[k]=s[k].reverse().map(row=>Object.fromEntries(Object.entries(row).reverse()));return s;
         }
         if(name==='memo_save_tag'){
           const t={id:p.p_id,name:p.p_name,user_id:'u',revision:1,created_at:'2026-10-20T00:00:00Z'};
@@ -50,16 +55,16 @@ async function simulate(mode=''){
         assert.equal(p.p_expected_revision,trash?1:2);assert.equal(p.p_request_id,trash?'trash-id':'restore-id');
         if(mode==='network')throw new TypeError('private');if(mode==='timeout')throw new DOMException('private','TimeoutError');
         const updated=trash?'2026-10-20T00:00:01Z':'2026-10-20T00:00:02Z';
-        const row={...state.memos[1],revision:trash?2:3,last_request_id:p.p_request_id,updated_at:updated,deleted_at:trash?updated:null};
+        const row={...state.memos.find(m=>m.id==='m2'),revision:trash?2:3,last_request_id:p.p_request_id,updated_at:updated,deleted_at:trash?updated:null};
         if(mode==='revision')row.revision=99;if(mode==='deleted')row.deleted_at=trash?null:updated;
         if(mode==='request')row.last_request_id='wrong';if(mode==='pinned')row.pinned_at=updated;
-        state.memos[1]=structuredClone(row);return row;
+        state.memos[state.memos.findIndex(m=>m.id==='m2')]=structuredClone(row);return row;
       }});
   }catch(e){error=e;}
   return {result,error,calls,confirmations,records,stages};
 }
 for(const [mode,item] of [['lost-relation','snapshot.memoTags.length'],['extra-relation','snapshot.memoTags.length'],
-  ['tag-change','snapshot.tags.revision'],['body-change','snapshot.memos.body'],['unknown-field','snapshot.memos.otherFieldsOrMultiplicity']]){
+  ['tag-change','snapshot.tags.revision'],['body-change','snapshot.memos.body'],['unknown-field','snapshot.memos.allFields']]){
   test(`取得後差分 ${mode}の段階と項目を特定`,async()=>{
     const r=await simulate(mode);assert.ok(r.error instanceof UsageDiagnostic);
     assert.equal(r.error.phase,'取得後検証');assert.equal(r.error.item,item);
@@ -88,3 +93,7 @@ for(const mode of ['lost-relation','extra-relation','tag-change','body-change','
     if(mode==='cancel-tag-used')assert.equal(r.calls.length,1);
   });
 }
+
+test('既存関連あり・全snapshotのキー順/配列順だけが異なっても完走',async()=>{
+  const r=await simulate('order-only');assert.ifError(r.error);assert.ok(r.result);
+});

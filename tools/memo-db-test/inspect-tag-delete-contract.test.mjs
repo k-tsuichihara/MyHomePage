@@ -1,12 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {TARGET_RUN,validateDeleteRecords,inspectDeleteSnapshot,inspectionRequest,InspectionError} from './inspect-tag-delete-contract.mjs';
 import './inspect-tag-delete.mjs';
 globalThis.fetch=()=>{throw new Error('network forbidden');};
 const origin='https://yohoppqflnhhvqypwhfv.supabase.co';
-const load=(suffix)=>JSON.parse(readFileSync(new URL(`runs/${TARGET_RUN}.tag-delete${suffix}.json`,import.meta.url),'utf8'));
-const records={identity:load(''),deleted:load('.tag-delete.result'),kept:load('.tag-keep.result'),failure:load('.failure')},run=records.identity;
+// Synthetic records, not copied from private runs. Only public IDs pinned by
+// the unchanged diagnostic validator are retained; all other values are invented.
+const id=(n)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const run={version:1,test:'tag-delete-read',runId:TARGET_RUN,status:'prepared',
+  projectHost:new URL(origin).hostname,userId:id(1),tagIds:[id(2),id(3)],
+  memoIds:['ffa12df4-197e-4045-ae11-23a296a735f7',id(4)],
+  requestIds:['fe9314ca-9a51-4ab8-9b78-1baa184dcd29',id(5),id(6)],startedAt:'2026-01-01T00:00:00Z'};
+const result=(action)=>({runId:run.runId,action,status:'passed',tagIds:[...run.tagIds],memoIds:[...run.memoIds],completedAt:'2026-01-01T00:00:01Z'});
+const records={identity:run,deleted:result('tag-delete'),kept:result('tag-keep'),
+  failure:{...result('failure'),status:'failed',stage:'memo-1: 取得後検証',
+    diagnostic:{phase:'取得後検証',item:'snapshot.memoTags.allFields'},completedAt:'2026-01-01T00:00:02Z'}};
 function fixture(){
   return {memos:[{id:run.memoIds[0],user_id:run.userId,revision:1,last_request_id:run.requestIds[0],deleted_at:null,pinned_at:null,
     title:`DBTEST-TAG-DELETE-1-${run.runId}`,body:`tag delete test 1 ${run.runId}`,created_at:'2026-10-25T00:00:00Z',updated_at:'2026-10-25T00:00:00Z'}],

@@ -1,14 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import {TARGET_RUN,validateUsageRecords,inspectionRequest,inspectUsageSnapshot,InspectionError} from './inspect-tag-usage-contract.mjs';
 import {usageNames} from './tag-usage-contract.mjs';
 import './inspect-tag-usage.mjs';
 globalThis.fetch=()=>{throw new Error('network forbidden');};
 const origin='https://yohoppqflnhhvqypwhfv.supabase.co';
-const load=(suffix)=>JSON.parse(readFileSync(new URL(`runs/${TARGET_RUN}.tag-usage${suffix}.json`,import.meta.url),'utf8'));
-const records={identity:load(''),used:load('.tag-used.result'),unused:load('.tag-unused.result'),failure:load('.failure')};
-const run=records.identity;
+// Synthetic records, not copied from private runs. Only public IDs pinned by
+// the unchanged diagnostic validator are retained; all other values are invented.
+const id=(n)=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+const run={version:1,test:'tag-usage-read',runId:TARGET_RUN,status:'prepared',
+  projectHost:new URL(origin).hostname,userId:id(1),tagIds:[id(2),id(3)],
+  memoIds:['a7d08104-f2ef-48e0-9cd2-7378b9ec8363',id(4)],
+  requestIds:['241be954-fceb-462e-920f-82c189639910',id(5),id(6),id(7)],startedAt:'2026-01-01T00:00:00Z'};
+const result=(action)=>({runId:run.runId,action,status:'passed',tagIds:[...run.tagIds],memoIds:[...run.memoIds],completedAt:'2026-01-01T00:00:01Z'});
+const records={identity:run,used:{...result('tag-used'),usedTagCount:0,unusedTagCount:null},
+  unused:{...result('tag-unused'),usedTagCount:0,unusedTagCount:0},
+  failure:{...result('failure'),status:'failed',stage:'スナップショット取得',completedAt:'2026-01-01T00:00:02Z'}};
 function fixture(){
   return {memos:[{id:run.memoIds[0],user_id:run.userId,revision:1,last_request_id:run.requestIds[0],deleted_at:null,pinned_at:null,
     title:`DBTEST-USAGE-1-${run.runId}`,body:`tag usage test 1 ${run.runId}`,created_at:'2026-10-21T00:00:00Z',updated_at:'2026-10-21T00:00:00Z'}],

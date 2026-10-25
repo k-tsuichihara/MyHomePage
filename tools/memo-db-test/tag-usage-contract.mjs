@@ -1,26 +1,8 @@
+import {compareSnapshots} from './snapshot-comparison.mjs';
 import {isDeepStrictEqual as equal} from 'node:util';
-import {UsageDiagnostic,SAFE_ROW_FIELDS} from './tag-usage-diagnostics.mjs';
+import {UsageDiagnostic} from './tag-usage-diagnostics.mjs';
 const check=(v,item='condition')=>{if(!v)throw new UsageDiagnostic('取得後検証',item);};
-const ordered=(rows)=>[...rows].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
-function same(a,b){
-  check(a,'snapshot');
-  for(const key of ['memos','tags','memoTags']) {
-    check(Array.isArray(a[key]),`snapshot.${key}.array`);
-    const actual=ordered(a[key]),expected=ordered(b[key]);
-    if(equal(actual,expected))continue;
-    check(actual.length===expected.length,`snapshot.${key}.length`);
-    // Prefer matching IDs/relations so array ordering changes cannot hide the changed field.
-    for(let i=0;i<expected.length;i++) {
-      const row=expected[i];
-      const match=key==='memoTags'?actual.find((r)=>r?.memo_id===row?.memo_id&&r?.tag_id===row?.tag_id)
-        :actual.find((r)=>r?.id===row?.id);
-      if(!match||!row)throw new UsageDiagnostic('取得後検証',`snapshot.${key}.identity`);
-      for(const field of SAFE_ROW_FIELDS)check(equal(match[field],row[field]),`snapshot.${key}.${field}`);
-    }
-    // Retain strict comparison, including extra/unknown fields and duplicate rows.
-    throw new UsageDiagnostic('取得後検証',`snapshot.${key}.otherFieldsOrMultiplicity`);
-  }
-}
+const same=compareSnapshots;
 function micros(v){
   check(typeof v==='string'&&Number.isFinite(Date.parse(v)));
   const m=/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/.exec(v);

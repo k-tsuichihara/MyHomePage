@@ -1,7 +1,7 @@
+import {compareSnapshots} from './snapshot-comparison.mjs';
 import {isDeepStrictEqual as equal} from 'node:util';
 const check=(v)=>{if(!v)throw new Error('verification failed');};
-const ordered=(rows)=>[...rows].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
-function same(a,b){check(a&&['memos','tags','memoTags'].every((k)=>Array.isArray(a[k])&&equal(ordered(a[k]),ordered(b[k]))));}
+const same=compareSnapshots;
 function micros(v){
   check(typeof v==='string'&&Number.isFinite(Date.parse(v)));
   const m=/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/.exec(v);

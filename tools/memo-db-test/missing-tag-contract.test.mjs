@@ -6,6 +6,11 @@ globalThis.fetch=()=>{throw new Error('network forbidden');};
 async function simulate(mode=''){
   const base={p_id:'memo',p_request_id:'create',p_expected_revision:null,p_title:'private title',p_body:'private body',p_tag_ids:['tag']};
   const state={memos:[{id:'old',body:'private existing'}],tags:[{id:'old-tag',name:'existing'}],memoTags:[]};
+  if(mode==='order-only'){
+    if(!state.memos.length)state.memos.push({id:'old',user_id:'u',deleted_at:null,body:'existing'});
+    if(!state.tags.length)state.tags.push({id:'old-tag',user_id:'u',name:'existing'});
+    state.memoTags.push({user_id:'u',memo_id:'old',tag_id:'old-tag'});
+  }
   if(mode==='missing-id-exists')state.tags.push({id:'missing',name:'existing-missing'});
   const calls=[],confirmations=[],records=[];let saved,submitted,result,error,rejected=false;
   try{
@@ -15,7 +20,7 @@ async function simulate(mode=''){
       rpc:async(name,payload)=>{
         calls.push({name,payload:structuredClone(payload)});
         if(name==='memo_load_snapshot'){
-          if(rejected&&mode==='read-failure')throw new Error('mock');return structuredClone(state);
+          if(rejected&&mode==='read-failure')throw new Error('mock');const s=structuredClone(state);if(mode==='order-only')for(const k of ['memos','tags','memoTags'])s[k]=s[k].reverse().map(row=>Object.fromEntries(Object.entries(row).reverse()));return s;
         }
         if(name==='memo_save_tag'){
           const tag={id:'tag',name:payload.p_name,user_id:'u',revision:1,created_at:'2026-10-20T00:00:00Z'};
@@ -81,3 +86,7 @@ for(const mode of ['ok','success','http','code','message','network','timeout','j
     assert.equal(count,1);
   });
 }
+
+test('既存関連あり・全snapshotのキー順/配列順だけが異なっても完走',async()=>{
+  const r=await simulate('order-only');assert.ifError(r.error);assert.ok(r.result);
+});

@@ -1,7 +1,7 @@
+import {compareSnapshots} from './snapshot-comparison.mjs';
 import {isDeepStrictEqual as equal} from 'node:util';
 const check=(v)=>{if(!v)throw new Error('verification failed');};
-const ordered=(rows)=>[...rows].sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
-function same(a,b){check(a&&['memos','tags','memoTags'].every((k)=>Array.isArray(a[k])&&equal(ordered(a[k]),ordered(b[k]))));}
+const same=compareSnapshots;
 export function missingTagName(runId){
   check(/^[0-9a-f-]{36}$/.test(runId));return `T16A-${runId.replaceAll('-','').slice(0,24)}`;
 }
