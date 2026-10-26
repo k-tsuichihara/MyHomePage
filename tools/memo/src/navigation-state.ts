@@ -10,7 +10,7 @@ export type NavigationTarget = { readonly kind: 'list' } | { readonly kind: 'det
 export interface LeaveConfirmation { readonly state: EditorState; readonly target: NavigationTarget }
 export type NavigationDecision = { kind: 'blocked'; reason: 'saving' | 'stale-confirmation' }
   | { kind: 'cancelled'; retained: EditorState }
-  | { kind: 'confirmation-required'; reason: 'unsaved' | 'unknown'; ticket: LeaveConfirmation }
+  | { kind: 'confirmation-required'; reason: 'unsaved' | 'unknown' | 'rejected'; ticket: LeaveConfirmation }
   | { kind: 'allowed'; target: NavigationTarget; retained: EditorState };
 
 function target(input: NavigationTarget): NavigationTarget {
@@ -22,8 +22,9 @@ function target(input: NavigationTarget): NavigationTarget {
 export function requestNavigation(state: EditorState, input: NavigationTarget): NavigationDecision {
   if (state.save.kind === 'saving') return { kind: 'blocked', reason: 'saving' };
   const destination = immutable(target(input));
-  if (isDirty(state) || state.unresolved.length) {
-    return { kind: 'confirmation-required', reason: state.unresolved.length ? 'unknown' : 'unsaved',
+  // 差分がなくても保存拒否は利用者の確認を要する。cleanを保存成功と同一視しない。
+  if (isDirty(state) || state.unresolved.length || state.save.kind === 'rejected') {
+    return { kind: 'confirmation-required', reason: state.unresolved.length ? 'unknown' : state.save.kind === 'rejected' ? 'rejected' : 'unsaved',
       ticket: immutable({ state, target: destination }) };
   }
   return { kind: 'allowed', target: destination, retained: state };

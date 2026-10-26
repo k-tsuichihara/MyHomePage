@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beginSave, createEditor, editDraft, settleSave } from '../src/editor-state';
+import { beginSave, createEditor, editDraft, isDirty, settleSave } from '../src/editor-state';
 import { confirmNavigation, listNeighbors, prepareLocalList, requestNavigation } from '../src/navigation-state';
 import type { NavigationTarget } from '../src/navigation-state';
 import { MEMO, OTHER, TAG, state, token } from './local-save-fixtures';
@@ -10,6 +10,44 @@ const dirty = () => editDraft(editor(), { title: ' 未保存 ', body: '\u0000', 
 const targets: NavigationTarget[] = [{ kind: 'list' }, { kind: 'detail', id: OTHER }, { kind: 'switch-source' }, { kind: 'logout' }];
 
 describe('ドラフト保護と遷移確認', () => {
+  it.each(targets)('保存拒否後のcleanでも失敗確認を要求する: %j', target => {
+    const operation = beginSave(editor(), { operationId: 'op', requestId: token(1) });
+    if (operation.kind !== 'submit') throw new Error('Expected submit');
+    const rejected = settleSave(operation.state, operation.attempt.context, { kind: 'rejected', reason: 'conflict', writeOutcome: 'not-attempted' });
+    expect(isDirty(rejected)).toBe(false); expect(rejected.unresolved).toEqual([]);
+    const decision = requestNavigation(rejected, target);
+    expect(decision.kind).toBe('confirmation-required');
+    if (decision.kind !== 'confirmation-required') throw new Error('Expected confirmation');
+    expect(decision.reason).toBe('rejected');
+    expect(confirmNavigation(rejected, decision.ticket, false)).toEqual({ kind: 'cancelled', retained: rejected });
+    expect(confirmNavigation(rejected, decision.ticket, true)).toEqual({ kind: 'allowed', target, retained: rejected });
+    expect(rejected.save).toEqual({ kind: 'rejected', reason: 'conflict' });
+  });
+  it('正常保存後のcleanは失敗確認なしで遷移できる', () => {
+    const operation = beginSave(editor(), { operationId: 'op', requestId: token(1) });
+    if (operation.kind !== 'submit') throw new Error('Expected submit');
+    const saved = settleSave(operation.state, operation.attempt.context, { kind: 'saved', value: {
+      memo: { ...state().memos[0]!, revision: 4 }, tagIds: [TAG] } });
+    expect(saved.save.kind).toBe('saved'); expect(isDirty(saved)).toBe(false);
+    expect(requestNavigation(saved, { kind: 'list' }).kind).toBe('allowed');
+  });
+  it.each(['invalid-input', 'locks-unavailable', 'revision-limit'])('競合以外の拒否%sでもcleanなまま失敗確認を要求する', reason => {
+    const operation = beginSave(editor(), { operationId: 'op', requestId: token(1) });
+    if (operation.kind !== 'submit') throw new Error('Expected submit');
+    const rejected = settleSave(operation.state, operation.attempt.context, { kind: 'rejected', reason, writeOutcome: 'not-attempted' });
+    expect(isDirty(rejected)).toBe(false);
+    expect(requestNavigation(rejected, { kind: 'list' })).toMatchObject({ kind: 'confirmation-required', reason: 'rejected' });
+  });
+  it('保存拒否の確認も追加編集で失効し、拒否状態を黙って解除しない', () => {
+    const operation = beginSave(editor(), { operationId: 'op', requestId: token(1) });
+    if (operation.kind !== 'submit') throw new Error('Expected submit');
+    const rejected = settleSave(operation.state, operation.attempt.context, { kind: 'rejected', reason: 'conflict', writeOutcome: 'not-attempted' });
+    const decision = requestNavigation(rejected, { kind: 'list' });
+    if (decision.kind !== 'confirmation-required') throw new Error('Expected confirmation');
+    const edited = editDraft(rejected, { ...rejected.draft, title: '追加編集' });
+    expect(confirmNavigation(edited, decision.ticket, true)).toEqual({ kind: 'blocked', reason: 'stale-confirmation' });
+    expect(requestNavigation(edited, { kind: 'list' })).toMatchObject({ kind: 'confirmation-required', reason: 'rejected' });
+  });
   it.each(targets)('cleanなら$kindへの判定だけを許可', target => {
     const source = editor(), decision = requestNavigation(source, target);
     expect(decision).toEqual({ kind: 'allowed', target, retained: source });
