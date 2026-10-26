@@ -39,13 +39,15 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
     render();
   };
   const selected = (id: string) => Array.from(element(id).querySelectorAll<HTMLInputElement>('input:checked')).map(node => node.value);
-  const query = () => send({ kind: 'query', options: { ...controller.getState().list?.result.query,
-    text: search.value, sort: sort.value, selectedTagIds: selected('filters') }, scrollTop: cards.scrollTop });
+  // 検索・並び替え・スクロールでは不在タグも含む保持条件を使う。DOMにないIDを落とさない。
+  const query = (tagIds: readonly string[] = controller.getState().list?.result.query.selectedTagIds ?? []) => send({ kind: 'query', options: { ...controller.getState().list?.result.query,
+    text: search.value, sort: sort.value, selectedTagIds: [...tagIds] }, scrollTop: cards.scrollTop });
   const updateDraft = () => send({ kind: 'draft', value: { title: title.value, body: body.value, tagIds: selected('editor-tags') } });
   const bind = (id: string, action: () => void) => element(id).addEventListener('click', action);
   bind('new', () => { void send({ kind: 'new' }); });
   bind('back', () => { void send({ kind: 'list' }); });
   bind('reload', () => { void send({ kind: 'load' }); });
+  bind('clear-tag-filters', () => { void query([]); });
   bind('previous', () => { void send({ kind: 'adjacent', direction: 'previous' }); });
   bind('next', () => { void send({ kind: 'adjacent', direction: 'next' }); });
   bind('edit', () => { const state = controller.getState(); if (state.route.kind === 'detail') void send({ kind: 'edit', id: state.route.id }); });
@@ -98,7 +100,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
       : state.read.kind === 'failed' ? '一覧の再読込に失敗しました。以前の表示は最新とは限りません。' : ready ? '一覧の読込が完了しました。' : '読込前です。');
     text('draft-status', state.editor ? isDirty(state.editor) ? '未保存の追加編集があります。' : '現在のドラフトに未保存の変更はありません。' : '');
     text('error', feedback || (state.editorIssue ? `編集中データの不整合：${state.editorIssue}。入力は保持しています。` : ''));
-    for (const id of ['new', 'back', 'edit', 'previous', 'next', 'tag-save', 'tag-delete']) {
+    for (const id of ['new', 'back', 'edit', 'previous', 'next', 'tag-save', 'tag-delete', 'clear-tag-filters']) {
       element<HTMLButtonElement>(id).disabled = busy || !ready || composing;
     }
     element<HTMLButtonElement>('reload').disabled = busy || composing;
@@ -143,11 +145,17 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
       for (const tag of state.data?.tags ?? []) {
         const label = doc.createElement('label'), input = doc.createElement('input'); input.type = 'checkbox'; input.value = tag.id;
         input.checked = state.list?.result.query.selectedTagIds.includes(tag.id) ?? false;
-        input.addEventListener('change', () => { void query(); });
+        input.addEventListener('change', () => {
+          const ids = (controller.getState().list?.result.query.selectedTagIds ?? []).filter(id => id.toLowerCase() !== tag.id.toLowerCase());
+          if (input.checked) ids.push(tag.id);
+          void query(ids);
+        });
         label.append(input, `${tag.name}（使用 ${state.usage.find(row => row.tagId === tag.id)?.count ?? 0}件）`); fragment.append(label);
       }
       element('filters').replaceChildren(fragment);
     }
+    // controllerが受理しない間はネイティブの選択変更も止め、見た目だけの変更を防ぐ。
+    for (const input of element('filters').querySelectorAll<HTMLInputElement>('input')) input.disabled = busy || !ready || composing;
     text('missing-tags', state.list?.result.missingSelectedTagIds.length ? '選択中のタグが削除されています。選択は自動解除しません。' : '');
     text('count', `${state.list?.result.query.view === 'trash' ? 'ゴミ箱' : '通常メモ'}：検索結果 ${state.list?.result.resultCount ?? 0}件`);
     const listKey = JSON.stringify([state.list?.result.items, busy, ready]);

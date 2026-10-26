@@ -33,6 +33,7 @@ export function createPreviewController(scenario: string) {
   } };
   const base = createLocalMemoStore({ storage, locks, now: () => now });
   const store: typeof base = { ...base, async load() {
+    if (scenario === 'slow-load') await new Promise(resolve => setTimeout(resolve, 300));
     // 保存直後の読戻し検証は成功させ、確定成功後の別loadだけを失敗させる。
     if (scenario === 'reload-failure' && written) return { kind: 'unavailable', reason: 'storage-failure' };
     return base.load();
@@ -40,6 +41,15 @@ export function createPreviewController(scenario: string) {
     if (scenario === 'slow') await new Promise(resolve => setTimeout(resolve, 600));
     if (scenario === 'rejected') return { kind: 'rejected', reason: 'conflict', writeOutcome: 'not-attempted' };
     return base.save(input);
+  }, async changeState(input) {
+    if (scenario === 'slow-mutation') await new Promise(resolve => setTimeout(resolve, 300));
+    return base.changeState(input);
+  }, async saveTag(input) {
+    if (scenario === 'slow-mutation') await new Promise(resolve => setTimeout(resolve, 300));
+    return base.saveTag(input);
+  }, async deleteTag(input) {
+    if (scenario === 'slow-mutation') await new Promise(resolve => setTimeout(resolve, 300));
+    return base.deleteTag(input);
   } };
   let sequence = 100;
   return createLocalMemoController({ store, createId: () => id(++sequence) });

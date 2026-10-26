@@ -170,3 +170,109 @@ test('入力文字列をHTMLとして実行せず、確認画面に対象と操�
   await row.locator('summary').click(); await row.getByRole('button', { name: 'ゴミ箱へ', exact: true }).click();
   await expect(page.locator('#confirm-description')).toContainText(payload); await expect(page.locator('#confirm-description')).toContainText('ゴミ箱へ移動');
 });
+
+const frames = async (page: import('@playwright/test').Page) => page.evaluate(() =>
+  new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+
+test('確認のキャンセル・再表示・遅延読込による失効を区別する', async ({ page }) => {
+  await openEditor(page, 'slow-load'); await page.getByLabel('タイトル', { exact: true }).fill('確認対象');
+  await page.getByRole('button', { name: '一覧へ戻る' }).click(); await frames(page); await expect(page.locator('#confirmation')).toBeVisible();
+  await page.getByRole('button', { name: 'キャンセル', exact: true }).click(); await frames(page); await expect(page.locator('#confirmation')).toBeHidden();
+  await page.getByRole('button', { name: '一覧へ戻る' }).click(); await frames(page); await expect(page.locator('#confirmation')).toBeVisible();
+  await page.getByRole('button', { name: '再読込', exact: true }).click(); await expect(page.locator('#read-status')).toContainText('再読込中');
+  await expect(page.locator('#confirmation')).toBeHidden(); await page.getByLabel('本文', { exact: true }).fill('読込中の追加編集');
+  await expect(page.locator('#read-status')).toContainText('完了'); await frames(page);
+  await expect(page.locator('#confirmation')).toBeHidden(); await expect(page.locator('#editor-view')).toBeVisible();
+  await expect(page.getByLabel('タイトル', { exact: true })).toHaveValue('確認対象');
+  await page.getByRole('button', { name: '一覧へ戻る' }).click(); await frames(page); await expect(page.locator('#confirmation')).toBeVisible();
+  await page.getByRole('button', { name: 'キャンセル', exact: true }).click();
+  await expect(page.getByLabel('本文', { exact: true })).toHaveValue('読込中の追加編集');
+});
+
+test('保存応答後にフォーカスと別入力欄を切り替えても古い値を再投入しない', async ({ page }) => {
+  await openEditor(page, 'slow');
+  await page.getByLabel('タイトル', { exact: true }).fill('送信タイトル'); await page.getByLabel('本文', { exact: true }).fill('送信本文');
+  await page.getByRole('button', { name: '保存する', exact: true }).click();
+  await page.getByLabel('タイトル', { exact: true }).fill('追加タイトル');
+  const body = page.getByLabel('本文', { exact: true }); await body.fill('追加本文');
+  await body.evaluate(node => { (node as HTMLTextAreaElement).setSelectionRange(2, 2); });
+  await expect(page.locator('#save-status')).toContainText('保存は成功'); await frames(page);
+  await expect(body).toBeFocused(); expect(await body.evaluate(node => (node as HTMLTextAreaElement).selectionStart)).toBe(2);
+  await expect(page.getByLabel('タイトル', { exact: true })).toHaveValue('追加タイトル'); await expect(body).toHaveValue('追加本文');
+  await page.getByLabel('タイトル', { exact: true }).fill('応答後タイトル'); await body.fill('応答後本文');
+  await expect(page.getByLabel('タイトル', { exact: true })).toHaveValue('応答後タイトル');
+  await page.getByRole('button', { name: '保存する', exact: true }).click(); await expect(page.locator('#detail-view')).toBeVisible();
+  await expect(page.locator('#detail-title')).toHaveText('応答後タイトル'); await expect(page.locator('#detail-body')).toHaveText('応答後本文');
+});
+
+test('遅延再読込中の別入力欄の編集をフォーカス移動後も保持する', async ({ page }) => {
+  await openEditor(page, 'slow-load'); await page.getByLabel('タイトル', { exact: true }).fill('読込前のタイトル');
+  await page.getByRole('button', { name: '再読込', exact: true }).click(); await page.getByLabel('本文', { exact: true }).fill('読込待ちの本文');
+  await expect(page.locator('#read-status')).toContainText('完了');
+  await page.getByLabel('タイトル', { exact: true }).fill('読込後のタイトル'); await page.getByLabel('本文', { exact: true }).press('End');
+  await page.getByLabel('本文', { exact: true }).pressSequentially('追記');
+  await expect(page.getByLabel('タイトル', { exact: true })).toHaveValue('読込後のタイトル');
+  await expect(page.getByLabel('本文', { exact: true })).toHaveValue('読込待ちの本文追記');
+});
+
+test('一覧のready切替でカードDOMが再生成されてもスクロールと条件を保持する', async ({ page }) => {
+  await page.goto('/?scenario=slow-load'); await expect(page.locator('#read-status')).toContainText('完了');
+  await page.getByLabel('並び替え').selectOption('created-asc');
+  await page.locator('#cards').evaluate(node => { node.scrollTop = 300; node.dispatchEvent(new Event('scroll')); }); await frames(page);
+  const scroll = await page.locator('#cards').evaluate(node => node.scrollTop);
+  await page.getByRole('button', { name: '再読込', exact: true }).click();
+  await expect(page.locator('#cards .open-card').first()).toBeDisabled(); await expect(page.locator('#read-status')).toContainText('完了');
+  await expect(page.locator('#cards .open-card').first()).toBeEnabled();
+  expect(await page.locator('#cards').evaluate(node => node.scrollTop)).toBe(scroll);
+  await expect(page.getByLabel('並び替え')).toHaveValue('created-asc'); await expect(page.locator('#confirmation')).toBeHidden();
+});
+
+test('一覧メニューからの確認はスクロールで消えずbusy再描画でも二重操作しない', async ({ page }) => {
+  await page.goto('/?scenario=slow-mutation'); await expect(page.locator('#read-status')).toContainText('完了');
+  const row = page.locator('#cards li').filter({ hasText: '合成メモ 6' }); await row.locator('summary').click(); await frames(page);
+  await row.getByRole('button', { name: 'ゴミ箱へ', exact: true }).click(); await frames(page);
+  await expect(page.locator('#confirmation')).toBeVisible(); await expect(page.locator('#confirm-description')).toContainText('合成メモ 6');
+  await page.getByRole('button', { name: 'キャンセル', exact: true }).click(); await row.getByRole('button', { name: 'ゴミ箱へ', exact: true }).click();
+  await frames(page); await expect(page.locator('#confirmation')).toBeVisible();
+  await page.getByRole('button', { name: '確認して実行' }).click(); await expect(page.locator('#save-status')).toContainText('保存処理中');
+  await expect(page.locator('#confirmation')).toBeHidden(); await expect(page.locator('#cards .open-card').first()).toBeDisabled();
+  await expect(page.locator('#read-status')).toContainText('完了'); await expect(page.locator('#save-status')).toContainText('保存は成功');
+  await expect(page.locator('#count')).toContainText('11件');
+});
+
+test('無関係なタグ追加・削除・使用件数変更で選択中タグを解除しない', async ({ page }) => {
+  await page.goto('/?scenario=slow-mutation'); const work = page.locator('#filters').getByLabel('仕事（使用 1件）', { exact: true }); await work.check();
+  await expect(page.locator('#count')).toContainText('1件'); await page.locator('#tag-manager summary').click();
+  await page.getByLabel('タグ名', { exact: true }).fill('無関係なタグ'); await page.getByRole('button', { name: 'タグを保存' }).click();
+  await expect(page.locator('#save-status')).toContainText('保存は成功'); await expect(work).toBeChecked();
+  await page.getByLabel('管理するタグ').selectOption({ label: '無関係なタグ' }); await page.getByRole('button', { name: 'タグを削除' }).click();
+  await page.getByRole('button', { name: '確認して実行' }).click(); await expect(page.locator('#filters')).not.toContainText('無関係なタグ'); await expect(work).toBeChecked();
+  await page.locator('#cards summary').click(); await page.getByRole('button', { name: 'ゴミ箱へ', exact: true }).click();
+  await page.getByRole('button', { name: '確認して実行' }).click();
+  await expect(page.locator('#filters').getByLabel('仕事（使用 0件）', { exact: true })).toBeChecked();
+  await page.getByRole('button', { name: 'ゴミ箱', exact: true }).click(); await expect(page.locator('#count')).toContainText('1件');
+  await page.locator('#cards summary').click(); await page.getByRole('button', { name: '復元する', exact: true }).click();
+  await page.getByRole('button', { name: '確認して実行' }).click(); await expect(work).toBeChecked();
+});
+
+test('選択タグ削除後の検索・並び替えでも不在タグIDを黙って解除しない', async ({ page }) => {
+  await page.goto('/'); await page.locator('#filters').getByLabel('仕事（使用 1件）', { exact: true }).check();
+  await page.locator('#tag-manager summary').click(); await page.getByLabel('管理するタグ').selectOption({ label: '仕事' });
+  await page.getByRole('button', { name: 'タグを削除' }).click(); await page.getByRole('button', { name: '確認して実行' }).click();
+  await expect(page.locator('#missing-tags')).toContainText('削除されています'); await expect(page.locator('#count')).toContainText('0件');
+  await page.getByLabel('検索', { exact: true }).fill('合成');
+  await expect(page.locator('#missing-tags')).toContainText('削除されています'); await expect(page.locator('#count')).toContainText('0件');
+  await page.getByLabel('並び替え').selectOption('created-asc'); await expect(page.locator('#missing-tags')).toContainText('削除されています');
+  await page.getByRole('button', { name: 'タグ絞り込みを解除', exact: true }).click();
+  await expect(page.locator('#missing-tags')).toBeEmpty(); await expect(page.locator('#count')).toContainText('11件');
+});
+
+test('busy中にタグ選択をクリックしても表示だけが未選択へ変わらない', async ({ page }) => {
+  await page.goto('/?scenario=slow-mutation'); const work = page.locator('#filters').getByLabel('仕事（使用 1件）', { exact: true }); await work.check();
+  await page.locator('#cards summary').click(); await page.getByRole('button', { name: 'ピン解除', exact: true }).click();
+  await expect(page.locator('#save-status')).toContainText('保存処理中');
+  await work.evaluate(node => { (node as HTMLInputElement).click(); });
+  await expect(work).toBeChecked(); await expect(page.locator('#read-status')).toContainText('完了');
+  await expect(page.locator('#save-status')).toContainText('保存は成功'); await expect(work).toBeChecked();
+  await expect(page.locator('#count')).toContainText('1件');
+});

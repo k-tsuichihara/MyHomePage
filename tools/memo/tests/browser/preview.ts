@@ -17,5 +17,5 @@ if ('serviceWorker' in navigator) Object.defineProperty(navigator, 'serviceWorke
 if ('storage' in navigator) Object.defineProperty(navigator, 'storage', { configurable: false, get: deny('storage') });
 
 const requested = new URL(location.href).searchParams.get('scenario') ?? 'normal';
-const scenario = ['normal', 'slow', 'rejected', 'unknown', 'reload-failure'].includes(requested) ? requested : 'normal';
+const scenario = ['normal', 'slow', 'slow-load', 'slow-mutation', 'rejected', 'unknown', 'reload-failure'].includes(requested) ? requested : 'normal';
 mountMemoPreview(document, createPreviewController(scenario));
