@@ -337,3 +337,109 @@ describe('公開境界と入力の独立性', () => {
     expect(f.storage.writes).toHaveLength(0);
   });
 });
+
+describe('レビュー回帰：自動再読込の競合と確認の再入', () => {
+  const orders = ['old-first', 'new-first'] as const;
+  const outcomes = ['success', 'failure'] as const;
+  const cases = outcomes.flatMap(oldOutcome => outcomes.flatMap(newOutcome => orders.map(order => ({ oldOutcome, newOutcome, order }))));
+  it.each(cases)('保存後load=$oldOutcome、後続load=$newOutcome、完了順=$orderでも最新世代だけを反映', async ({ oldOutcome, newOutcome, order }) => {
+    const f = fixture(); await editing(f);
+    const automatic = deferred<LocalLoadResult>(), manual = deferred<LocalLoadResult>();
+    f.store.load.mockReturnValueOnce(automatic.promise).mockReturnValueOnce(manual.promise);
+    const saving = f.dispatch({ kind: 'save' });
+    await vi.waitFor(() => expect(f.store.load).toHaveBeenCalledTimes(2));
+    expect(f.get().write.kind).toBe('succeeded'); expect(f.get().read.kind).toBe('loading');
+    const savedEditor = f.get().editor, beforeData = f.get().data;
+    const oldSnapshot = JSON.parse(f.storage.values.get(NEW_STORAGE_KEY)!) as ReturnType<typeof state>;
+    const newSnapshot = structuredClone(oldSnapshot); newSnapshot.memos[0]!.title = '後続読込の値'; newSnapshot.memos[0]!.revision++;
+    const oldResult: LocalLoadResult = oldOutcome === 'success' ? { kind: 'loaded', value: oldSnapshot }
+      : { kind: 'unavailable', reason: 'storage-failure' };
+    const newResult: LocalLoadResult = newOutcome === 'success' ? { kind: 'loaded', value: newSnapshot }
+      : { kind: 'unavailable', reason: 'invalid-data' };
+    const loading = f.dispatch({ kind: 'load' });
+    expect(f.store.load).toHaveBeenCalledTimes(3);
+    if (order === 'old-first') {
+      automatic.resolve(oldResult); await saving;
+      // 古い成功でもreadyへ進まず、古い失敗でも最新loadをfailedにしない。
+      expect(f.get().read.kind).toBe('loading'); expect(f.get().data).toBe(beforeData);
+      manual.resolve(newResult); await loading;
+    } else {
+      manual.resolve(newResult); await loading; const latest = f.get();
+      automatic.resolve(oldResult); await saving;
+      expect(f.get()).toBe(latest);
+    }
+    expect(f.get().write.kind).toBe('succeeded'); expect(f.get().editor).toBe(savedEditor);
+    expect(f.get().editor!.expectedRevision).toBe(4); expect(f.store.save).toHaveBeenCalledTimes(1);
+    expect(f.storage.writes).toHaveLength(1);
+    if (newOutcome === 'success') {
+      expect(f.get().read.kind).toBe('ready'); expect(f.get().data!.memos[0]!.title).toBe('後続読込の値');
+      expect(f.get().list!.result.items.find(row => row.memo.id === MEMO)!.memo.title).toBe('後続読込の値');
+      expect(f.get().editorIssue).toBe('changed');
+    } else {
+      expect(f.get().read).toEqual({ kind: 'failed', reason: 'invalid-data' }); expect(f.get().data).toBe(beforeData);
+    }
+  });
+  it('古い自動loadのPromise拒否も最新の成功を上書きしない', async () => {
+    const f = fixture(); await editing(f);
+    let reject!: (error: Error) => void;
+    const old = new Promise<LocalLoadResult>((_resolve, fail) => { reject = fail; });
+    f.store.load.mockReturnValueOnce(old);
+    const saving = f.dispatch({ kind: 'save' }); await vi.waitFor(() => expect(f.store.load).toHaveBeenCalledTimes(2));
+    await f.dispatch({ kind: 'load' }); const latest = f.get();
+    reject(new Error('PRIVATE')); await saving;
+    expect(f.get()).toBe(latest); expect(f.get().read.kind).toBe('ready'); expect(f.get().write.kind).toBe('succeeded');
+  });
+  it('最新loadのPromise拒否後に古い自動loadが成功してもfailedを保持', async () => {
+    const f = fixture(); await editing(f); const old = deferred<LocalLoadResult>();
+    f.store.load.mockReturnValueOnce(old.promise);
+    const saving = f.dispatch({ kind: 'save' }); await vi.waitFor(() => expect(f.store.load).toHaveBeenCalledTimes(2));
+    f.store.load.mockRejectedValueOnce(new Error('PRIVATE')); await f.dispatch({ kind: 'load' }); const latest = f.get();
+    old.resolve({ kind: 'loaded', value: state() }); await saving;
+    expect(f.get()).toBe(latest); expect(f.get().read).toEqual({ kind: 'failed', reason: 'storage-failure' });
+    expect(f.get().write.kind).toBe('succeeded');
+  });
+  it('同一確認の並行実行・microtask再入・ポート内再入でも削除は一回だけ', async () => {
+    const f = fixture(); await f.dispatch({ kind: 'load' });
+    await f.dispatch({ kind: 'mutate', operation: { kind: 'delete-tag', id: TAG2, expectedRevision: 2 } });
+    const token = f.get().confirmation!.token, gate = deferred<void>();
+    const original = f.store.deleteTag.getMockImplementation()!;
+    let reentered: ReturnType<typeof f.dispatch> | undefined;
+    f.store.deleteTag.mockImplementationOnce(async input => {
+      reentered = f.dispatch({ kind: 'confirm', token, accepted: true });
+      await gate.promise; return original(input);
+    });
+    const first = f.dispatch({ kind: 'confirm', token, accepted: true });
+    const second = f.dispatch({ kind: 'confirm', token, accepted: true });
+    const microtask = Promise.resolve().then(() => f.dispatch({ kind: 'confirm', token, accepted: true }));
+    for (const result of await Promise.all([second, microtask, reentered!])) expect(result).toEqual({ kind: 'blocked', reason: 'writing' });
+    expect(f.store.deleteTag).toHaveBeenCalledTimes(1); expect(f.get().confirmation).toBeNull();
+    gate.resolve(); await first;
+    expect(f.storage.writes).toHaveLength(1); expect(f.store.deleteTag).toHaveBeenCalledTimes(1);
+    expect(await f.dispatch({ kind: 'confirm', token, accepted: true })).toMatchObject({ reason: 'stale-confirmation' });
+  });
+  it('結果不明後の再保存確認を二重実行しても追加saveは一回だけ', async () => {
+    const f = fixture(); await editing(f);
+    f.store.save.mockResolvedValueOnce({ kind: 'unknown', reason: 'storage-failure', writeOutcome: 'unverified' });
+    await f.dispatch({ kind: 'save' }); await f.dispatch({ kind: 'load' }); await f.dispatch({ kind: 'save' });
+    const token = f.get().confirmation!.token, gate = deferred<void>(), original = f.store.save.getMockImplementation()!;
+    f.store.save.mockImplementationOnce(async input => { await gate.promise; return original(input); });
+    const first = f.dispatch({ kind: 'confirm', token, accepted: true });
+    expect(await f.dispatch({ kind: 'confirm', token, accepted: true })).toMatchObject({ reason: 'writing' });
+    gate.resolve(); await first;
+    expect(f.store.save).toHaveBeenCalledTimes(2); expect(f.storage.writes).toHaveLength(1); expect(f.get().unresolved).toHaveLength(1);
+  });
+  it('保存Promise解決後settleSave直前の編集を最新ドラフトとして保持する', async () => {
+    const f = fixture(); await editing(f); const original = f.store.save.getMockImplementation()!;
+    f.store.save.mockImplementationOnce(input => {
+      const result = original(input);
+      // await側の継続より先に登録し、解決済み応答の反映直前へ編集を差し込む。
+      void result.then(() => f.dispatch({ kind: 'draft', value: { title: '応答直前の編集', body: '\u0000', tagIds: [TAG2] } }));
+      return result;
+    });
+    await f.dispatch({ kind: 'save' });
+    expect(f.get().editor!.draft.title).toBe('応答直前の編集'); expect(f.get().editor!.draft.body).toBe('\u0000');
+    expect(isDirty(f.get().editor!)).toBe(true); expect(f.get().route.kind).toBe('edit');
+    expect(f.get().data!.memos[0]!.title).toBe('元のタイトル'); expect(f.get().editor!.expectedRevision).toBe(4);
+    expect(f.store.save).toHaveBeenCalledTimes(1);
+  });
+});
