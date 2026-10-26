@@ -2,6 +2,8 @@
 
 第二弾の旧データ・v2・DB snapshot読み取り検証は、別紙[承認済み契約とテスト方針](READ-VALIDATION.md)を参照。第一弾の入力検証165件は引き続き維持する。
 
+第三弾のWeb Locks排他・非破壊移行・pending復旧は、[ローカル移行のテスト方針](LOCAL-MIGRATION.md)を参照。実保存データや既存画面には接続しない。
+
 対象は新規入力用の純粋関数と最小限のドメイン型。VitestはNode環境で実行し、DOM・localStorage・ネットワーク・認証・実DBは使用しない。
 
 ## 根拠と期待値
