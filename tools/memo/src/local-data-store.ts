@@ -9,7 +9,7 @@ import type { LocalV2ValidationResult } from './read-types';
 export type ReadyLocalData = Exclude<LocalV2ValidationResult, { kind: 'validated-pending' }>['value'];
 export type LocalFailureReason = 'invalid-input' | 'request-id-reused' | 'locks-unavailable' | 'lock-failure'
   | 'storage-failure' | 'invalid-data' | 'migration-required' | 'recovery-required' | 'snapshot-changed'
-  | 'id-exists' | 'not-found' | 'trashed' | 'conflict' | 'revision-limit' | 'invalid-tag';
+  | 'id-exists' | 'not-found' | 'trashed' | 'conflict' | 'revision-limit' | 'invalid-tag' | 'invalid-state' | 'duplicate-tag';
 export type LocalWriteFailure =
   | { kind: 'rejected'; reason: LocalFailureReason; writeOutcome: 'not-attempted' }
   | { kind: 'unknown'; reason: LocalFailureReason; writeOutcome: 'unverified' };
