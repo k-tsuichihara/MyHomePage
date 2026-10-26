@@ -66,3 +66,22 @@ Ver1.1.0の正式な設計参照先は次の5件です。設計参照先であ�
 Ver1.1.0のTypeScript本体、認証・クラウド保存、移行等の完成をDBテスト完了から推定しません。画面・ブラウザ、モバイル、移行、非同期応答等は別途検証が必要です。
 
 このREADMEの現行機能・起動方法はコードの静的確認に基づきます。本整理時にはブラウザ動作確認・DB接続・テスト再実行は行っていません。
+
+## Ver1.1.0 先行実装の開発・テスト
+
+[製造計画](doc/v1.1.0/IMPLEMENTATION-PLAN-2026-10-26.md) と [入力契約のテスト方針](tests/README.md) に従います。現在の先行実装は `src/types.ts` と `src/input.ts` の型・純粋な入力検証のみです。現行HTML/CSS/JavaScriptからは読み込まず、localStorage・Supabase・UIには接続していません。
+
+メモ専用のpackage.jsonとlockfileを使います。Node.jsは `^22.12.0 || ^24.0.0 || >=26.0.0` が対象です。TypeScript 7.0.2とVitest 5.0.5を開発依存として固定し、型チェックにはNodeの型定義も使用します。他のアプリの依存関係管理とは独立しています。
+
+リポジトリルートから実行します。
+
+```powershell
+cd tools/memo
+npm.cmd ci
+npm.cmd run typecheck
+npm.cmd test
+```
+
+PowerShell以外では `npm` も利用できます。実行ポリシーの変更は不要です。`typecheck`は `tsc --noEmit`、`test`は `vitest run` を実行します。テストはNode環境で、実DB・認証・既存保存領域へのアクセスはありません。
+
+今回JavaScriptの生成・配信は行いません。ブラウザ向けのビルド方式・生成先・公開手順は後続承認事項です。`node_modules/`・カバレッジ・実設定・ログはGit除外し、package-lock.jsonはGit管理します。入力関数は新規入力用であり、旧データ移行の補正には使用しません。
