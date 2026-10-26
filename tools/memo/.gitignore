@@ -4,3 +4,7 @@ coverage/
 .env.*
 *.log
 *.tsbuildinfo
+.preview/
+test-results/
+playwright-report/
+.browser-profiles/
