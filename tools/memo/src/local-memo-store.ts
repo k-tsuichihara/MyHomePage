@@ -3,19 +3,22 @@ import { createLocalDataStore, LocalDataError } from './local-data-store';
 import type { LocalDataDependencies, LocalWriteFailure } from './local-data-store';
 import { array, instant, nullable, record, revision, uuid, uuidKey } from './read-primitives';
 import type { Memo } from './types';
+import { changeLocalState, parseStateRequest } from './local-state-operations';
+import { deleteLocalTag, parseTagDelete, parseTagSave, saveLocalTag } from './local-tag-operations';
+import type { ReadyLocalData } from './local-data-store';
 
 interface LocalSaveRequest {
   id: string; title: string; body: string; tagIds: string[]; expectedRevision: number | null; requestId: string;
 }
 export type LocalSaveResult = { kind: 'saved'; value: { memo: Memo; tagIds: string[] } } | LocalWriteFailure;
 
-/** 完全なMemoRepositoryではなく、今回承認されたload/saveだけを提供する。 */
+/** 完全削除・履歴照合を含まないローカル操作。全変更操作でrequestIdのA案を共用する。 */
 export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => string }) {
   const data = createLocalDataStore(deps);
   // requestIdだけをインスタンス寿命中保持する。内容・receiptの永続化や暗黙の追い出しはしない。
   const used = new Set<string>();
 
-  function accept(input: unknown): LocalSaveRequest {
+  function reserve(input: unknown): string {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new LocalDataError('invalid-input');
     const descriptor = Object.getOwnPropertyDescriptor(input, 'requestId');
     if (!descriptor || !('value' in descriptor)) throw new LocalDataError('invalid-input');
@@ -24,6 +27,11 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
     if (used.has(key)) throw new LocalDataError('request-id-reused');
     // 他の検証や最初のawaitより前に予約する。入力不正・ロック失敗でも予約は戻さない。
     used.add(key);
+    return requestId;
+  }
+
+  function accept(input: unknown): LocalSaveRequest {
+    const requestId = reserve(input);
     const row = record(input, ['id', 'title', 'body', 'tagIds', 'expectedRevision', 'requestId']);
     const normalized = normalizeMemoInput(row.title as string, row.body as string);
     const tagIds = array(row.tagIds).map(uuid);
@@ -31,8 +39,29 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
     return { id: uuid(row.id), ...normalized, tagIds, expectedRevision: nullable(row.expectedRevision, raw => revision(raw) as number), requestId };
   }
 
+  /** 同じ予約タイミング・入力固定・書込基盤を、追加操作にも適用する。 */
+  async function operate<T>(input: unknown, parse: (raw: unknown) => T, transform: (current: ReadyLocalData, request: T) => ReadyLocalData) {
+    let request: T;
+    try { reserve(input); request = parse(input); }
+    catch (error) {
+      return { kind: 'rejected' as const, reason: error instanceof LocalDataError ? error.reason : 'invalid-input' as const, writeOutcome: 'not-attempted' as const };
+    }
+    return data.transact(current => transform(current, request));
+  }
+
   return {
     load: data.load,
+    /** pin/unpin/trash/restoreだけを提供し、完全削除を状態操作へ混在させない。 */
+    changeState(input: unknown) {
+      return operate(input, parseStateRequest, (current, request) => changeLocalState(current, request, deps.now));
+    },
+    saveTag(input: unknown) {
+      return operate(input, parseTagSave, (current, request) => saveLocalTag(current, request, deps.now));
+    },
+    /** 明示呼出しだけで実行する。確認UIは後続工程で接続する。 */
+    deleteTag(input: unknown) {
+      return operate(input, parseTagDelete, (current, request) => deleteLocalTag(current, request, deps.now));
+    },
     /**
      * 受付時に入力を独立した値へ固定する。書込後の異常を同一要求の自動再送で回避しない。
      * lastRequestIdは新規ではnull、更新では既存値保持とし、試行の判定には使わない。
