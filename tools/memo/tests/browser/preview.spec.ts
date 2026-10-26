@@ -174,6 +174,39 @@ test('入力文字列をHTMLとして実行せず、確認画面に対象と操�
 const frames = async (page: import('@playwright/test').Page) => page.evaluate(() =>
   new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 
+for (const scenario of ['slow-load', 'slow-mutation']) test(`受付不能中の検索を抑止し表示条件と結果を一致させる：${scenario}`, async ({ page }) => {
+  await page.goto(`/?scenario=${scenario}`); await expect(page.locator('#read-status')).toContainText('完了');
+  if (scenario === 'slow-load') await page.locator('#reload').click();
+  else { await page.locator('#cards summary').first().click(); await page.getByRole('button', { name: 'ピン解除', exact: true }).click(); }
+  await expect(page.locator('#search')).toBeDisabled();
+  await expect(page.locator('#search')).toBeEnabled();
+  await page.locator('#search').fill('NO MATCH'); await expect(page.locator('#count')).toContainText('0件');
+});
+
+test('ゴミ箱と復元の確認をスクロールで失効させずキャンセル・実行できる', async ({ page }) => {
+  await page.goto('/'); await page.locator('#cards summary').first().click();
+  await page.getByRole('button', { name: 'ゴミ箱へ', exact: true }).first().click();
+  const scroll = async () => { await page.locator('#cards').evaluate(node => { node.scrollTop = 200; node.dispatchEvent(new Event('scroll')); }); await frames(page); };
+  await scroll(); await expect(page.locator('#confirmation')).toBeVisible();
+  await page.locator('#confirm-no').click(); await expect(page.locator('#count')).toContainText('12件');
+  await page.getByRole('button', { name: 'ゴミ箱へ', exact: true }).first().click(); await scroll(); await page.locator('#confirm-yes').click();
+  await expect(page.locator('#count')).toContainText('11件'); await page.locator('#trash-view').click();
+  await page.locator('#cards summary').click(); await page.getByRole('button', { name: '復元する', exact: true }).click();
+  await scroll(); await expect(page.locator('#confirmation')).toBeVisible(); await page.locator('#confirm-yes').click();
+  await expect(page.locator('#count')).toContainText('0件');
+});
+
+for (const create of [false, true]) test(`保存成功後の読込失敗で古い詳細や不在を断定しない：${create ? '新規' : '更新'}`, async ({ page }) => {
+  if (create) { await page.goto('/?scenario=reload-failure'); await page.locator('#new').click(); }
+  else await openEditor(page, 'reload-failure');
+  await page.locator('#memo-title').fill('確定保存タイトル'); await page.locator('#memo-body').fill('確定保存本文');
+  await page.locator('#save').click(); await expect(page.locator('#save-status')).toContainText('保存は成功');
+  await expect(page.locator('#read-status')).toContainText('失敗');
+  await expect(page.locator('#detail-title')).toHaveText('詳細を取得できません。再読込してください。');
+  await expect(page.locator('#detail-body')).toBeEmpty(); await expect(page.locator('#detail-tags')).toBeEmpty();
+  await expect(page.locator('#edit')).toBeDisabled();
+});
+
 test('確認のキャンセル・再表示・遅延読込による失効を区別する', async ({ page }) => {
   await openEditor(page, 'slow-load'); await page.getByLabel('タイトル', { exact: true }).fill('確認対象');
   await page.getByRole('button', { name: '一覧へ戻る' }).click(); await frames(page); await expect(page.locator('#confirmation')).toBeVisible();

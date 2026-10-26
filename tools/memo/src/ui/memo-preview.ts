@@ -76,7 +76,8 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
     win.cancelAnimationFrame(scrollFrame);
     scrollFrame = win.requestAnimationFrame(() => {
       const state = controller.getState();
-      if (state.route.kind === 'list' && state.read.kind === 'ready' && cards.scrollTop !== state.list?.scrollTop) void query();
+      // 確認中は位置記録だけの世代更新を控える。対象・revisionの実変更による失効は維持する。
+      if (!state.confirmation && state.route.kind === 'list' && state.read.kind === 'ready' && cards.scrollTop !== state.list?.scrollTop) void query();
     });
   });
   const managed = element<HTMLSelectElement>('managed-tag'), tagName = element<HTMLInputElement>('tag-name');
@@ -105,6 +106,8 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
     }
     element<HTMLButtonElement>('reload').disabled = busy || composing;
     element<HTMLButtonElement>('save').disabled = busy || !ready || composing;
+    // 受理されない検索文字列を表示だけ残さない。保存中のドラフト入力とは分離する。
+    search.disabled = busy || !ready;
     if (!composing) {
       text('page-title', state.route.kind === 'list' ? 'メモ一覧' : state.route.kind === 'edit' ? 'メモ編集' : 'メモ詳細');
       element('list-view').hidden = state.route.kind !== 'list'; element('detail-view').hidden = state.route.kind !== 'detail';
@@ -133,8 +136,9 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
     if (state.route.kind === 'detail') {
       const id = state.route.id;
       const memo = state.data?.memos.find(row => row.id === id);
-      text('detail-title', memo?.title ?? '対象のメモはありません。'); text('detail-body', memo?.body ?? '');
-      text('detail-tags', state.data?.memoTags.filter(row => row.memoId === memo?.id).map(row => state.data?.tags.find(tag => tag.id === row.tagId)?.name ?? '').join('・') ?? '');
+      // 再取得失敗時のsnapshotは最新ではない。不在や古い内容を確定情報として表示しない。
+      text('detail-title', ready ? memo?.title ?? '対象のメモはありません。' : '詳細を取得できません。再読込してください。'); text('detail-body', ready ? memo?.body ?? '' : '');
+      text('detail-tags', ready ? state.data?.memoTags.filter(row => row.memoId === memo?.id).map(row => state.data?.tags.find(tag => tag.id === row.tagId)?.name ?? '').join('・') ?? '' : '');
       element<HTMLButtonElement>('edit').disabled ||= memo?.deletedAt !== null;
     }
     if (!composing && doc.activeElement !== search && search.value !== state.list?.result.query.text) search.value = state.list?.result.query.text ?? '';
