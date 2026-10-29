@@ -2,6 +2,7 @@ import { expect, it, vi } from 'vitest';
 import { createDuplicateEditor } from '../src/memo-duplicate';
 import { createLocalMemoController } from '../src/local-memo-controller';
 import { isDirty } from '../src/editor-state';
+import { DUPLICATE_DRAFT_ID } from '../src/memo-duplicate';
 import { NEW_STORAGE_KEY, OLD_STORAGE_KEY } from '../src/local-migration';
 import { MEMO, OTHER, TAG, NOW, state, token, saveFixture } from './local-save-fixtures';
 
@@ -81,6 +82,11 @@ it('ID衝突は既存saveで拒否し、上書き・再採番・ドラフト破�
   expect(f.get().write).toMatchObject({ kind: 'rejected', reason: 'id-exists' });
   expect(f.get().editor!.draft.title).toBe('元のタイトル'); expect(f.generate).toHaveBeenCalledTimes(2);
   expect(f.storage.writes).toHaveLength(0);
+  expect(f.get().editor!.id).toBe(MEMO);
+  expect(f.get().write).toMatchObject({ attempt: { input: { id: MEMO, expectedRevision: null } } });
+  await f.send({ kind: 'load' }); expect(f.get().editorIssue).toBe('id-exists');
+  expect(await f.send({ kind: 'save' })).toMatchObject({ reason: 'id-exists' });
+  expect(f.generate).toHaveBeenCalledTimes(2);
 });
 it.each(['quota', 'after-write', 'readback'] as const)('%sでも結果不明を保持し自動再送しない', async mode => {
   const f = fixture(); await copy(f);
@@ -95,10 +101,15 @@ it.each(['quota', 'after-write', 'readback'] as const)('%sでも結果不明を�
 it('二重保存を一回に制限し、保存中追加編集を消さない', async () => {
   const f = fixture(); await copy(f);
   const pending = f.send({ kind: 'save' });
+  expect(f.get().editor!.id).toBe(token(102));
+  expect(f.get().editor!.save).toMatchObject({ attempt: { request: { id: token(102) } } });
   expect(await f.send({ kind: 'save' })).toMatchObject({ reason: 'writing' });
   expect(await f.send({ kind: 'duplicate', id: MEMO })).toMatchObject({ reason: 'writing' });
   await f.send({ kind: 'draft', value: { title: '追加', body: ' ', tagIds: [TAG] } });
+  expect(f.get().editor!.id).toBe(token(102));
+  expect(f.get().route).toEqual({ kind: 'edit', id: token(102) });
   await pending; expect(f.get().route.kind).toBe('edit'); expect(isDirty(f.get().editor!)).toBe(true);
+  expect(f.get().editor!.save.kind).toBe('saved');
   expect(f.get().editor!.draft.title).toBe('追加'); expect(f.storage.writes).toHaveLength(1);
 });
 it('旧キー・移行snapshotを保持して既存経路から保存', async () => {
@@ -133,4 +144,71 @@ it.each(['pending', 'invalid'] as const)('%sへ変化した保存先を複製で
   await f.send({ kind: 'save' });
   expect(f.get().write.kind).toBe('rejected'); expect(f.get().editor!.draft.title).toBe('元のタイトル');
   expect(f.storage.values.get(NEW_STORAGE_KEY)).toBe(raw); expect(f.storage.writes).toHaveLength(0);
+});
+
+it.each(['saved', 'rejected', 'unknown'] as const)('初回保存%sでeditor・route・送信IDを開始時から一致させる', async outcome => {
+  const f = fixture(); await copy(f);
+  if (outcome === 'rejected') modify(f, value => { value.tags = []; value.memoTags = []; });
+  if (outcome === 'unknown') f.storage.beforeSet = () => { throw new Error('synthetic quota'); };
+  const pending = f.send({ kind: 'save' });
+  const writing = f.get();
+  expect(writing.editor!.id).toBe(token(102));
+  expect(writing.editor!.id).not.toBe(DUPLICATE_DRAFT_ID);
+  expect(writing.route).toEqual({ kind: 'edit', id: token(102) });
+  expect(writing.editor!.save).toMatchObject({ kind: 'saving', attempt: { request: { id: token(102), expectedRevision: null } } });
+  expect(writing.write).toMatchObject({ kind: 'writing', attempt: { input: { id: token(102), requestId: token(101) } } });
+  expect(await f.send({ kind: 'save' })).toMatchObject({ reason: 'writing' });
+  await pending;
+  expect(f.get().editor!.id).toBe(token(102));
+  expect(f.get().route).toMatchObject({ id: token(102) });
+  expect(f.get().editor!.save.kind).toBe(outcome);
+  if (outcome === 'saved') expect(f.get().write.kind).toBe('succeeded');
+});
+
+it('書込前例外の結果不明後、loadと明示承認した再保存で永続IDを維持する', async () => {
+  const f = fixture(); await copy(f);
+  f.storage.beforeSet = () => { throw new Error('synthetic quota'); };
+  await f.send({ kind: 'save' });
+  expect(f.get().editor!.save).toMatchObject({ kind: 'unknown', attempt: { request: { id: token(102), requestId: token(101) } } });
+  delete f.storage.beforeSet;
+  // 仮IDと同値の実在メモがあっても、初回採番済みの新IDとは混同しない。
+  modify(f, value => { value.memos.push({ ...value.memos[1]!, id: DUPLICATE_DRAFT_ID }); });
+  await f.send({ kind: 'load' });
+  expect(f.get().editorIssue).toBeNull(); expect(f.get().editor!.id).toBe(token(102));
+  expect(f.storage.writes).toHaveLength(0);
+  expect((await f.send({ kind: 'save' })).kind).toBe('confirmation-required');
+  const ticket = f.get().confirmation!;
+  const pending = f.send({ kind: 'confirm', token: ticket.token, accepted: true });
+  expect(f.get().write).toMatchObject({ kind: 'writing', attempt: { input: { id: token(102), requestId: token(103), expectedRevision: null } } });
+  expect(await f.send({ kind: 'confirm', token: ticket.token, accepted: true })).toMatchObject({ reason: 'writing' });
+  await pending;
+  expect(f.get().editor!.save.kind).toBe('saved'); expect(f.get().write.kind).toBe('succeeded');
+  expect(f.get().unresolved[0]!.input).toMatchObject({ id: token(102), requestId: token(101) });
+  expect(f.get().editor!.unresolved[0]!.request.id).toBe(token(102));
+  expect(f.storage.writes).toHaveLength(1); expect(f.generate).toHaveBeenCalledTimes(3);
+});
+
+it('書込済み結果不明後のloadは実IDの存在を通知し、仮IDへの再保存を発行しない', async () => {
+  const f = fixture(); await copy(f);
+  f.storage.afterSet = () => { throw new Error('synthetic response lost'); };
+  await f.send({ kind: 'save' }); delete f.storage.afterSet;
+  await f.send({ kind: 'load' });
+  expect(f.get().editorIssue).toBe('id-exists'); expect(f.get().editor!.id).toBe(token(102));
+  expect(f.get().editor!.save).toMatchObject({ kind: 'unknown', attempt: { request: { id: token(102) } } });
+  expect(await f.send({ kind: 'save' })).toMatchObject({ kind: 'confirmation-required' });
+  const ticket = f.get().confirmation!;
+  expect(await f.send({ kind: 'confirm', token: ticket.token, accepted: true })).toMatchObject({ reason: 'id-exists' });
+  expect(f.storage.writes).toHaveLength(1); expect(f.generate).toHaveBeenCalledTimes(2);
+});
+it('保存拒否後も採番済みIDを保持し、条件を直した次の明示保存で使用する', async () => {
+  const f = fixture(); await copy(f);
+  modify(f, value => { value.tags = []; value.memoTags = []; });
+  await f.send({ kind: 'save' });
+  expect(f.get().editor!.id).toBe(token(102));
+  modify(f, value => { value.tags = state().tags; }); await f.send({ kind: 'load' });
+  expect(f.get().editorIssue).toBeNull(); expect(f.get().editor!.save.kind).toBe('rejected');
+  await f.send({ kind: 'save' });
+  expect(f.get().write).toMatchObject({ kind: 'succeeded', attempt: { input: { id: token(102), requestId: token(103), expectedRevision: null } } });
+  expect(f.get().editor!.save.kind).toBe('saved'); expect(f.get().editor!.id).toBe(token(102));
+  expect(f.storage.writes).toHaveLength(1); expect(f.generate).toHaveBeenCalledTimes(3);
 });

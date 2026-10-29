@@ -162,8 +162,12 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     const attempt: ControllerAttempt = immutable({ operationId, requestId, command, input });
     // 書込前に開始したloadは、書込完了後に戻っても反映させない。
     ++readEpoch;
+    // 初回複製の採番はeditorだけでなくrouteにも同時に反映する。
+    // 応答前の追加入力・失敗後の再読込も、送信済み要求と同じIDを参照する。
     patch({ write: { kind: 'writing', attempt }, confirmation: null,
-      editor: saving?.kind === 'submit' ? saving.state : app.editor, read: { kind: 'ready' } });
+      editor: saving?.kind === 'submit' ? saving.state : app.editor,
+      route: saving?.kind === 'submit' && app.route.kind === 'edit'
+        ? { kind: 'edit', id: saving.state.id } : app.route, read: { kind: 'ready' } });
     let result: Awaited<ReturnType<typeof store.save>> | Awaited<ReturnType<typeof store.changeState>>;
     try {
       if (command.kind === 'save') result = await store.save(input);
