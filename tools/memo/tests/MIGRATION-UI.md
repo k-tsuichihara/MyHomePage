@@ -4,7 +4,8 @@
 
 ## 接続・承認契約
 
-- 起動はinspectだけ。通常UIを隠し、empty／existing／migrated／recoveredの結果だけで一度起動する。pending・不正・取得失敗・キャンセルは空一覧に変換しない。
+- 起動はinspectだけ。通常UIを隠し、empty／existing／migrated／recoveredの診断結果に加えて、同じ通常controllerの初回load成功を確認した後に一度だけ表示する。pending・不正・取得失敗・キャンセルは空一覧に変換しない。
+- 診断と通常loadは別のロック内読取であり、その間に状態が変わり得る。接続層はload完了をawaitし、待機中は再診断を抑止する。失敗時は診断画面に留まり、明示再診断を可能にする。移行controllerはready後も再診断できるが、書込は新しい確認を必要とする。初回loadは接続層だけが実行し、通常UIのmountは二重loadを行わない。APIの結果と画面表示の成功を区別し、状態変化自体を阻止する原子性は保証しない。
 - 生の旧JSON・pendingはcontrollerの閉包内だけに保持する。公開状態・DOM・URL・ログへ出さない。公開状態は理由・段階・残存状態のみ。テストシナリオ名は固定列挙であり、URLからJSONを入力できない。
 - 世代付き確認トークンは再診断・キャンセル・実行開始で消費する。失敗後に古いトークンを再利用できない。最初のawait前にrunningへ移し二重実行を防ぐ。古い診断応答はepochで無視する。
 - 移行・復旧は既存APIだけを呼ぶ。ロック内再検証、全件拒否、UUID発行、内容照合をUIで再実装しない。
@@ -19,6 +20,7 @@
 | 保存先保護 | 新旧なし、既存v2、確認後に他処理が作ったv2、不正旧値・v2、pending承認後の変更、旧キー原文保持 |
 | 中断・復旧 | pending書込後例外、complete書込後例外、結果未確認の停止、新たな診断・承認を経る復旧 |
 | E2E | 起動診断、承認・取消・再表示、成功後の通常一覧、pending復旧、復旧不能、ロック非対応、読戻し不一致 |
+| 起動境界のE2E | empty／existing／migrated／recoveredの診断後にpending／不正v2へ変化する8通り。初回load待機・失敗でも通常UIを隠し、明示再診断でpendingなら再承認による復旧、不正なら停止 |
 | 隔離性 | 使い捨てContext、外部通信0件、Cookie空、禁止APIアクセス0件、固定資産だけを127.0.0.1で配信 |
 
 実行はtools/memoでtypecheck、全Vitest、build:preview、全test:e2e。既存771単体テスト・26 E2Eを維持する。合成シナリオはlegacy／empty／invalid／pending／broken-pending／interrupted／readback-failure／no-locks。既存normalシナリオは検証済みv2を起点とする。

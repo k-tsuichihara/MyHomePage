@@ -211,6 +211,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
   }
   // controllerの公開APIを拡張せず、待機中の中間状態もフレームごとに観測する。
   const observe = () => { if (stopped) return; if (controller.getState().generation !== lastGeneration) render(); frame = win.requestAnimationFrame(observe); };
-  render(); frame = win.requestAnimationFrame(observe); void send({ kind: 'load' });
+  // 初回loadは起動接続層が完了を確認してからmountする。ここでは重複読込しない。
+  render(); frame = win.requestAnimationFrame(observe);
   return () => { stopped = true; win.cancelAnimationFrame(frame); win.cancelAnimationFrame(scrollFrame); };
 }

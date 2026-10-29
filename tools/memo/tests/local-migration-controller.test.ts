@@ -97,4 +97,11 @@ describe('移行・復旧の明示承認制御', () => {
     expect(c.getState().kind).toBe('stopped'); expect(JSON.stringify(c.getState())).not.toContain('PRIVATE');
     expect(JSON.stringify(c.getState())).not.toContain('legacySnapshot'); expect(f.storage.writes).toEqual([]);
   });
+  it('ready後の明示再診断でpendingや不正への変化を再検証する', async () => {
+    const f = fixture(null), c = createLocalMigrationController(f.deps); await c.inspect();
+    expect(c.getState().kind).toBe('ready');
+    f.storage.values.set(NEW_STORAGE_KEY, '{'); await c.inspect();
+    expect(c.getState()).toMatchObject({ kind: 'stopped', result: { reason: 'invalid-data' } });
+    expect(f.storage.writes).toEqual([]);
+  });
 });

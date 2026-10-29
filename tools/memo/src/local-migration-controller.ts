@@ -25,7 +25,7 @@ export function createLocalMigrationController(deps: MigrationDependencies) {
   return {
     getState: (): MigrationView => state,
     async inspect() {
-      if (state.kind === 'running' || state.kind === 'ready') return;
+      if (state.kind === 'running') return;
       approval = null; const operation = ++epoch; ++generation;
       set({ kind: 'inspecting', generation });
       const result = await inspectLocalMigration(deps);

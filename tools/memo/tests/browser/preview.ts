@@ -21,6 +21,12 @@ if ('storage' in navigator) Object.defineProperty(navigator, 'storage', { config
 
 const requested = new URL(location.href).searchParams.get('scenario') ?? 'normal';
 const scenario = ['normal', 'slow', 'slow-load', 'slow-mutation', 'rejected', 'unknown', 'reload-failure'].includes(requested) ? requested : 'normal';
-const migrationScenario = ['legacy', 'empty', 'invalid', 'pending', 'broken-pending', 'interrupted', 'readback-failure', 'no-locks'].includes(requested) ? requested : null;
+const migrationScenario = ['legacy', 'empty', 'invalid', 'pending', 'broken-pending', 'interrupted', 'readback-failure', 'no-locks',
+  ...['empty', 'existing', 'migrated', 'recovered'].flatMap(source => [`handoff-${source}-pending`, `handoff-${source}-invalid`])].includes(requested) ? requested : null;
 const environment = migrationScenario ? createMigrationEnvironment(migrationScenario) : createPreviewEnvironment(scenario);
-mountMigrationPreview(document, createLocalMigrationController(environment.migration), () => mountMemoPreview(document, environment.controller));
+mountMigrationPreview(document, createLocalMigrationController(environment.migration), async () => {
+  await environment.controller.dispatch({ kind: 'load' });
+  if (environment.controller.getState().read.kind !== 'ready') return false;
+  mountMemoPreview(document, environment.controller);
+  return true;
+});

@@ -46,3 +46,22 @@ test('読戻し不一致は復旧不能として停止し自動補修しない',
   await page.locator('#migration-inspect').click(); await expect(page.locator('#migration-status')).toContainText('invalid-data');
   await expect(page.locator('#memo-app')).toBeHidden();
 });
+
+for (const source of ['empty', 'existing', 'migrated', 'recovered']) for (const change of ['pending', 'invalid']) {
+  test(`診断から通常UIへの初回読込失敗でも再診断できる：${source}→${change}`, async ({ page }) => {
+    await page.goto(`/?scenario=handoff-${source}-${change}`);
+    if (source === 'migrated' || source === 'recovered') await page.locator('#migration-yes').click();
+    await expect(page.locator('#migration-inspect')).toBeDisabled(); await expect(page.locator('#memo-app')).toBeHidden();
+    await expect(page.locator('#migration-status')).toContainText('通常画面の初回読込に失敗');
+    await expect(page.locator('#memo-app')).toBeHidden(); await expect(page.locator('#migration-inspect')).toBeEnabled();
+    await page.locator('#migration-inspect').click();
+    if (change === 'pending') {
+      await expect(page.locator('#migration-status')).toContainText('pendingを検出');
+      await expect(page.locator('#memo-app')).toBeHidden(); await page.locator('#migration-no').click();
+      await page.locator('#migration-inspect').click(); await page.locator('#migration-yes').click();
+      await expect(page.locator('#count')).toContainText('2件');
+    } else {
+      await expect(page.locator('#migration-status')).toContainText('invalid-data'); await expect(page.locator('#memo-app')).toBeHidden();
+    }
+  });
+}
