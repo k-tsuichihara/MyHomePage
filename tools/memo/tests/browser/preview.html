@@ -6,6 +6,15 @@
 <header><strong>Kana Tsuichihara Portfolio</strong><span>メモツール</span></header>
 <p class="notice">検証専用・メモリ保存のみ。再読込で初期状態に戻ります。実データ・認証・音声・完全削除には接続しません。</p>
 <main>
+  <section id="migration-view" aria-label="移行・復旧診断">
+    <h1>合成データの移行・復旧診断</h1><p id="migration-status" role="status"></p>
+    <button id="migration-inspect">再診断</button>
+    <div id="migration-confirmation" hidden role="dialog" aria-label="移行・復旧の確認">
+      <p>旧データを保持し、照合した対象だけへ処理を実行してよいですか？</p>
+      <button id="migration-yes">承認して実行</button><button id="migration-no">移行・復旧をキャンセル</button>
+    </div>
+  </section>
+  <div id="memo-app" hidden>
   <h1 id="page-title">メモ一覧</h1>
   <section aria-label="処理状態" class="statuses">
     <p id="save-status" role="status"></p><p id="read-status" role="status"></p>
@@ -40,6 +49,7 @@
     <h2 id="confirm-title">操作の確認</h2><p id="confirm-description"></p>
     <button id="confirm-yes">確認して実行</button><button id="confirm-no">キャンセル</button>
   </section>
+  </div>
 </main>
 <footer>Kana Tsuichihara Portfolio · Learning by building</footer>
 <script type="module" src="/preview.js"></script>

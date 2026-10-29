@@ -8,8 +8,9 @@
 - tests/browser/preview.html・preview.css・preview.ts・preview-memory.ts・preview.spec.tsとsrc/ui/memo-preview.tsをGit管理する。ビルドした.preview、test-results、playwright-report、プロファイル等だけを除外する。Git除外はソースの機密保護ではなく、追跡ソースは公開リポジトリから閲覧可能。
 - esbuildはtests/browser/preview.tsだけをブラウザ用ESMへバンドルする。型チェックは独立したtsc --noEmitで行い、既存TSファイル・旧JSへ出力しない。生成物を手で編集しない。
 - src/ui/memo-preview.tsは既存controller.dispatch/getStateだけに接続。controllerのAPI・データ層を変更しない。購読APIを増やす代わりにrequestAnimationFrameで状態世代を観測し、非同期の中間状態も表示する。
+- 初回loadはpreview.tsの起動接続が完了を待ち、成功後だけ通常UIをmountする。失敗時は移行診断画面と再診断導線を維持する。通常UI自身は初回loadを重複発行しない。
 - 画面設計の一覧検索・並び替え・タグ領域・カードの縦スクロール・詳細前後移動・編集・タグ管理・ヘッダー／フッターを検証する。ピン操作はカードの︙内で行う。スマホは同じ操作を縦配置する。完全な視覚的一致や製品UIの受入完了を意味しない。
-- 認証・音声・複製・完全削除・ゴミ箱一括削除・移行／復旧実行は対象外。複製は未接続と明記し、既存APIを独断で拡張しない。
+- 認証・音声・複製・完全削除・ゴミ箱一括削除は対象外。移行／復旧は[合成データ専用の診断UI](MIGRATION-UI.md)だけに接続する。実データの移行は行わない。複製は未接続と明記し、既存APIを独断で拡張しない。
 
 ## データ・ネットワーク保護
 
