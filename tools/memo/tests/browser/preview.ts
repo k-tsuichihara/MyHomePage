@@ -1,5 +1,8 @@
 import { mountMemoPreview } from '../../src/ui/memo-preview';
-import { createPreviewController } from './preview-memory';
+import { createPreviewEnvironment } from './preview-memory';
+import { createMigrationEnvironment } from './migration-memory';
+import { createLocalMigrationController } from '../../src/local-migration-controller';
+import { mountMigrationPreview } from '../../src/ui/migration-preview';
 
 // アプリ側でも永続APIを利用不能にする。既存キーやCookieの内容は一切読まない。
 const denied: string[] = [];
@@ -18,4 +21,6 @@ if ('storage' in navigator) Object.defineProperty(navigator, 'storage', { config
 
 const requested = new URL(location.href).searchParams.get('scenario') ?? 'normal';
 const scenario = ['normal', 'slow', 'slow-load', 'slow-mutation', 'rejected', 'unknown', 'reload-failure'].includes(requested) ? requested : 'normal';
-mountMemoPreview(document, createPreviewController(scenario));
+const migrationScenario = ['legacy', 'empty', 'invalid', 'pending', 'broken-pending', 'interrupted', 'readback-failure', 'no-locks'].includes(requested) ? requested : null;
+const environment = migrationScenario ? createMigrationEnvironment(migrationScenario) : createPreviewEnvironment(scenario);
+mountMigrationPreview(document, createLocalMigrationController(environment.migration), () => mountMemoPreview(document, environment.controller));

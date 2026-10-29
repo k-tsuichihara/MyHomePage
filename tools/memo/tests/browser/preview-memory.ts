@@ -7,7 +7,7 @@ const id = (n: number) => `abcdef00-0000-4000-8000-${String(n).padStart(12, '0')
 const now = '2026-10-26T00:00:00Z';
 
 /** ブラウザ保存APIを参照しない合成保存先。ページを閉じればすべて失われる。 */
-export function createPreviewController(scenario: string) {
+export function createPreviewEnvironment(scenario: string) {
   let raw = JSON.stringify({ version: 2, migration: { status: 'not-required' },
     memos: Array.from({ length: 12 }, (_, i) => ({ id: id(i + 1), title: i === 0 ? '仕事メモ' : `合成メモ ${i + 1}`,
       body: i === 0 ? '入力・保存・ドラフト保護を検証します。' : '合成データだけを使います。',
@@ -52,5 +52,6 @@ export function createPreviewController(scenario: string) {
     return base.deleteTag(input);
   } };
   let sequence = 100;
-  return createLocalMemoController({ store, createId: () => id(++sequence) });
+  return { controller: createLocalMemoController({ store, createId: () => id(++sequence) }),
+    migration: { storage, locks, createId: () => id(++sequence) } };
 }
