@@ -51,6 +51,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
   bind('previous', () => { void send({ kind: 'adjacent', direction: 'previous' }); });
   bind('next', () => { void send({ kind: 'adjacent', direction: 'next' }); });
   bind('edit', () => { const state = controller.getState(); if (state.route.kind === 'detail') void send({ kind: 'edit', id: state.route.id }); });
+  bind('duplicate', () => { const state = controller.getState(); if (state.route.kind === 'detail') void send({ kind: 'duplicate', id: state.route.id }); });
   for (const [id, view] of [['trash-view', 'trash'], ['normal-view', 'normal']] as const) bind(id, () => {
     void send({ kind: 'query', options: { ...controller.getState().list?.result.query, view }, scrollTop: 0 });
   });
@@ -101,7 +102,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
       : state.read.kind === 'failed' ? '一覧の再読込に失敗しました。以前の表示は最新とは限りません。' : ready ? '一覧の読込が完了しました。' : '読込前です。');
     text('draft-status', state.editor ? isDirty(state.editor) ? '未保存の追加編集があります。' : '現在のドラフトに未保存の変更はありません。' : '');
     text('error', feedback || (state.editorIssue ? `編集中データの不整合：${state.editorIssue}。入力は保持しています。` : ''));
-    for (const id of ['new', 'back', 'edit', 'previous', 'next', 'tag-save', 'tag-delete', 'clear-tag-filters']) {
+    for (const id of ['new', 'back', 'edit', 'duplicate', 'previous', 'next', 'tag-save', 'tag-delete', 'clear-tag-filters']) {
       element<HTMLButtonElement>(id).disabled = busy || !ready || composing;
     }
     element<HTMLButtonElement>('reload').disabled = busy || composing;
@@ -140,6 +141,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
       text('detail-title', ready ? memo?.title ?? '対象のメモはありません。' : '詳細を取得できません。再読込してください。'); text('detail-body', ready ? memo?.body ?? '' : '');
       text('detail-tags', ready ? state.data?.memoTags.filter(row => row.memoId === memo?.id).map(row => state.data?.tags.find(tag => tag.id === row.tagId)?.name ?? '').join('・') ?? '' : '');
       element<HTMLButtonElement>('edit').disabled ||= memo?.deletedAt !== null;
+      element<HTMLButtonElement>('duplicate').disabled ||= memo?.deletedAt !== null;
     }
     if (!composing && doc.activeElement !== search && search.value !== state.list?.result.query.text) search.value = state.list?.result.query.text ?? '';
     sort.value = state.list?.result.query.sort ?? 'updated-desc';
@@ -174,7 +176,8 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
         const action = (name: string, value: 'pin' | 'unpin' | 'trash' | 'restore') => button(name, () => {
           void send({ kind: 'mutate', operation: { kind: 'state', id: memo.id, action: value, expectedRevision: memo.revision } });
         }, busy || !ready);
-        if (memo.deletedAt === null) menu.append(action(memo.pinnedAt ? 'ピン解除' : 'ピン留め', memo.pinnedAt ? 'unpin' : 'pin'), action('ゴミ箱へ', 'trash'));
+        if (memo.deletedAt === null) menu.append(action(memo.pinnedAt ? 'ピン解除' : 'ピン留め', memo.pinnedAt ? 'unpin' : 'pin'),
+          button('複製', () => { void send({ kind: 'duplicate', id: memo.id }); }, busy || !ready), action('ゴミ箱へ', 'trash'));
         else menu.append(action('復元する', 'restore'));
         row.append(open, preview, metadata, menu); fragment.append(row);
       }
@@ -194,6 +197,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
       displayedToken = ticket.token;
       const command = ticket.command;
       let operation = command.kind === 'save' ? '現在のドラフトを新しい保存試行として保存します。'
+        : command.kind === 'duplicate' ? '保存済みメモを複製し、未保存の新規編集を開始します。'
         : command.kind === 'list' ? '一覧へ戻ります。' : command.kind === 'new' ? '新規編集を開始します。' : '選択したメモへ移動します。';
       if (command.kind === 'mutate') {
         const op = command.operation;

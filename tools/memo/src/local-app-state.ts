@@ -7,7 +7,8 @@ import type { countTagUsage } from './tag-usage';
 export type Mutation = { kind: 'state'; id: string; action: 'pin' | 'unpin' | 'trash' | 'restore'; expectedRevision: number }
   | { kind: 'save-tag'; id: string; name: string; expectedRevision: number | null }
   | { kind: 'delete-tag'; id: string; expectedRevision: number };
-export type Destination = { kind: 'list' } | { kind: 'detail'; id: string } | { kind: 'edit'; id: string } | { kind: 'new' };
+export type Destination = { kind: 'list' } | { kind: 'detail'; id: string } | { kind: 'edit'; id: string } | { kind: 'new' }
+  | { kind: 'duplicate'; id: string };
 export type ControllerCommand = Destination | { kind: 'load' } | { kind: 'query'; options: unknown; scrollTop: number }
   | { kind: 'draft'; value: Draft } | { kind: 'save' } | { kind: 'mutate'; operation: Mutation }
   | { kind: 'confirm'; token: number; accepted: boolean } | { kind: 'adjacent'; direction: 'previous' | 'next' };

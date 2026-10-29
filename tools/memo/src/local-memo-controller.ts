@@ -10,6 +10,7 @@ import type { createLocalMemoStore } from './local-memo-store';
 import type { LocalLoadResult } from './local-data-store';
 import type { CommandResult, ControllerCommand, ControllerAttempt, Destination, LocalAppState, Mutation, WriteCommand } from './local-app-state';
 import type { MemoData } from './types';
+import { createDuplicateEditor } from './memo-duplicate';
 
 export interface LocalControllerDependencies {
   store: ReturnType<typeof createLocalMemoStore>;
@@ -30,6 +31,8 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     detailList: null, usage: [], read: { kind: 'idle' }, write: { kind: 'idle' }, editor: null,
     editorAnchor: null, editorIssue: null, confirmation: null, unresolved: [], retainedEditors: [] });
   let readEpoch = 0, serial = 0;
+  // 仮IDを保存先のIDと照合しない。最初の明示保存後は通常の新規編集と同じ契約に戻す。
+  let duplicateSession: string | null = null;
   const patch = (value: Partial<LocalAppState>) => { app = immutable({ ...app, ...value, generation: app.generation + 1 }); };
   const busy = () => app.write.kind === 'writing';
   const ready = () => app.read.kind === 'ready' && app.data !== null;
@@ -40,8 +43,9 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
   /** 再取得で編集基準やドラフトを更新しない。現在値との差を利用者向けの状態として残す。 */
   function issue(data: MemoData, editor = app.editor): LocalAppState['editorIssue'] {
     if (!editor) return null;
-    const memo = data.memos.find(row => key(row.id) === key(editor.id));
     const missingTag = editor.draft.tagIds.some(id => !data.tags.some(tag => key(tag.id) === key(id)));
+    if (editor.sessionId === duplicateSession) return missingTag ? 'missing-tag' : null;
+    const memo = data.memos.find(row => key(row.id) === key(editor.id));
     if (editor.expectedRevision === null) return memo ? 'id-exists' : missingTag ? 'missing-tag' : null;
     if (!memo) return 'missing';
     if (memo.deletedAt !== null) return 'trashed';
@@ -93,15 +97,20 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     const memo = id ? findMemo(id) : undefined;
     if (destination.kind !== 'new' && destination.kind !== 'list' && !memo) return blocked('not-found');
     if (destination.kind === 'edit' && memo!.deletedAt !== null) return blocked('trashed');
+    if (destination.kind === 'duplicate' && memo!.deletedAt !== null) return blocked('trashed');
     if (destination.kind === 'new' && memo) return blocked('id-exists');
     const retained = app.editor && (isDirty(app.editor) || app.editor.unresolved.length || app.editor.save.kind === 'rejected')
       ? [...app.retainedEditors, app.editor] : app.retainedEditors;
-    const editing = destination.kind === 'edit' || destination.kind === 'new';
+    const editing = destination.kind === 'edit' || destination.kind === 'new' || destination.kind === 'duplicate';
     const initial = memo ? { memo, tagIds: related(app.data!, memo.id) } : undefined;
-    patch({ route: id ? { kind: editing ? 'edit' : 'detail', id } : { kind: 'list' },
+    const sessionId = `session-${++serial}`;
+    const editor = destination.kind === 'duplicate' ? createDuplicateEditor(sessionId, initial!)
+      : editing ? createEditor(id!, sessionId, initial) : null;
+    duplicateSession = destination.kind === 'duplicate' ? sessionId : null;
+    patch({ route: id ? { kind: editing ? 'edit' : 'detail', id: editor?.id ?? id } : { kind: 'list' },
       detailList: destination.kind === 'list' ? null : app.route.kind === 'list' ? app.list : app.detailList,
-      editor: editing ? createEditor(id!, `session-${++serial}`, initial) : null,
-      editorAnchor: editing && initial ? initial : null, editorIssue: null, confirmation: null, retainedEditors: retained });
+      editor,
+      editorAnchor: editing && destination.kind !== 'duplicate' && initial ? initial : null, editorIssue: null, confirmation: null, retainedEditors: retained });
     return done;
   }
 
@@ -140,9 +149,11 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     const operationId = `operation-${++serial}`, requestId = uuid(deps.createId());
     let input: unknown, saving: ReturnType<typeof beginSave> | null = null;
     if (command.kind === 'save') {
-      const editor = app.editor!;
+      const editor = app.editor!.sessionId === duplicateSession
+        ? immutable({ ...app.editor!, id: uuid(deps.createId()) }) : app.editor!;
       saving = beginSave(editor, { operationId, requestId }, accepted ? confirmResave(editor) : undefined);
       if (saving.kind !== 'submit') return blocked(saving.reason);
+      duplicateSession = null;
       input = saving.attempt.request;
     } else {
       const { kind: _kind, ...fields } = command.operation;
