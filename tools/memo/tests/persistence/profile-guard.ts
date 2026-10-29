@@ -47,11 +47,17 @@ export async function createProfileOwner(base: string) {
       if (info.dev !== record.dev || info.ino !== record.ino || !markerInfo.isFile() || markerInfo.isSymbolicLink()
         || await readFile(markerPath, 'utf8') !== record.marker) fail();
     },
-    async dispose(profile: string) {
+    async dispose(profile: string, beforeFinalCheck?: () => Promise<void>) {
       await this.verify(profile);
       // Chromium終了後だけ呼ぶ。全木のリンク検査後に所有と根を再確認する。
       await verifyTree(profile); await this.verify(profile);
-      await rm(profile, { recursive: true, force: false }); owned.delete(profile);
+      // 故障注入はテストだけ。最終検査も原子的な削除保護とは扱わない。
+      await beforeFinalCheck?.();
+      await verifyTree(profile); await this.verify(profile);
+      await rm(profile, { recursive: true, force: false });
+      try { await lstat(profile); throw new Error('Profile disposal not verified'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+      await verifyDirectory(runRoot); owned.delete(profile);
     },
   };
 }

@@ -26,3 +26,13 @@ it('子孫のjunction／symlinkを検出したら外側の対象も削除しな�
   // 自分が今作ったリンクだけを解除。リンク先の再帰削除は行わない。
   await unlink(link); await owner.dispose(profile); await owner.dispose(target);
 });
+it('最初の検査後に直接の子へ差し込んだリンクも最終検査で拒否する', async () => {
+  const owner = await createProfileOwner(await prepareProfileBase(process.cwd()));
+  const profile = await owner.create(), target = await owner.create(), link = join(profile, 'late-link');
+  const targetMarker = await readFile(join(target, '.memo-test-owner.json'), 'utf8');
+  await expect(owner.dispose(profile, () => symlink(target, link, process.platform === 'win32' ? 'junction' : 'dir'))).rejects.toThrow('ownership');
+  expect((await lstat(profile)).isDirectory()).toBe(true);
+  expect(await readFile(join(target, '.memo-test-owner.json'), 'utf8')).toBe(targetMarker);
+  await unlink(link); await owner.dispose(profile); await owner.dispose(target);
+  await expect(lstat(profile)).rejects.toMatchObject({ code: 'ENOENT' });
+});

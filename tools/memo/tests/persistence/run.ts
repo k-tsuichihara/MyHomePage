@@ -5,6 +5,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { strict as assert } from 'node:assert';
 import { createProfileOwner, prepareProfileBase } from './profile-guard';
+import { initializeContext, runOwnedCase } from './lifecycle';
+import type { PreservationReport } from './lifecycle';
 import type {} from './entry';
 
 if (process.argv.length !== 2) throw new Error('Custom paths and arguments are forbidden');
@@ -31,36 +33,48 @@ if (!address || typeof address === 'string' || address.port === 4173) {
 origin = `http://127.0.0.1:${address.port}`;
 let passed = 0, quotaVerified = false;
 
-async function launch(profile: string, permit = true) {
+async function launch(profile: string, permit = true, injection?: { fault: 'navigation' | 'pageerror' | 'existing-pageerror'; onClose: () => void }) {
   await owner.verify(profile);
-  const context = await chromium.launchPersistentContext(profile, {
+  return initializeContext(() => chromium.launchPersistentContext(profile, {
     headless: true, serviceWorkers: 'block', acceptDownloads: false,
     // 外部宛は到達不能なループバックproxyへ限定。検証originだけを直接接続する。
     proxy: { server: 'http://127.0.0.1:9', bypass: '127.0.0.1' },
     args: ['--disable-background-networking', '--disable-component-update', '--disable-sync', '--no-first-run', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'],
-  });
+  }), async context => {
   const external: string[] = [], errors: string[] = [];
+  const watched = new WeakSet<Page>();
+  const watch = (page: Page) => { if (!watched.has(page)) { watched.add(page); page.on('pageerror', () => errors.push('pageerror')); } };
+  context.on('page', watch);
+  // persistent起動時に既に存在するabout:blankも、未許可経路を含めて収集対象にする。
+  for (const page of context.pages()) watch(page);
+  context.on('close', () => injection?.onClose());
   await context.route('**/*', async route => {
     if (new URL(route.request().url()).origin !== origin) { external.push('external'); await route.abort(); }
     else await route.continue();
   });
-  context.on('page', page => page.on('pageerror', () => errors.push('pageerror')));
   if (permit) await context.addInitScript(value => { Object.defineProperty(window, '__persistencePermit', { value: Object.freeze(value) }); }, { origin, runId: owner.runId });
   else await context.addInitScript(() => {
     let reads = 0;
     Object.defineProperty(window, 'localStorage', { get() { reads++; throw new Error('Must not access storage'); } });
     Object.defineProperty(window, '__storageAccessCount', { get: () => reads });
   });
-  const page = await context.newPage(); await page.goto(origin);
+  const page = await context.newPage(); watch(page);
+  if (injection?.fault === 'navigation') await page.route('**/*', route => route.abort('failed'));
+  await page.goto(origin);
+  if (injection?.fault === 'pageerror' || injection?.fault === 'existing-pageerror') {
+    const target = injection.fault === 'existing-pageerror' ? context.pages()[0]! : page;
+    const observed = target.waitForEvent('pageerror');
+    await target.evaluate(() => { setTimeout(() => { throw new Error('Synthetic pageerror'); }, 0); }); await observed;
+  }
   return { context, page, async close() {
     try { assert.equal(external.length, 0); assert.equal(errors.length, 0); assert.equal((await context.cookies()).length, 0); }
     finally { await context.close(); }
   } };
+  });
 }
 async function run(name: string, operation: (profile: string) => Promise<void>) {
   const profile = await owner.create();
-  await operation(profile);
-  await owner.dispose(profile);
+  await runOwnedCase(owner, profile, () => operation(profile), value => process.stderr.write(`${JSON.stringify(value)}\n`));
   if (name.startsWith('上限付き') && !quotaVerified) process.stdout.write(`UNVERIFIED ${name}\n`);
   else { passed++; process.stdout.write(`PASS ${name}\n`); }
 }
@@ -72,6 +86,16 @@ async function withBrowser(profile: string, operation: (page: Page, context: Bro
   try { await operation(browser.page, browser.context); } finally { await browser.close(); }
 }
 try {
+  for (const fault of ['navigation', 'pageerror', 'existing-pageerror'] as const) await run(`未許可起動の${fault}故障でもContext終了・profile保全報告`, async profile => {
+    let closed = 0; const reports: PreservationReport[] = [];
+    await assert.rejects(runOwnedCase(owner, profile, async () => {
+      const browser = await launch(profile, false, { fault, onClose: () => { closed++; } });
+      await browser.close();
+    }, value => reports.push(value)));
+    assert.equal(closed, 1); await owner.verify(profile);
+    assert.deepEqual(reports, [{ event: 'PRESERVED', runId: owner.runId, profile, ownership: 'verified' }]);
+    // 意図した失敗の保全を検証した後だけ、外側の成功ケースが通常の所有検証を経て破棄する。
+  });
   await run('許可なしはストレージ接続前に停止', async profile => {
     const browser = await launch(profile, false);
     try {
