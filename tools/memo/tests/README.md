@@ -18,6 +18,8 @@
 
 合成データの事前診断・明示移行・pending復旧UIは、[移行・復旧UIの契約](MIGRATION-UI.md)を参照。起動では診断だけを行う。
 
+ランナー所有の使い捨てプロファイルと専用originで実localStorage・Web Locksを検証する手順は、[隔離永続化試験](LOCAL-PERSISTENCE.md)を参照。既存メモリ入口の禁止ガードは維持し、日常ブラウザ・本番originへ接続しない。
+
 対象は新規入力用の純粋関数と最小限のドメイン型。VitestはNode環境で実行し、DOM・localStorage・ネットワーク・認証・実DBは使用しない。
 
 ## 根拠と期待値

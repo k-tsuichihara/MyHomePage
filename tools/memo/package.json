@@ -8,7 +8,9 @@
     "test": "vitest run",
     "build:preview": "node scripts/build-preview.mjs",
     "preview": "npm run build:preview && node scripts/serve-preview.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:persistence": "node scripts/build-persistence.mjs",
+    "test:persistence": "npm run build:persistence && node .persistence/run.mjs"
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
