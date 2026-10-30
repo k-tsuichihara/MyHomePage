@@ -26,7 +26,7 @@
       <label>並び替え<select id="sort"><option value="updated-desc">更新日（新しい順）</option><option value="updated-asc">更新日（古い順）</option><option value="created-desc">作成日（新しい順）</option><option value="created-asc">作成日（古い順）</option></select></label>
       <button id="trash-view">ゴミ箱</button><button id="normal-view">通常一覧</button></div>
     <section aria-label="タグ絞り込み"><h2>タグで絞り込み</h2><div id="filters"></div><p id="missing-tags" role="status"></p><button id="clear-tag-filters">タグ絞り込みを解除</button></section>
-    <h2 id="count"></h2><ul id="cards" aria-label="メモ一覧"></ul>
+    <h2 id="count"></h2><button id="empty-trash" hidden>ゴミ箱を空にする</button><ul id="cards" aria-label="メモ一覧"></ul>
     <details id="tag-manager"><summary>タグ管理</summary><form id="tag-form">
       <label>管理するタグ<select id="managed-tag"><option value="">新規タグ</option></select></label>
       <label>タグ名<input id="tag-name"></label><button id="tag-save" type="submit">タグを保存</button>
@@ -36,6 +36,7 @@
     <h2 id="detail-title"></h2><pre id="detail-body"></pre><p id="detail-tags"></p>
     <button id="previous">前のメモ</button><button id="next">次のメモ</button><button id="edit">編集する</button>
     <button id="duplicate">複製</button>
+    <button id="permanent-delete" hidden>完全削除</button>
   </section>
   <section id="editor-view" hidden aria-label="メモ編集">
     <h2>メモの作成・編集</h2><form id="memo-form">

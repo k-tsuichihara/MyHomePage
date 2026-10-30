@@ -9,6 +9,9 @@ const messages: Record<string, string> = {
   'duplicate-tag': '同じ名前のタグがあります。', 'stale-confirmation': '確認後に状態が変わりました。再確認してください。',
   'not-ready': '読込が完了していないため操作できません。', writing: '保存処理中です。',
   'editor-active': 'タグ管理・状態操作は編集を終了してから行ってください。',
+  'v3-required': '完全削除はv3形式でのみ利用できます。',
+  'delete-conflict': '削除対象の状態が変わりました。再読込して確認してください。',
+  'trash-conflict': 'ゴミ箱の対象集合が変わりました。一括削除は実行せず停止しました。',
 };
 
 /**
@@ -52,6 +55,16 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
   bind('next', () => { void send({ kind: 'adjacent', direction: 'next' }); });
   bind('edit', () => { const state = controller.getState(); if (state.route.kind === 'detail') void send({ kind: 'edit', id: state.route.id }); });
   bind('duplicate', () => { const state = controller.getState(); if (state.route.kind === 'detail') void send({ kind: 'duplicate', id: state.route.id }); });
+  bind('permanent-delete', () => {
+    const state = controller.getState();
+    const id = state.route.kind === 'detail' ? state.route.id : null;
+    const memo = id ? state.data?.memos.find(row => row.id === id) : undefined;
+    if (memo) void send({ kind: 'mutate', operation: { kind: 'permanent-delete', id: memo.id, expectedRevision: memo.revision } });
+  });
+  bind('empty-trash', () => {
+    const state = controller.getState();
+    void send({ kind: 'mutate', operation: { kind: 'empty-trash', targets: state.data?.memos.filter(row => row.deletedAt !== null).map(row => ({ id: row.id, revision: row.revision })) ?? [] } });
+  });
   for (const [id, view] of [['trash-view', 'trash'], ['normal-view', 'normal']] as const) bind(id, () => {
     void send({ kind: 'query', options: { ...controller.getState().list?.result.query, view }, scrollTop: 0 });
   });
@@ -95,7 +108,8 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
   function render() {
     const state = controller.getState(), busy = state.write.kind === 'writing', ready = state.read.kind === 'ready';
     text('save-status', state.write.kind === 'writing' ? '保存処理中：追加入力は保持します。'
-      : state.write.kind === 'succeeded' ? '送信した内容の保存は成功しました。'
+      : state.write.kind === 'succeeded' ? state.write.deletedCount === undefined ? '送信した内容の保存は成功しました。'
+        : state.write.deletedCount === 0 ? '削除対象は0件です。書込は行っていません。' : `${state.write.deletedCount}件の完全削除が成功しました。`
       : state.write.kind === 'unknown' ? '保存結果は不明です。自動再送しません。'
       : state.write.kind === 'rejected' ? `保存・操作は拒否されました。${messages[state.write.reason] ?? state.write.reason}` : 'まだ保存操作は行っていません。');
     text('read-status', state.read.kind === 'loading' ? '一覧を再読込中です。'
@@ -107,6 +121,10 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
     }
     element<HTMLButtonElement>('reload').disabled = busy || composing;
     element<HTMLButtonElement>('save').disabled = busy || !ready || composing;
+    element('empty-trash').hidden = state.storageVersion !== 3 || state.list?.result.query.view !== 'trash';
+    element<HTMLButtonElement>('empty-trash').disabled = busy || !ready || composing;
+    element('permanent-delete').hidden = true;
+    element<HTMLButtonElement>('permanent-delete').disabled = busy || !ready || composing;
     // 受理されない検索文字列を表示だけ残さない。保存中のドラフト入力とは分離する。
     search.disabled = busy || !ready;
     if (!composing) {
@@ -142,6 +160,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
       text('detail-tags', ready ? state.data?.memoTags.filter(row => row.memoId === memo?.id).map(row => state.data?.tags.find(tag => tag.id === row.tagId)?.name ?? '').join('・') ?? '' : '');
       element<HTMLButtonElement>('edit').disabled ||= memo?.deletedAt !== null;
       element<HTMLButtonElement>('duplicate').disabled ||= memo?.deletedAt !== null;
+      element('permanent-delete').hidden = state.storageVersion !== 3 || memo?.deletedAt == null;
     }
     if (!composing && doc.activeElement !== search && search.value !== state.list?.result.query.text) search.value = state.list?.result.query.text ?? '';
     sort.value = state.list?.result.query.sort ?? 'updated-desc';
@@ -164,7 +183,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
     for (const input of element('filters').querySelectorAll<HTMLInputElement>('input')) input.disabled = busy || !ready || composing;
     text('missing-tags', state.list?.result.missingSelectedTagIds.length ? '選択中のタグが削除されています。選択は自動解除しません。' : '');
     text('count', `${state.list?.result.query.view === 'trash' ? 'ゴミ箱' : '通常メモ'}：検索結果 ${state.list?.result.resultCount ?? 0}件`);
-    const listKey = JSON.stringify([state.list?.result.items, busy, ready]);
+    const listKey = JSON.stringify([state.list?.result.items, state.storageVersion, busy, ready]);
     if (listKey !== listSignature) {
       listSignature = listKey; const scroll = cards.scrollTop, fragment = doc.createDocumentFragment();
       for (const { memo, tags } of state.list?.result.items ?? []) {
@@ -178,7 +197,12 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
         }, busy || !ready);
         if (memo.deletedAt === null) menu.append(action(memo.pinnedAt ? 'ピン解除' : 'ピン留め', memo.pinnedAt ? 'unpin' : 'pin'),
           button('複製', () => { void send({ kind: 'duplicate', id: memo.id }); }, busy || !ready), action('ゴミ箱へ', 'trash'));
-        else menu.append(action('復元する', 'restore'));
+        else {
+          menu.append(action('復元する', 'restore'));
+          if (state.storageVersion === 3) menu.append(button('完全削除', () => {
+            void send({ kind: 'mutate', operation: { kind: 'permanent-delete', id: memo.id, expectedRevision: memo.revision } });
+          }, busy || !ready));
+        }
         row.append(open, preview, metadata, menu); fragment.append(row);
       }
       cards.replaceChildren(fragment); cards.scrollTop = scroll;
@@ -201,10 +225,13 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
         : command.kind === 'list' ? '一覧へ戻ります。' : command.kind === 'new' ? '新規編集を開始します。' : '選択したメモへ移動します。';
       if (command.kind === 'mutate') {
         const op = command.operation;
-        const name = op.kind === 'state' ? state.data?.memos.find(row => row.id === op.id)?.title : state.data?.tags.find(row => row.id === op.id)?.name;
+        const name = op.kind === 'empty-trash' ? undefined : op.kind === 'state' || op.kind === 'permanent-delete'
+          ? state.data?.memos.find(row => row.id === op.id)?.title : state.data?.tags.find(row => row.id === op.id)?.name;
         const action = op.kind === 'delete-tag' ? 'タグと関連を削除します。' : op.kind === 'save-tag' ? 'タグを保存します。'
+          : op.kind === 'permanent-delete' ? '1件を完全削除します。元に戻せない操作です。'
+          : op.kind === 'empty-trash' ? `ゴミ箱全体の${op.targets.length}件を完全削除します。検索条件外も対象です。元に戻せない操作です。`
           : op.action === 'trash' ? 'ゴミ箱へ移動します。' : op.action === 'restore' ? 'ゴミ箱から復元します。' : 'ピン状態を変更します。';
-        operation = `「${name ?? '対象'}」の${action}`;
+        operation = op.kind === 'empty-trash' ? action : `「${name ?? '対象'}」の${action}`;
       }
       text('confirm-description', operation + (ticket.reason === 'operation' ? '確認時の対象に対して実行してよいですか？'
         : ticket.reason === 'rejected' ? '保存が拒否されています。入力を保持したまま画面を離れますか？'

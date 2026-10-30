@@ -11,6 +11,7 @@ import type { LocalLoadResult } from './local-data-store';
 import type { CommandResult, ControllerCommand, ControllerAttempt, Destination, LocalAppState, Mutation, WriteCommand } from './local-app-state';
 import type { MemoData } from './types';
 import { createDuplicateEditor } from './memo-duplicate';
+import { parseDeleteTargets, parsePermanentDelete, sameTargets } from './local-delete-operations';
 
 export interface LocalControllerDependencies {
   store: ReturnType<typeof createLocalMemoStore>;
@@ -27,7 +28,7 @@ const tagSet = (ids: readonly string[]) => ids.map(key).sort().join('/');
  */
 export function createLocalMemoController(deps: LocalControllerDependencies) {
   const store = deps.store;
-  let app: LocalAppState = immutable({ generation: 0, route: { kind: 'list' }, data: null, list: null,
+  let app: LocalAppState = immutable({ generation: 0, route: { kind: 'list' }, data: null, storageVersion: null, list: null,
     detailList: null, usage: [], read: { kind: 'idle' }, write: { kind: 'idle' }, editor: null,
     editorAnchor: null, editorIssue: null, confirmation: null, unresolved: [], retainedEditors: [] });
   let readEpoch = 0, serial = 0;
@@ -70,7 +71,7 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     }
     const value = result.kind === 'loaded' ? validateLocalFormat(result.value).value : null;
     const data: MemoData = value ? { memos: value.memos, tags: value.tags, memoTags: value.memoTags } : { memos: [], tags: [], memoTags: [] };
-    patch({ data, list: prepared.context, usage: countTagUsage(data), read: { kind: 'ready' }, editorIssue: issue(data) });
+    patch({ data, storageVersion: value?.version ?? null, list: prepared.context, usage: countTagUsage(data), read: { kind: 'ready' }, editorIssue: issue(data) });
     return done;
   }
 
@@ -126,10 +127,19 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
       const checked = parseTagSave({ id: input.id, name: input.name, expectedRevision: input.expectedRevision, requestId: request.requestId });
       return { kind: 'save-tag', ...checked };
     }
+    if (input.kind === 'permanent-delete') {
+      const checked = parsePermanentDelete({ id: input.id, expectedRevision: input.expectedRevision, requestId: request.requestId });
+      return { kind: 'permanent-delete', id: checked.targets[0]!.id, expectedRevision: checked.targets[0]!.revision };
+    }
+    if (input.kind === 'empty-trash') return { kind: 'empty-trash', targets: parseDeleteTargets(input.targets) };
     if (input.kind !== 'delete-tag') throw new Error('Invalid operation');
     return { kind: 'delete-tag', ...parseTagDelete({ id: input.id, expectedRevision: input.expectedRevision, requestId: request.requestId }) };
   }
   function matches(operation: Mutation): boolean {
+    if (operation.kind === 'empty-trash') return sameTargets(operation.targets, app.data!.memos.filter(row => row.deletedAt !== null));
+    if (operation.kind === 'permanent-delete') {
+      const row = findMemo(operation.id); return row?.deletedAt != null && row.revision === operation.expectedRevision;
+    }
     const row = operation.kind === 'state' ? findMemo(operation.id) : findTag(operation.id);
     return operation.expectedRevision === null ? row === undefined : row?.revision === operation.expectedRevision;
   }
@@ -139,9 +149,10 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     if (command.kind === 'mutate' && app.route.kind === 'edit') return blocked('editor-active');
     if (!accepted && (app.unresolved.length || app.editor?.unresolved.length)) return confirmation(command, 'unknown');
     if (command.kind === 'mutate') {
-      if (!matches(command.operation)) return blocked('target-changed');
       const op = command.operation;
-      if (!accepted && (op.kind === 'delete-tag' || (op.kind === 'state' && (op.action === 'trash' || op.action === 'restore')))) {
+      if ((op.kind === 'permanent-delete' || op.kind === 'empty-trash') && app.storageVersion !== 3) return blocked('v3-required');
+      if (!matches(op)) return blocked('target-changed');
+      if (!accepted && (op.kind === 'permanent-delete' || op.kind === 'empty-trash' || op.kind === 'delete-tag' || (op.kind === 'state' && (op.action === 'trash' || op.action === 'restore')))) {
         return confirmation(command, 'operation');
       }
     } else if (!app.editor || app.editorIssue) return blocked(app.editorIssue ?? 'no-editor');
@@ -168,11 +179,13 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
       editor: saving?.kind === 'submit' ? saving.state : app.editor,
       route: saving?.kind === 'submit' && app.route.kind === 'edit'
         ? { kind: 'edit', id: saving.state.id } : app.route, read: { kind: 'ready' } });
-    let result: Awaited<ReturnType<typeof store.save>> | Awaited<ReturnType<typeof store.changeState>>;
+    let result: Awaited<ReturnType<typeof store.save>> | Awaited<ReturnType<typeof store.changeState>> | Awaited<ReturnType<typeof store.emptyTrash>>;
     try {
       if (command.kind === 'save') result = await store.save(input);
       else if (command.operation.kind === 'state') result = await store.changeState(input);
       else if (command.operation.kind === 'save-tag') result = await store.saveTag(input);
+      else if (command.operation.kind === 'permanent-delete') result = await store.deletePermanently(input);
+      else if (command.operation.kind === 'empty-trash') result = await store.emptyTrash(input);
       else result = await store.deleteTag(input);
     } catch { result = { kind: 'unknown', reason: 'storage-failure', writeOutcome: 'unverified' }; }
 
@@ -180,7 +193,7 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     if (!result || typeof result !== 'object') result = { kind: 'unknown', reason: 'storage-failure', writeOutcome: 'unverified' };
 
     if (app.write.kind !== 'writing' || app.write.attempt !== attempt) return { kind: 'ignored' };
-    let success = result.kind === 'saved' || result.kind === 'written';
+    let success = result.kind === 'saved' || result.kind === 'written' || result.kind === 'deleted' || result.kind === 'not-needed';
     if (saving?.kind === 'submit' && app.editor) {
       let editor = settleSave(app.editor, saving.attempt.context, result);
       success = editor.save.kind === 'saved';
@@ -190,7 +203,15 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
       patch({ editor, editorAnchor: anchor, route: { kind: success && !isDirty(editor) ? 'detail' : 'edit', id: editor.id } });
     }
     if (success) {
-      patch({ write: { kind: 'succeeded', attempt } });
+      const deletedCount = result.kind === 'deleted' || result.kind === 'not-needed' ? result.count : undefined;
+      const deletion = deletedCount !== undefined;
+      patch({ write: deletedCount !== undefined ? { kind: 'succeeded', attempt, deletedCount } : { kind: 'succeeded', attempt } });
+      if (deletion && command.kind === 'mutate' && app.route.kind === 'detail') {
+        const id = app.route.id, op = command.operation;
+        if ((op.kind === 'permanent-delete' && key(op.id) === key(id)) || (op.kind === 'empty-trash' && op.targets.some(row => key(row.id) === key(id)))) {
+          patch({ route: { kind: 'list' }, editor: null, editorAnchor: null, editorIssue: null, detailList: null });
+        }
+      }
       await load(); // 後続loadの失敗でも、この確定成功は変更しない。
     } else if (result.kind === 'rejected') {
       patch({ write: { kind: 'rejected', attempt, reason: result.reason } });

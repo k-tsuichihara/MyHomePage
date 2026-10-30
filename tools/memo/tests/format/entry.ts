@@ -7,6 +7,9 @@ import { createControlledUpgrade } from './controlled-upgrade';
 import { createLocalDataStore as oldStore } from './old-v2-store';
 import { state, token } from '../local-save-fixtures';
 import { oldRows } from '../migration-fixtures';
+import { createLocalMemoStore } from '../../src/local-memo-store';
+import { createLocalMemoController } from '../../src/local-memo-controller';
+import type { ControllerCommand } from '../../src/local-app-state';
 
 declare global { interface Window { __format?: ReturnType<typeof start> } }
 function start() {
@@ -26,6 +29,8 @@ function start() {
       if (fault === 'after') throw new Error('Synthetic after write');
     } };
   const deps = { storage, locks: adapter.locks, createId: () => token(++sequence) };
+  const memoStore = createLocalMemoStore({ ...deps, now: () => '2026-10-30T00:00:00Z' });
+  const memoController = createLocalMemoController({ store: memoStore, createId: deps.createId });
   const managed = createControlledUpgrade(deps, Object.freeze({ permit: window.__persistencePermit, storage }));
   let prepared: Awaited<ReturnType<typeof managed.port.inspect>> | null = null;
   let migration: Extract<MigrationResult, { kind: 'migration-required' | 'recovery-ready' }> | null = null;
@@ -84,6 +89,10 @@ function start() {
       if (mode === 'v2') managed.issuer.producedV2(raw);
     },
     inspect, fault(value: string) { fault = value; }, writes: () => writes,
+    dispatch(command: ControllerCommand) {
+      return maintenanceMode ? Promise.resolve({ kind: 'blocked' as const, reason: 'maintenance' }) : memoController.dispatch(command);
+    },
+    state: memoController.getState,
     snapshot: () => ({ old: native.getItem(OLD_STORAGE_KEY), current: native.getItem(NEW_STORAGE_KEY) }),
     oldLoad: () => oldStore(deps).load(), oldWrite: () => oldStore(deps).transact(value => ({ ...value, memos: [], memoTags: [] })),
     async maintenance() {
