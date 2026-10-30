@@ -2,7 +2,7 @@ import { immutable, isDirty } from './editor-state';
 import type { EditorState } from './editor-state';
 import { getMemoNeighbors, queryMemos } from './memo-query';
 import type { MemoQueryResult } from './memo-query';
-import { validateLocalV2 } from './local-validation';
+import { validateLocalFormat } from './local-format';
 import { record, uuid } from './read-primitives';
 
 export type NavigationTarget = { readonly kind: 'list' } | { readonly kind: 'detail'; readonly id: string }
@@ -51,7 +51,7 @@ export function prepareLocalList(input: unknown, options?: unknown, scrollTop = 
     } else {
       const row = record(input, ['kind', 'value']);
       if (row.kind !== 'loaded') return { kind: 'blocked', reason: 'invalid-data' };
-      const checked = validateLocalV2(row.value);
+      const checked = validateLocalFormat(row.value);
       if (checked.kind === 'validated-pending') return { kind: 'blocked', reason: 'pending' };
       const { memos, tags, memoTags } = checked.value; data = { memos, tags, memoTags };
     }

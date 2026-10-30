@@ -105,7 +105,7 @@ export function beginSave(state: EditorState, ids: { operationId: string; reques
 
 const reasons: readonly LocalFailureReason[] = ['invalid-input', 'request-id-reused', 'locks-unavailable', 'lock-failure',
   'storage-failure', 'invalid-data', 'migration-required', 'recovery-required', 'snapshot-changed', 'id-exists',
-  'not-found', 'trashed', 'conflict', 'revision-limit', 'invalid-tag', 'invalid-state', 'duplicate-tag'];
+  'not-found', 'trashed', 'conflict', 'revision-limit', 'invalid-tag', 'invalid-state', 'duplicate-tag', 'deleted-id'];
 
 /**
  * LocalSaveResultの接続境界。要求に対応しない応答は無視し、壊れた成功応答も不明とする。

@@ -1,5 +1,7 @@
 # メモツール Ver1.1.0 入力契約のテスト方針
 
+v3形式・限定導入・互換性の契約は [format/V3-CONTRACT.md](format/V3-CONTRACT.md) を参照。
+
 メモ複製の契約・テスト観点は [DUPLICATE.md](DUPLICATE.md) を参照。
 
 第二弾の旧データ・v2・DB snapshot読み取り検証は、別紙[承認済み契約とテスト方針](READ-VALIDATION.md)を参照。第一弾の入力検証165件は引き続き維持する。
