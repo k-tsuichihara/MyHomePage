@@ -2,14 +2,14 @@ import { withLocalDataLock, LocalLocksUnavailableError } from './local-lock';
 import type { LocalLockManager } from './local-lock';
 import { NEW_STORAGE_KEY, OLD_STORAGE_KEY } from './local-migration';
 import type { MigrationStorage } from './local-migration';
-import { parseLocalV2Json, validateLocalV2 } from './local-validation';
+import { parseLocalFormatJson, validateLocalFormat } from './local-format';
 import { ReadValidationError } from './read-primitives';
-import type { LocalV2ValidationResult } from './read-types';
+import type { LocalFormatResult } from './local-format';
 
-export type ReadyLocalData = Exclude<LocalV2ValidationResult, { kind: 'validated-pending' }>['value'];
+export type ReadyLocalData = Exclude<LocalFormatResult, { kind: 'validated-pending' }>['value'];
 export type LocalFailureReason = 'invalid-input' | 'request-id-reused' | 'locks-unavailable' | 'lock-failure'
   | 'storage-failure' | 'invalid-data' | 'migration-required' | 'recovery-required' | 'snapshot-changed'
-  | 'id-exists' | 'not-found' | 'trashed' | 'conflict' | 'revision-limit' | 'invalid-tag' | 'invalid-state' | 'duplicate-tag';
+  | 'id-exists' | 'deleted-id' | 'not-found' | 'trashed' | 'conflict' | 'revision-limit' | 'invalid-tag' | 'invalid-state' | 'duplicate-tag';
 export type LocalWriteFailure =
   | { kind: 'rejected'; reason: LocalFailureReason; writeOutcome: 'not-attempted' }
   | { kind: 'unknown'; reason: LocalFailureReason; writeOutcome: 'unverified' };
@@ -24,7 +24,7 @@ export interface LocalDataDependencies { storage: MigrationStorage; locks: Local
 
 /** pendingを通常保存へ流さない。構造不正を空データへ補正しない。 */
 function ready(raw: unknown): ReadyLocalData {
-  const result = validateLocalV2(raw);
+  const result = validateLocalFormat(raw);
   if (result.kind === 'validated-pending') throw new LocalDataError('recovery-required');
   return result.value;
 }
@@ -46,7 +46,7 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
       return { raw, legacyRaw, value: null };
     }
     try {
-      const checked = parseLocalV2Json(raw);
+      const checked = parseLocalFormatJson(raw);
       if (checked.kind === 'validated-pending') throw new LocalDataError('recovery-required');
       return { raw, legacyRaw, value: checked.value };
     } catch (error) {
@@ -81,9 +81,13 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
           const state = read();
           const base: ReadyLocalData = state.value ?? { version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] };
           const metadata = JSON.stringify(base.migration);
+          const history = base.version === 3 ? JSON.stringify(base.deletedMemoIds) : null;
           fallback = 'invalid-input';
           const candidate = ready(transform(base));
           if (JSON.stringify(candidate.migration) !== metadata) throw new LocalDataError('invalid-data');
+          // 通常操作へ形式更新や履歴の削除・追加・並べ替えを混入させない。
+          if (candidate.version !== base.version
+            || (candidate.version === 3 ? JSON.stringify(candidate.deletedMemoIds) : null) !== history) throw new LocalDataError('invalid-data');
           const nextRaw = JSON.stringify(candidate);
           fallback = 'storage-failure';
           if (deps.storage.getItem(OLD_STORAGE_KEY) !== state.legacyRaw || deps.storage.getItem(NEW_STORAGE_KEY) !== state.raw) {

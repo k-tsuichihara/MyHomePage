@@ -11,6 +11,8 @@
     "test:e2e": "playwright test",
     "build:persistence": "node scripts/build-persistence.mjs",
     "test:persistence": "npm run build:persistence && node .persistence/run.mjs",
+    "build:format": "node scripts/build-format.mjs",
+    "test:format": "npm run build:format && node .format/run.mjs",
     "build:transition": "node scripts/build-transition.mjs",
     "test:transition": "npm run build:transition && node .transition/run.mjs"
   },

@@ -2,7 +2,7 @@ import { beginSave, confirmResave, createEditor, editDraft, immutable, isDirty, 
 import { listNeighbors, prepareLocalList, requestNavigation } from './navigation-state';
 import { queryMemos } from './memo-query';
 import { countTagUsage } from './tag-usage';
-import { validateLocalV2 } from './local-validation';
+import { validateLocalFormat } from './local-format';
 import { parseStateRequest } from './local-state-operations';
 import { parseTagDelete, parseTagSave } from './local-tag-operations';
 import { uuid, uuidKey } from './read-primitives';
@@ -68,7 +68,7 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
       patch({ read: { kind: 'failed', reason: result.kind === 'unavailable' ? result.reason : prepared.reason } });
       return blocked('load-failed');
     }
-    const value = result.kind === 'loaded' ? validateLocalV2(result.value).value : null;
+    const value = result.kind === 'loaded' ? validateLocalFormat(result.value).value : null;
     const data: MemoData = value ? { memos: value.memos, tags: value.tags, memoTags: value.memoTags } : { memos: [], tags: [], memoTags: [] };
     patch({ data, list: prepared.context, usage: countTagUsage(data), read: { kind: 'ready' }, editorIssue: issue(data) });
     return done;

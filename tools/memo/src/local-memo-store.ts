@@ -78,6 +78,7 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
         const existing = current.memos[index];
         if (request.expectedRevision === null) {
           if (existing) throw new LocalDataError('id-exists');
+          if (current.version === 3 && current.deletedMemoIds.some(id => uuidKey(id) === key)) throw new LocalDataError('deleted-id');
         } else {
           if (!existing) throw new LocalDataError('not-found');
           if (existing.deletedAt !== null) throw new LocalDataError('trashed');

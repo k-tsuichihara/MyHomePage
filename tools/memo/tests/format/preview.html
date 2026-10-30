@@ -1,0 +1,8 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>v3隔離診断</title></head>
+<body><h1>v3形式更新・隔離検証専用</h1><p>合成データだけを使用します。本番接続ではありません。</p>
+<p>approval-requiredはv2→v3形式更新の確認です。内容・順序・日時・revisionを保持し、削除済みID履歴を空で追加します。更新後は旧v2コードが停止し、自動逆変換は行いません。</p>
+<p>migration-requiredは旧データからv2への移行、recovery-readyはv2 pendingの復旧です。どちらも完了後、v3更新には再診断と別の承認が必要です。untrusted-v2は導入経路が未確認のため更新できません。</p>
+<p>unknownは書込結果不明です。成功とは判定せず、自動再試行・初期化をしません。再診断でv3が見えても、過去の要求の成功証明にはなりません。</p>
+<p id="status" role="status">未起動</p><p id="outcome" role="status">未実行</p>
+<button id="inspect">再診断</button><button id="approve" hidden>表示した操作を承認</button><button id="cancel" hidden>キャンセル</button>
+<p id="maintenance">保守モードは読取・停止案内のみ。保存・逆変換は提供しません。</p><script type="module" src="/format.js"></script></body></html>
