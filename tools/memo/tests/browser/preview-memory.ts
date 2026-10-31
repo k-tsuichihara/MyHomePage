@@ -3,14 +3,15 @@ import { createLocalMemoController } from '../../src/local-memo-controller';
 import { NEW_STORAGE_KEY } from '../../src/local-migration';
 import type { LocalLockManager } from '../../src/local-lock';
 import { createLocalRestoreController } from '../../src/local-restore-controller';
+import { createDeletedRecoveryController } from '../../src/deleted-recovery-controller';
 
 const id = (n: number) => `abcdef00-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const now = '2026-10-26T00:00:00Z';
 
 /** ブラウザ保存APIを参照しない合成保存先。ページを閉じればすべて失われる。 */
 export function createPreviewEnvironment(scenario: string) {
-  const deletion = scenario.startsWith('delete') || scenario === 'backup' || scenario === 'restore-slow';
-  let raw = JSON.stringify({ version: deletion ? 3 : 2, ...(deletion ? { deletedMemoIds: scenario === 'backup' ? [id(99)] : [] } : {}), migration: { status: 'not-required' },
+  const deletion = scenario.startsWith('delete') || scenario.startsWith('recovery') || scenario === 'backup' || scenario === 'restore-slow';
+  let raw = JSON.stringify({ version: deletion ? 3 : 2, ...(deletion ? { deletedMemoIds: scenario === 'backup' || scenario.startsWith('recovery') ? [id(99)] : [] } : {}), migration: { status: 'not-required' },
     memos: Array.from({ length: 12 }, (_, i) => ({ id: id(i + 1), title: i === 0 ? '仕事メモ' : `合成メモ ${i + 1}`,
       body: i === 0 ? '入力・保存・ドラフト保護を検証します。' : '合成データだけを使います。',
       createdAt: now, updatedAt: now, pinnedAt: i === 0 ? now : null, deletedAt: deletion && (i === 1 || i === 2) ? now : null, revision: 1, lastRequestId: null })),
@@ -21,13 +22,14 @@ export function createPreviewEnvironment(scenario: string) {
     getItem(key: string): string | null {
       if (key !== NEW_STORAGE_KEY) return null;
       if (scenario === 'delete-readback' && written) throw new Error('Synthetic readback');
+      if (scenario === 'recovery-unreadable' && written) throw new Error('Synthetic readback');
       return raw;
     },
     setItem(key: string, value: string) {
       if (key !== NEW_STORAGE_KEY) throw new Error('Unexpected synthetic key');
       if (scenario === 'delete-quota') throw new Error('Synthetic quota');
       raw = value; written = true;
-      if (scenario === 'unknown' || scenario === 'delete-unknown') throw new Error('Synthetic unknown write');
+      if (scenario === 'unknown' || scenario === 'delete-unknown' || scenario === 'recovery-unknown' || scenario === 'recovery-unreadable') throw new Error('Synthetic unknown write');
     },
   };
   // 実Web Locksではない。単一ページの合成操作だけを直列化する。
@@ -37,6 +39,10 @@ export function createPreviewEnvironment(scenario: string) {
   } };
   const base = createLocalMemoStore({ storage, locks, now: () => now });
   const store: typeof base = { ...base,
+    async recoverDeleted(input) {
+      if (scenario === 'recovery-slow') await new Promise(resolve => setTimeout(resolve, 500));
+      return base.recoverDeleted(input);
+    },
     async prepareRestore(...args) {
       if (scenario === 'restore-slow') await new Promise(resolve => setTimeout(resolve, 1200));
       return base.prepareRestore(...args);
@@ -71,8 +77,16 @@ export function createPreviewEnvironment(scenario: string) {
   } };
   let sequence = 100;
   const controller = createLocalMemoController({ store, createId: () => id(++sequence) });
-  return { controller, restore: createLocalRestoreController({ store, createId: () => id(++sequence), canStart: () => {
+  const canStart = () => {
     const state = controller.getState(); return !state.editor && state.write.kind !== 'writing' && state.read.kind === 'ready' && !state.confirmation;
-  } }),
+  };
+  return { controller, recovery: createDeletedRecoveryController({ store, createId: () => id(++sequence), canStart,
+    openCreated: async id => {
+      await controller.dispatch({ kind: 'load' });
+      if (controller.getState().read.kind !== 'ready') return false;
+      const result = await controller.dispatch({ kind: 'detail', id });
+      const route = controller.getState().route;
+      return result.kind === 'done' && route.kind === 'detail' && route.id === id;
+    } }), restore: createLocalRestoreController({ store, createId: () => id(++sequence), canStart }),
     migration: { storage, locks, createId: () => id(++sequence) } };
 }

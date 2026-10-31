@@ -1,6 +1,7 @@
 import type { createLocalMemoController } from '../local-memo-controller';
 import type { ControllerCommand } from '../local-app-state';
 import { isDirty } from '../editor-state';
+import { renderMemoDetail } from './memo-detail-content';
 
 type Controller = ReturnType<typeof createLocalMemoController>;
 const messages: Record<string, string> = {
@@ -156,8 +157,9 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
       const id = state.route.id;
       const memo = state.data?.memos.find(row => row.id === id);
       // 再取得失敗時のsnapshotは最新ではない。不在や古い内容を確定情報として表示しない。
-      text('detail-title', ready ? memo?.title ?? '対象のメモはありません。' : '詳細を取得できません。再読込してください。'); text('detail-body', ready ? memo?.body ?? '' : '');
-      text('detail-tags', ready ? state.data?.memoTags.filter(row => row.memoId === memo?.id).map(row => state.data?.tags.find(tag => tag.id === row.tagId)?.name ?? '').join('・') ?? '' : '');
+      renderMemoDetail({ title: element('detail-title'), body: element('detail-body'), tags: element('detail-tags') }, {
+        title: ready ? memo?.title ?? '対象のメモはありません。' : '詳細を取得できません。再読込してください。', body: ready ? memo?.body ?? '' : '',
+        tags: ready ? state.data?.memoTags.filter(row => row.memoId === memo?.id).map(row => state.data?.tags.find(tag => tag.id === row.tagId)?.name ?? '').join('・') ?? '' : '' });
       element<HTMLButtonElement>('edit').disabled ||= memo?.deletedAt !== null;
       element<HTMLButtonElement>('duplicate').disabled ||= memo?.deletedAt !== null;
       element('permanent-delete').hidden = state.storageVersion !== 3 || memo?.deletedAt == null;

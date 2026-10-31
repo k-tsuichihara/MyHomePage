@@ -12,6 +12,8 @@ import { planRestore } from './local-restore';
 import type { RestoreBackup, RestoreV3 } from './local-restore';
 import type { RestoreBase } from './local-data-store';
 import type { MemoStorageV3 } from './local-format';
+import { validateMemoData } from './snapshot-validation';
+import { recoverMemo } from './deleted-recovery';
 
 interface LocalSaveRequest {
   id: string; title: string; body: string; tagIds: string[]; expectedRevision: number | null; requestId: string;
@@ -67,6 +69,24 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
   }
   return {
     load: data.load,
+    /** 単件回復の明示操作を受ける内部ポート。通常保存とrequestId集合・commit基盤を共用する。 */
+    async recoverDeleted(input: unknown): Promise<LocalSaveResult> {
+      let source: Memo, sourceTags: string[], expectedTags: string[], id: string;
+      try {
+        reserve(input);
+        const row = record(input, ['source', 'sourceTags', 'expectedTags', 'id', 'requestId']);
+        source = validateMemoData({ memos: [row.source], tags: [], memoTags: [] }).memos[0]!;
+        sourceTags = array(row.sourceTags).map(uuid); expectedTags = array(row.expectedTags).map(uuid); id = uuid(row.id);
+        if ([sourceTags, expectedTags].some(ids => new Set(ids.map(uuidKey)).size !== ids.length)) throw new LocalDataError('invalid-tag');
+      } catch (error) { return { kind: 'rejected', reason: error instanceof LocalDataError ? error.reason : 'invalid-input', writeOutcome: 'not-attempted' }; }
+      const result = await data.transact(current => {
+        if (current.version !== 3) throw new LocalDataError('v3-required');
+        return recoverMemo(current as RestoreV3, source, sourceTags, expectedTags, id, deps.now());
+      });
+      if (result.kind !== 'written') return result;
+      return { kind: 'saved', value: { memo: result.value.memos.find(m => uuidKey(m.id) === uuidKey(id))!,
+        tagIds: result.value.memoTags.filter(link => uuidKey(link.memoId) === uuidKey(id)).map(link => link.tagId) } };
+    },
     invalidateRestore() { restoreSerial++; restorePlan = null; },
     /** 同じストア寿命内に一つだけ非公開の固定候補を保持する。準備は書込ではない。 */
     async prepareRestore(backup: RestoreBackup, selected: readonly number[], createId: () => string, expected: MemoStorageV3) {
