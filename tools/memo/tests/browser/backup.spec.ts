@@ -14,6 +14,7 @@ test('v3全体のダウンロード、UTF-8原文、除外範囲、公開API非�
   await page.locator('#search').fill('存在しない検索');
   const downloaded = page.waitForEvent('download');
   await page.getByRole('button', { name: 'JSONバックアップを作成' }).click();
+  await page.getByRole('link', { name: '準備済みJSONをダウンロード' }).click();
   const file = await downloaded;
   expect(file.suggestedFilename()).toMatch(/^memo-backup-[\dTZ-]+\.json$/);
   const stream = await file.createReadStream();
@@ -42,6 +43,7 @@ test('未保存ドラフトを含めず保持する', async ({ page }) => {
   await page.goto('/?scenario=backup'); await page.locator('#new').click();
   await page.getByLabel('タイトル', { exact: true }).fill('未保存の秘密');
   const event = page.waitForEvent('download'); await page.getByRole('button', { name: 'JSONバックアップを作成' }).click();
+  await page.getByRole('link', { name: '準備済みJSONをダウンロード' }).click();
   const stream = await (await event).createReadStream(); if (!stream) throw new Error('download');
   let content = ''; for await (const part of stream) content += part.toString();
   expect(content).not.toContain('未保存の秘密'); await expect(page.getByLabel('タイトル', { exact: true })).toHaveValue('未保存の秘密');
@@ -50,8 +52,47 @@ test('未保存ドラフトを含めず保持する', async ({ page }) => {
 test('同一操作の二重クリックを抑止し、繰り返しの明示出力は可能', async ({ page }) => {
   await page.goto('/?scenario=backup'); let count = 0; page.on('download', () => count++);
   const button = page.getByRole('button', { name: 'JSONバックアップを作成' });
-  const first = page.waitForEvent('download');
-  await button.evaluate((node: HTMLButtonElement) => { node.click(); node.click(); }); await first;
-  await expect(button).toBeEnabled(); expect(count).toBe(1);
-  const second = page.waitForEvent('download'); await button.click(); await second; expect(count).toBe(2);
+  await button.evaluate((node: HTMLButtonElement) => { node.click(); node.click(); });
+  const link = page.getByRole('link', { name: '準備済みJSONをダウンロード' });
+  await expect(link).toBeVisible(); await expect(button).toBeEnabled(); expect(count).toBe(0);
+  const first = page.waitForEvent('download'); await link.click(); await first; expect(count).toBe(1);
+  await button.click(); await expect(link).toBeVisible();
+  const second = page.waitForEvent('download'); await link.click(); await second; expect(count).toBe(2);
+});
+
+test('準備だけでは保存せず、1秒を過ぎてもURLを保持し、明示破棄で解放する', async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    const revoked: string[] = []; const original = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = url => { revoked.push(url); original(url); };
+    Object.defineProperty(window, '__backupRevoked', { value: revoked });
+  });
+  await page.goto('/?scenario=backup'); let count = 0; page.on('download', () => count++);
+  await page.getByRole('button', { name: 'JSONバックアップを作成' }).click();
+  const link = page.getByRole('link', { name: '準備済みJSONをダウンロード' });
+  await expect(link).toBeVisible(); expect(count).toBe(0);
+  const url = await link.getAttribute('href');
+  await page.clock.fastForward(5000);
+  const revoked = () => page.evaluate(() => (window as unknown as { __backupRevoked: string[] }).__backupRevoked);
+  expect(await revoked()).toEqual([]);
+  const event = page.waitForEvent('download'); await link.click(); await event;
+  await page.clock.fastForward(5000); expect(await revoked()).toEqual([]);
+  await page.getByRole('button', { name: '準備済みファイルを破棄' }).click();
+  expect(await revoked()).toEqual([url]); await expect(link).toBeHidden();
+});
+
+test('再作成とページ終了でURLを解放し、古いリンクを残さない', async ({ page }) => {
+  await page.addInitScript(() => {
+    const revoked: string[] = []; const original = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = url => { revoked.push(url); original(url); };
+    Object.defineProperty(window, '__backupRevoked', { value: revoked });
+  });
+  await page.goto('/?scenario=backup'); const prepare = page.getByRole('button', { name: 'JSONバックアップを作成' });
+  const link = page.getByRole('link', { name: '準備済みJSONをダウンロード' });
+  await prepare.click(); await expect(link).toBeVisible(); const first = await link.getAttribute('href');
+  await prepare.click(); await expect(link).toBeVisible(); const second = await link.getAttribute('href');
+  expect(second).not.toBe(first);
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  expect(await page.evaluate(() => (window as unknown as { __backupRevoked: string[] }).__backupRevoked)).toEqual([first, second]);
+  await expect(link).toBeHidden();
 });
