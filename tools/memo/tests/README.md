@@ -1,5 +1,7 @@
 # メモツール Ver1.1.0 入力契約のテスト方針
 
+ローカルJSONバックアップ出力の承認済み契約と試験は [LOCAL-BACKUP-EXPORT.md](LOCAL-BACKUP-EXPORT.md) を参照。
+
 完全削除・ゴミ箱一括削除の契約は [LOCAL-DELETE.md](LOCAL-DELETE.md) を参照。
 
 v3形式・限定導入・互換性の契約は [format/V3-CONTRACT.md](format/V3-CONTRACT.md) を参照。
