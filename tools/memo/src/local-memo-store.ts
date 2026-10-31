@@ -61,7 +61,9 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
   }
   return {
     load: data.load,
+    /** controller内部の実行ポート。利用者確認は検証しないため、UIや他機能へ直接渡さない。 */
     deletePermanently(input: unknown) { return deleteOperation(input, parsePermanentDelete); },
+    /** 確認済み全件集合をcontrollerから受ける。requestIdは確認の証明ではない。 */
     emptyTrash(input: unknown) { return deleteOperation(input, parseEmptyTrash); },
     /** pin/unpin/trash/restoreだけを提供し、完全削除を状態操作へ混在させない。 */
     changeState(input: unknown) {

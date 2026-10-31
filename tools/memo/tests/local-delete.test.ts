@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { createLocalMemoController } from '../src/local-memo-controller';
 import { createLocalMemoStore } from '../src/local-memo-store';
 import { NEW_STORAGE_KEY, OLD_STORAGE_KEY } from '../src/local-migration';
@@ -200,4 +200,56 @@ it('保存先依存の差替えで確認済み削除を別保存領域へ流さ�
   const f = fixture(), other = fixture(); await prepare(f);
   f.deps.storage = other.storage; await confirm(f);
   expect(f.storage.writes).toHaveLength(1); expect(other.storage.writes).toHaveLength(0);
+});
+it.each([false, true])('確認なし・偽トークン・取消では低レベル削除ポートを呼ばない：一括=%s', async batch => {
+  const f = fixture(), single = vi.spyOn(f.store, 'deletePermanently'), bulk = vi.spyOn(f.store, 'emptyTrash');
+  const before = raw(f);
+  expect(await f.send({ kind: 'confirm', token: 12345, accepted: true })).toMatchObject({ reason: 'stale-confirmation' });
+  expect((await prepare(f, batch)).kind).toBe('confirmation-required');
+  const ticket = f.get().confirmation!;
+  expect(single).not.toHaveBeenCalled(); expect(bulk).not.toHaveBeenCalled();
+  expect(await f.send({ kind: 'confirm', token: ticket.token + 1, accepted: true })).toMatchObject({ reason: 'stale-confirmation' });
+  await f.send({ kind: 'confirm', token: ticket.token, accepted: false });
+  expect(await f.send({ kind: 'confirm', token: ticket.token, accepted: true })).toMatchObject({ reason: 'stale-confirmation' });
+  expect(single).not.toHaveBeenCalled(); expect(bulk).not.toHaveBeenCalled();
+  expect(raw(f)).toBe(before); expect(f.storage.writes).toHaveLength(0);
+});
+it.each([false, true])('確認したID・revisionだけを一度渡し、外部入力の変更を反映しない：一括=%s', async batch => {
+  const f = fixture(), single = vi.spyOn(f.store, 'deletePermanently'), bulk = vi.spyOn(f.store, 'emptyTrash');
+  await f.send({ kind: 'load' });
+  const operation = batch ? { kind: 'empty-trash' as const, targets: targets() }
+    : { kind: 'permanent-delete' as const, id: MEMO, expectedRevision: 3 };
+  await f.send({ kind: 'mutate', operation }); const ticket = f.get().confirmation!;
+  if (operation.kind === 'empty-trash') operation.targets.splice(0, 2, { id: NORMAL, revision: 999 });
+  else { operation.id = NORMAL; operation.expectedRevision = 999; }
+  expect(ticket.command).toMatchObject({ kind: 'mutate', operation: batch ? { kind: 'empty-trash', targets: targets() }
+    : { kind: 'permanent-delete', id: MEMO, expectedRevision: 3 } });
+  expect(single).not.toHaveBeenCalled(); expect(bulk).not.toHaveBeenCalled();
+  const pending = f.send({ kind: 'confirm', token: ticket.token, accepted: true });
+  await f.send({ kind: 'confirm', token: ticket.token, accepted: true }); await pending;
+  await f.send({ kind: 'confirm', token: ticket.token, accepted: true });
+  if (batch) {
+    expect(bulk).toHaveBeenCalledExactlyOnceWith({ targets: targets(), requestId: token(501) }); expect(single).not.toHaveBeenCalled();
+  } else {
+    expect(single).toHaveBeenCalledExactlyOnceWith({ id: MEMO, expectedRevision: 3, requestId: token(501) }); expect(bulk).not.toHaveBeenCalled();
+  }
+  expect(f.storage.writes).toHaveLength(1);
+});
+it('unknown後の再読込でも旧確認・旧集合を拡張せず、別の明示確認だけが新集合を送る', async () => {
+  const f = fixture(), bulk = vi.spyOn(f.store, 'emptyTrash'); await prepare(f, true);
+  const oldTicket = f.get().confirmation!;
+  f.storage.beforeSet = () => { throw new Error('quota'); }; await confirm(f); delete f.storage.beforeSet;
+  expect(f.get().write.kind).toBe('unknown'); expect(bulk).toHaveBeenCalledExactlyOnceWith({ targets: targets(), requestId: token(501) });
+  change(f, value => { value.memos[2]!.deletedAt = NOW; }); await f.send({ kind: 'load' });
+  expect(await f.send({ kind: 'confirm', token: oldTicket.token, accepted: true })).toMatchObject({ reason: 'stale-confirmation' });
+  await f.send({ kind: 'mutate', operation: { kind: 'empty-trash', targets: targets() } });
+  expect(await confirm(f)).toMatchObject({ reason: 'target-changed' });
+  expect(bulk).toHaveBeenCalledTimes(1); expect(f.storage.writes).toHaveLength(0);
+  const current = [...targets(), { id: NORMAL, revision: 1 }];
+  await f.send({ kind: 'mutate', operation: { kind: 'empty-trash', targets: current } });
+  const newTicket = f.get().confirmation!; expect(newTicket.token).not.toBe(oldTicket.token);
+  expect(bulk).toHaveBeenCalledTimes(1); await confirm(f);
+  expect(bulk).toHaveBeenNthCalledWith(2, { targets: current, requestId: token(502) });
+  expect(f.get().unresolved[0]!.input).toEqual({ targets: targets(), requestId: token(501) });
+  expect(f.storage.writes).toHaveLength(1);
 });
