@@ -12,7 +12,7 @@ function fixture(initial = state(), custom?: (store: LocalControllerDependencies
   const f = saveFixture(initial);
   const port = custom ? custom(f.store) : f.store;
   const store = { load: vi.fn(port.load), save: vi.fn(port.save), changeState: vi.fn(port.changeState),
-    saveTag: vi.fn(port.saveTag), deleteTag: vi.fn(port.deleteTag) };
+    saveTag: vi.fn(port.saveTag), deleteTag: vi.fn(port.deleteTag), deletePermanently: vi.fn(port.deletePermanently), emptyTrash: vi.fn(port.emptyTrash) };
   let n = 100;
   const controller = createLocalMemoController({ store, createId: () => token(++n) });
   return { ...f, store, controller, dispatch: controller.dispatch, get: controller.getState };

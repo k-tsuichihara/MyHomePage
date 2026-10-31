@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createProfileOwner, prepareProfileBase } from '../persistence/profile-guard';
 import { initializeContext, runOwnedCase } from '../persistence/lifecycle';
 import type {} from './entry';
+import type { ControllerCommand } from '../../src/local-app-state';
 
 if (process.argv.length !== 2) throw new Error('Custom paths forbidden');
 const owner = await createProfileOwner(await prepareProfileBase(fileURLToPath(new URL('../', import.meta.url))));
@@ -57,6 +58,13 @@ async function run(name: string, operation: (page: Page, other: () => Promise<Pa
 }
 const diagnose = async (page: Page, expected: string) => { await page.locator('#inspect').click(); await page.locator('#status').filter({ hasText: expected }).waitFor(); };
 const snapshot = (page: Page) => page.evaluate(() => window.__format!.snapshot());
+const control = (page: Page, command: ControllerCommand) => page.evaluate(value => window.__format!.dispatch(value), command);
+async function trashMemo(page: Page) {
+  await control(page, { kind: 'load' });
+  await control(page, { kind: 'mutate', operation: { kind: 'state', action: 'trash', id: 'abcdef00-0000-4000-8000-000000000001', expectedRevision: 3 } });
+  const token = await page.evaluate(() => window.__format!.state().confirmation!.token);
+  await control(page, { kind: 'confirm', token, accepted: true });
+}
 try {
   await run('未許可起動はStorage取得前に停止', async page => {
     assert.equal(await page.locator('#status').textContent(), 'boundary-stopped');
@@ -139,6 +147,43 @@ try {
     await page.evaluate(() => window.__format!.maintenance());
     assert.equal(await page.locator('#status').textContent(), 'maintenance-stopped');
     assert.deepEqual(await snapshot(page), before); assert.equal(await page.evaluate(() => window.__format!.writes()), 0);
+  });
+  await run('完全削除の実複数タブ競合は一方だけ成功し履歴を保持', async (page, other) => {
+    const id = 'abcdef00-0000-4000-8000-000000000001';
+    await page.evaluate(() => window.__format!.seed('v3')); await trashMemo(page);
+    const second = await other(); await control(second, { kind: 'load' });
+    for (const tab of [page, second]) await control(tab, { kind: 'mutate', operation: { kind: 'permanent-delete', id, expectedRevision: 4 } });
+    const tokens = await Promise.all([page, second].map(tab => tab.evaluate(() => window.__format!.state().confirmation!.token)));
+    await Promise.all([page, second].map((tab, index) => control(tab, { kind: 'confirm', token: tokens[index]!, accepted: true })));
+    const results = await Promise.all([page, second].map(tab => tab.evaluate(() => window.__format!.state().write.kind)));
+    assert.deepEqual(results.sort(), ['rejected', 'succeeded']);
+    const after = JSON.parse((await snapshot(page)).current!);
+    assert.equal(after.memos.length, 1); assert.equal(after.memoTags.some((row: { memoId: string }) => row.memoId === id), false);
+    assert.equal(after.deletedMemoIds.includes(id), true); assert.equal(after.tags.length, 2);
+    assert.equal((await page.evaluate(() => window.__format!.writes())) + (await second.evaluate(() => window.__format!.writes())), 2);
+  });
+  await run('一括削除の実ロック待機中の復元で全体拒否', async (page, other) => {
+    const id = 'abcdef00-0000-4000-8000-000000000001';
+    await page.evaluate(() => window.__format!.seed('v3')); await trashMemo(page);
+    await control(page, { kind: 'mutate', operation: { kind: 'empty-trash', targets: [{ id, revision: 4 }] } });
+    const token = await page.evaluate(() => window.__format!.state().confirmation!.token), second = await other();
+    const held = second.evaluate(() => navigator.locks.request('myhomepage.memo.data.v2.write', { mode: 'exclusive' }, async () => {
+      const ctl = window as unknown as { holding: boolean; release: () => void }; ctl.holding = true;
+      await new Promise<void>(resolve => { ctl.release = resolve; });
+    }));
+    await second.waitForFunction(() => (window as unknown as { holding: boolean }).holding);
+    const deletion = control(page, { kind: 'confirm', token, accepted: true });
+    await page.waitForFunction(() => window.__format!.state().write.kind === 'writing');
+    await second.evaluate(() => {
+      const key = 'myhomepage.memo.data.v2', value = JSON.parse(localStorage.getItem(key)!);
+      value.memos[0].deletedAt = null; value.memos[0].revision++;
+      localStorage.setItem(key, JSON.stringify(value)); (window as unknown as { release: () => void }).release();
+    });
+    await held; await deletion;
+    assert.equal(await page.evaluate(() => window.__format!.state().write.kind), 'rejected');
+    const after = JSON.parse((await snapshot(page)).current!);
+    assert.equal(after.memos.length, 2); assert.equal(after.deletedMemoIds.includes(id), false);
+    assert.equal(await page.evaluate(() => window.__format!.writes()), 1);
   });
   process.stdout.write(`Format E2E: ${passed} passed\n`);
 } finally { await new Promise<void>(resolve => server.close(() => resolve())); }

@@ -3,13 +3,15 @@ import type { LocalLockManager } from './local-lock';
 import { NEW_STORAGE_KEY, OLD_STORAGE_KEY } from './local-migration';
 import type { MigrationStorage } from './local-migration';
 import { parseLocalFormatJson, validateLocalFormat } from './local-format';
-import { ReadValidationError } from './read-primitives';
+import { ReadValidationError, uuidKey } from './read-primitives';
 import type { LocalFormatResult } from './local-format';
+import { removeTrash } from './local-delete-operations';
+import type { DeleteRequest } from './local-delete-operations';
 
 export type ReadyLocalData = Exclude<LocalFormatResult, { kind: 'validated-pending' }>['value'];
 export type LocalFailureReason = 'invalid-input' | 'request-id-reused' | 'locks-unavailable' | 'lock-failure'
   | 'storage-failure' | 'invalid-data' | 'migration-required' | 'recovery-required' | 'snapshot-changed'
-  | 'id-exists' | 'deleted-id' | 'not-found' | 'trashed' | 'conflict' | 'revision-limit' | 'invalid-tag' | 'invalid-state' | 'duplicate-tag';
+  | 'id-exists' | 'deleted-id' | 'v3-required' | 'delete-conflict' | 'trash-conflict' | 'not-found' | 'trashed' | 'conflict' | 'revision-limit' | 'invalid-tag' | 'invalid-state' | 'duplicate-tag';
 export type LocalWriteFailure =
   | { kind: 'rejected'; reason: LocalFailureReason; writeOutcome: 'not-attempted' }
   | { kind: 'unknown'; reason: LocalFailureReason; writeOutcome: 'unverified' };
@@ -21,6 +23,8 @@ export class LocalDataError extends Error {
   constructor(readonly reason: LocalFailureReason) { super(`Local memo operation rejected: ${reason}`); }
 }
 export interface LocalDataDependencies { storage: MigrationStorage; locks: LocalLockManager | undefined }
+type Written = { kind: 'written'; value: ReadyLocalData };
+type Unchanged = { kind: 'not-needed'; count: 0 };
 
 /** pendingを通常保存へ流さない。構造不正を空データへ補正しない。 */
 function ready(raw: unknown): ReadyLocalData {
@@ -38,6 +42,8 @@ function classify(error: unknown, fallback: LocalFailureReason): LocalFailureRea
  * transactの変換関数は内部データ層用であり、任意の外部入力をそのまま実行する入口ではない。
  */
 export function createLocalDataStore(deps: LocalDataDependencies) {
+  // ストア寿命中の保存先を固定し、確認後の依存オブジェクト差替えで別領域へ書かない。
+  deps = { storage: deps.storage, locks: deps.locks };
   function read() {
     const legacyRaw = deps.storage.getItem(OLD_STORAGE_KEY);
     const raw = deps.storage.getItem(NEW_STORAGE_KEY);
@@ -55,6 +61,40 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
     }
   }
 
+  /** 通常変換には履歴変更を許さず、専用削除経路だけが検証済み対象のIDを追加できる。 */
+  async function commit(transform: (current: ReadyLocalData) => ReadyLocalData, deletion?: DeleteRequest): Promise<Written | Unchanged | LocalWriteFailure> {
+    let attempted = false;
+    let fallback: LocalFailureReason = 'lock-failure';
+    try {
+      return await withLocalDataLock(deps.locks, async () => {
+        fallback = 'storage-failure';
+        const state = read();
+        const base: ReadyLocalData = state.value ?? { version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] };
+        const metadata = JSON.stringify(base.migration), version = base.version;
+        const expected = base.version === 3 ? [...base.deletedMemoIds] : null;
+        if (deletion && expected) {
+          const ids = new Set(deletion.targets.map(row => uuidKey(row.id)));
+          expected.push(...base.memos.filter(row => ids.has(uuidKey(row.id))).map(row => row.id));
+        }
+        fallback = 'invalid-input';
+        const candidate = ready(deletion ? removeTrash(base, deletion) : transform(base));
+        if (JSON.stringify(candidate.migration) !== metadata || candidate.version !== version
+          || JSON.stringify(candidate.version === 3 ? candidate.deletedMemoIds : null) !== JSON.stringify(expected)) throw new LocalDataError('invalid-data');
+        const nextRaw = JSON.stringify(candidate);
+        fallback = 'storage-failure';
+        if (deps.storage.getItem(OLD_STORAGE_KEY) !== state.legacyRaw || deps.storage.getItem(NEW_STORAGE_KEY) !== state.raw) throw new LocalDataError('snapshot-changed');
+        if (deletion && deletion.targets.length === 0) return { kind: 'not-needed', count: 0 };
+        attempted = true;
+        deps.storage.setItem(NEW_STORAGE_KEY, nextRaw);
+        if (deps.storage.getItem(OLD_STORAGE_KEY) !== state.legacyRaw || deps.storage.getItem(NEW_STORAGE_KEY) !== nextRaw) throw new LocalDataError('snapshot-changed');
+        fallback = 'invalid-data';
+        return { kind: 'written', value: ready(JSON.parse(nextRaw) as unknown) };
+      });
+    } catch (error) {
+      const reason = classify(error, fallback);
+      return attempted ? { kind: 'unknown', reason, writeOutcome: 'unverified' } : { kind: 'rejected', reason, writeOutcome: 'not-attempted' };
+    }
+  }
   return {
     /** 読取も共通ロック内で行い、結果は検証器が再構築した独立したデータとして返す。 */
     async load(): Promise<LocalLoadResult> {
@@ -73,39 +113,9 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
      * setItemの呼出直前から書込試行済みとし、それ以降の異常は成功でも未実行でもない。
      */
     async transact(transform: (current: ReadyLocalData) => ReadyLocalData): Promise<{ kind: 'written'; value: ReadyLocalData } | LocalWriteFailure> {
-      let attempted = false;
-      let fallback: LocalFailureReason = 'lock-failure';
-      try {
-        return await withLocalDataLock(deps.locks, async () => {
-          fallback = 'storage-failure';
-          const state = read();
-          const base: ReadyLocalData = state.value ?? { version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] };
-          const metadata = JSON.stringify(base.migration);
-          const history = base.version === 3 ? JSON.stringify(base.deletedMemoIds) : null;
-          fallback = 'invalid-input';
-          const candidate = ready(transform(base));
-          if (JSON.stringify(candidate.migration) !== metadata) throw new LocalDataError('invalid-data');
-          // 通常操作へ形式更新や履歴の削除・追加・並べ替えを混入させない。
-          if (candidate.version !== base.version
-            || (candidate.version === 3 ? JSON.stringify(candidate.deletedMemoIds) : null) !== history) throw new LocalDataError('invalid-data');
-          const nextRaw = JSON.stringify(candidate);
-          fallback = 'storage-failure';
-          if (deps.storage.getItem(OLD_STORAGE_KEY) !== state.legacyRaw || deps.storage.getItem(NEW_STORAGE_KEY) !== state.raw) {
-            throw new LocalDataError('snapshot-changed');
-          }
-          attempted = true;
-          deps.storage.setItem(NEW_STORAGE_KEY, nextRaw);
-          if (deps.storage.getItem(OLD_STORAGE_KEY) !== state.legacyRaw || deps.storage.getItem(NEW_STORAGE_KEY) !== nextRaw) {
-            throw new LocalDataError('snapshot-changed');
-          }
-          fallback = 'invalid-data';
-          return { kind: 'written', value: ready(JSON.parse(nextRaw) as unknown) };
-        });
-      } catch (error) {
-        const reason = classify(error, fallback);
-        return attempted ? { kind: 'unknown', reason, writeOutcome: 'unverified' }
-          : { kind: 'rejected', reason, writeOutcome: 'not-attempted' };
-      }
+      const result = await commit(transform);
+      return result.kind === 'not-needed' ? { kind: 'rejected', reason: 'invalid-input', writeOutcome: 'not-attempted' } : result;
     },
+    deleteTrash(request: DeleteRequest) { return commit(value => value, request); },
   };
 }

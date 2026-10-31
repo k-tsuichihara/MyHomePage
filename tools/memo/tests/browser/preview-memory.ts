@@ -8,22 +8,25 @@ const now = '2026-10-26T00:00:00Z';
 
 /** ブラウザ保存APIを参照しない合成保存先。ページを閉じればすべて失われる。 */
 export function createPreviewEnvironment(scenario: string) {
-  let raw = JSON.stringify({ version: 2, migration: { status: 'not-required' },
+  const deletion = scenario.startsWith('delete');
+  let raw = JSON.stringify({ version: deletion ? 3 : 2, ...(deletion ? { deletedMemoIds: [] } : {}), migration: { status: 'not-required' },
     memos: Array.from({ length: 12 }, (_, i) => ({ id: id(i + 1), title: i === 0 ? '仕事メモ' : `合成メモ ${i + 1}`,
       body: i === 0 ? '入力・保存・ドラフト保護を検証します。' : '合成データだけを使います。',
-      createdAt: now, updatedAt: now, pinnedAt: i === 0 ? now : null, deletedAt: null, revision: 1, lastRequestId: null })),
+      createdAt: now, updatedAt: now, pinnedAt: i === 0 ? now : null, deletedAt: deletion && (i === 1 || i === 2) ? now : null, revision: 1, lastRequestId: null })),
     tags: [{ id: id(50), name: '仕事', createdAt: now, revision: 1 }, { id: id(51), name: '個人', createdAt: now, revision: 1 }],
     memoTags: [{ memoId: id(1), tagId: id(50) }] });
   let written = false;
   const storage = {
     getItem(key: string): string | null {
       if (key !== NEW_STORAGE_KEY) return null;
+      if (scenario === 'delete-readback' && written) throw new Error('Synthetic readback');
       return raw;
     },
     setItem(key: string, value: string) {
       if (key !== NEW_STORAGE_KEY) throw new Error('Unexpected synthetic key');
+      if (scenario === 'delete-quota') throw new Error('Synthetic quota');
       raw = value; written = true;
-      if (scenario === 'unknown') throw new Error('Synthetic unknown write');
+      if (scenario === 'unknown' || scenario === 'delete-unknown') throw new Error('Synthetic unknown write');
     },
   };
   // 実Web Locksではない。単一ページの合成操作だけを直列化する。
@@ -32,7 +35,14 @@ export function createPreviewEnvironment(scenario: string) {
     const next = tail.then(operation); tail = next.catch(() => undefined); return next;
   } };
   const base = createLocalMemoStore({ storage, locks, now: () => now });
-  const store: typeof base = { ...base, async load() {
+  const store: typeof base = { ...base,
+    async deletePermanently(input) {
+      if (scenario === 'delete-slow') await new Promise(resolve => setTimeout(resolve, 600));
+      return base.deletePermanently(input);
+    }, async emptyTrash(input) {
+      if (scenario === 'delete-slow') await new Promise(resolve => setTimeout(resolve, 600));
+      return base.emptyTrash(input);
+    }, async load() {
     if (scenario === 'slow-load') await new Promise(resolve => setTimeout(resolve, 300));
     // 保存直後の読戻し検証は成功させ、確定成功後の別loadだけを失敗させる。
     if (scenario === 'reload-failure' && written) return { kind: 'unavailable', reason: 'storage-failure' };

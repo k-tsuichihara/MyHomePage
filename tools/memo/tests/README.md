@@ -1,5 +1,7 @@
 # メモツール Ver1.1.0 入力契約のテスト方針
 
+完全削除・ゴミ箱一括削除の契約は [LOCAL-DELETE.md](LOCAL-DELETE.md) を参照。
+
 v3形式・限定導入・互換性の契約は [format/V3-CONTRACT.md](format/V3-CONTRACT.md) を参照。
 
 メモ複製の契約・テスト観点は [DUPLICATE.md](DUPLICATE.md) を参照。

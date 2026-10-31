@@ -6,13 +6,16 @@ import type { Memo } from './types';
 import { changeLocalState, parseStateRequest } from './local-state-operations';
 import { deleteLocalTag, parseTagDelete, parseTagSave, saveLocalTag } from './local-tag-operations';
 import type { ReadyLocalData } from './local-data-store';
+import { parsePermanentDelete, parseEmptyTrash } from './local-delete-operations';
+import type { DeleteRequest } from './local-delete-operations';
 
 interface LocalSaveRequest {
   id: string; title: string; body: string; tagIds: string[]; expectedRevision: number | null; requestId: string;
 }
 export type LocalSaveResult = { kind: 'saved'; value: { memo: Memo; tagIds: string[] } } | LocalWriteFailure;
 
-/** 完全削除・履歴照合を含まないローカル操作。全変更操作でrequestIdのA案を共用する。 */
+export type LocalDeleteResult = { kind: 'deleted'; count: number } | { kind: 'not-needed'; count: 0 } | LocalWriteFailure;
+/** 全変更操作でrequestIdのA案を共用し、履歴照合による自動再送は行わない。 */
 export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => string }) {
   const data = createLocalDataStore(deps);
   // requestIdだけをインスタンス寿命中保持する。内容・receiptの永続化や暗黙の追い出しはしない。
@@ -49,8 +52,19 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
     return data.transact(current => transform(current, request));
   }
 
+  async function deleteOperation(input: unknown, parse: (input: unknown) => DeleteRequest): Promise<LocalDeleteResult> {
+    let request: DeleteRequest;
+    try { reserve(input); request = parse(input); }
+    catch (error) { return { kind: 'rejected', reason: error instanceof LocalDataError ? error.reason : 'invalid-input', writeOutcome: 'not-attempted' }; }
+    const result = await data.deleteTrash(request);
+    return result.kind === 'written' ? { kind: 'deleted', count: request.targets.length } : result;
+  }
   return {
     load: data.load,
+    /** controller内部の実行ポート。利用者確認は検証しないため、UIや他機能へ直接渡さない。 */
+    deletePermanently(input: unknown) { return deleteOperation(input, parsePermanentDelete); },
+    /** 確認済み全件集合をcontrollerから受ける。requestIdは確認の証明ではない。 */
+    emptyTrash(input: unknown) { return deleteOperation(input, parseEmptyTrash); },
     /** pin/unpin/trash/restoreだけを提供し、完全削除を状態操作へ混在させない。 */
     changeState(input: unknown) {
       return operate(input, parseStateRequest, (current, request) => changeLocalState(current, request, deps.now));
