@@ -6,6 +6,7 @@ import { mountMigrationPreview } from '../../src/ui/migration-preview';
 import { createLocalBackup } from '../../src/local-backup';
 import { mountBackupPreview } from '../../src/ui/backup-preview';
 import { mountRestorePreview } from '../../src/ui/restore-preview';
+import { mountDeletedRecoveryPreview } from '../../src/ui/deleted-recovery-preview';
 
 // アプリ側でも永続APIを利用不能にする。既存キーやCookieの内容は一切読まない。
 const denied: string[] = [];
@@ -24,7 +25,7 @@ if ('storage' in navigator) Object.defineProperty(navigator, 'storage', { config
 
 const requested = new URL(location.href).searchParams.get('scenario') ?? 'normal';
 const scenario = ['normal', 'slow', 'slow-load', 'slow-mutation', 'rejected', 'unknown', 'reload-failure',
-  'delete', 'delete-slow', 'delete-unknown', 'delete-quota', 'delete-readback', 'backup', 'restore-slow'].includes(requested) ? requested : 'normal';
+  'delete', 'delete-slow', 'delete-unknown', 'delete-quota', 'delete-readback', 'backup', 'restore-slow', 'recovery', 'recovery-slow', 'recovery-unknown', 'recovery-unreadable', 'recovery-quota'].includes(requested) ? requested : 'normal';
 const migrationScenario = ['legacy', 'empty', 'invalid', 'pending', 'broken-pending', 'interrupted', 'readback-failure', 'no-locks',
   ...['empty', 'existing', 'migrated', 'recovered'].flatMap(source => [`handoff-${source}-pending`, `handoff-${source}-invalid`])].includes(requested) ? requested : null;
 const environment = migrationScenario ? createMigrationEnvironment(migrationScenario) : createPreviewEnvironment(scenario);
@@ -36,11 +37,14 @@ const enter = async () => {
     mountBackupPreview(document, createLocalBackup({ ...environment.migration, now: () => new Date().toISOString() }));
     backupMounted = true;
     if ('restore' in environment) mountRestorePreview(document, environment.restore);
+    if ('recovery' in environment) mountDeletedRecoveryPreview(document, environment.recovery, () => {
+      const route = environment.controller.getState().route; return route.kind === 'detail' ? route.id : null;
+    });
   }
   mountMemoPreview(document, environment.controller);
   return true;
 };
-if (scenario.startsWith('delete') || scenario === 'backup' || scenario === 'restore-slow') {
+if (scenario.startsWith('delete') || scenario.startsWith('recovery') || scenario === 'backup' || scenario === 'restore-slow') {
   // 固定の合成v3だけを読込検証して入場する。旧v2移行診断の拒否契約は変えない。
   document.querySelector('.notice')!.textContent = '完全削除の隔離検証専用。合成メモリv3のみ。実データ・実保存先・認証・音声には接続しません。';
   void enter().then(ready => {
