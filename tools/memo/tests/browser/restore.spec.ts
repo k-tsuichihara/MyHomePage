@@ -45,6 +45,7 @@ test('不正JSON・重複キー・BOMで停止し、旧選択と確認を流用�
   for (const buffer of [Buffer.from('{"x":0,"x":1}'), Buffer.from([0xef, 0xbb, 0xbf, 123, 125]), Buffer.from('{')]) {
     await page.getByLabel('バックアップJSONを選択').setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer });
     await expect(area).toContainText('操作を停止'); await expect(area.getByRole('dialog')).toHaveCount(0); await expect(page.locator('#count')).toContainText('10件');
+    await expect(area).toContainText('ファイルを選び直し、再診断・対象選択・確認を最初から');
   }
 });
 test('書込例外は結果不明・自動再送なし、明示再診断も過去成功へ昇格しない', async ({ page }) => {
@@ -52,6 +53,7 @@ test('書込例外は結果不明・自動再送なし、明示再診断も過�
   const area = page.getByRole('region', { name: '追加型復元' }); await area.getByRole('checkbox').first().check();
   await area.getByRole('button', { name: '追加内容を確認' }).click(); await area.getByRole('button', { name: '確認して復元' }).click();
   await expect(area).toContainText('復元結果は不明'); await expect(area.getByRole('button', { name: '追加内容を確認' })).toBeDisabled();
+  await expect(area).toContainText('重複して追加される可能性');
   await area.getByRole('button', { name: '保存状況を再確認' }).click(); await expect(area).toContainText('過去の書込成功は確定しません');
   await page.locator('#reload').click(); await expect(page.locator('#count')).toContainText('11件');
 });
@@ -61,4 +63,44 @@ test('確認後のファイル差替えは古い確認を失効する', async ({
   await area.getByRole('button', { name: '追加内容を確認' }).click();
   await upload(page, file(3)); await expect(area.getByRole('dialog')).toHaveCount(0); await expect(area).toContainText('選択0件');
   await expect(page.locator('#count')).toContainText('10件');
+});
+
+test('遅延ファイル読取中の差替え・通常操作は抑止し、最初のファイルだけ診断する', async ({ page }) => {
+  await page.goto('/?scenario=backup');
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    Object.assign(window, { releaseFileRead: release });
+    File.prototype.arrayBuffer = async function () { await gate; return original.call(this); };
+  });
+  const input = page.getByLabel('バックアップJSONを選択'), area = page.getByRole('region', { name: '追加型復元' });
+  await input.setInputFiles({ name: 'first.json', mimeType: 'application/json', buffer: file(2) });
+  await expect(input).toBeDisabled();
+  await expect(page.locator('#reload')).toBeVisible();
+  expect(await page.locator('#reload').evaluate(node => !!node.closest('[inert]'))).toBe(true);
+  await input.evaluate((node: HTMLInputElement, raw) => {
+    const replacement = new DataTransfer(); replacement.items.add(new File([raw], 'replacement.json')); node.files = replacement.files;
+    node.dispatchEvent(new Event('change')); node.dispatchEvent(new Event('change'));
+  }, file(3).toString('utf8'));
+  await page.evaluate(() => (window as unknown as { releaseFileRead: () => void }).releaseFileRead());
+  await expect(area.getByRole('checkbox')).toHaveCount(2); await expect(area).toContainText('選択0件');
+  await expect(page.locator('#count')).toContainText('10件');
+});
+
+test('遅延準備・書込中の強制ファイル変更と連打は旧確認の再利用や二重書込を起こさない', async ({ page }) => {
+  await page.goto('/?scenario=restore-slow'); await upload(page);
+  const area = page.getByRole('region', { name: '追加型復元' }), input = page.getByLabel('バックアップJSONを選択');
+  await area.getByRole('checkbox').first().check(); await area.getByRole('button', { name: '追加内容を確認' }).click();
+  await expect(input).toBeDisabled();
+  // disabledを無視したイベント注入でも、リセット拒否後のidle確認で読取を止める。
+  await input.evaluate((node: HTMLInputElement, raw) => {
+    const replacement = new DataTransfer(); replacement.items.add(new File([raw], 'replacement.json')); node.files = replacement.files;
+    node.dispatchEvent(new Event('change')); node.dispatchEvent(new Event('change'));
+  }, file(3).toString('utf8'));
+  await expect(area.getByRole('dialog')).toContainText('新規メモ1件');
+  await area.getByRole('button', { name: '確認して復元' }).evaluate((node: HTMLButtonElement) => { node.click(); node.click(); });
+  await expect(input).toBeDisabled(); await input.evaluate(node => node.dispatchEvent(new Event('change')));
+  await expect(area).toContainText('追加型復元が成功'); await expect(area).toContainText('通常一覧は再読込');
+  await page.locator('#reload').click(); await expect(page.locator('#count')).toContainText('11件');
 });

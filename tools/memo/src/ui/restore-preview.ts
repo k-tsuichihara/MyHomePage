@@ -8,6 +8,7 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
   const notice = doc.createElement('p'); notice.textContent = '既存の正常v3へ新しいメモを追加します。初期復元ではありません。バックアップの削除履歴は取り込みません。元ID重複行には共通の正常タグ関連を適用します。入力10 MiB・深度32、メモ10000・タグ5000・関連100000・削除ID100000、候補16 MiBが上限です。';
   const file = doc.createElement('input'); file.type = 'file'; file.accept = '.json'; file.setAttribute('aria-label', 'バックアップJSONを選択');
   const status = doc.createElement('p'); status.setAttribute('role', 'status');
+  const recovery = doc.createElement('p');
   const controls = doc.createElement('div'), rows = doc.createElement('div'); let readingFile = false, fileError = '';
   const button = (label: string, command: RestoreCommand, disabled = false) => {
     const node = doc.createElement('button'); node.type = 'button'; node.textContent = label; node.disabled = disabled;
@@ -34,6 +35,11 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
       if (child !== section && child instanceof doc.defaultView!.HTMLElement) child.inert = busy || readingFile || s.phase === 'confirmation';
     }
     file.disabled = busy || readingFile;
+    recovery.textContent = s.phase === 'failed'
+      ? '再操作する場合は「バックアップJSONを選択」でファイルを選び直し、再診断・対象選択・確認を最初から行ってください。自動再試行はしません。'
+      : s.phase === 'unknown'
+        ? 'まず「保存状況を再確認」を実行してください。読めても過去の書込成功は確定しません。再操作を選ぶ場合はファイルを選び直し、再診断・対象選択・確認が必要です。重複して追加される可能性があります。自動再試行はしません。'
+        : '';
     status.textContent = `${fileError || s.message} 選択${s.selected.length}件。${s.page + 1}ページ。警告${s.backup?.warnings.length ?? 0}件（先頭20件表示）: ${s.backup?.warnings.slice(0, 20).join('、') ?? ''}`;
     controls.replaceChildren(); rows.replaceChildren();
     if (!s.backup) return;
@@ -58,5 +64,5 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
     }
     if (s.phase === 'unknown') controls.append(button('保存状況を再確認', { kind: 'inspect' }));
   }
-  section.append(notice, file, status, controls, rows); doc.getElementById('memo-app')!.append(section); render();
+  section.append(notice, file, status, recovery, controls, rows); doc.getElementById('memo-app')!.append(section); render();
 }

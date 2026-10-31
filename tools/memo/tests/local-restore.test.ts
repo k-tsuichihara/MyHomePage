@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { parseBackupBytes, MAX_IMPORT_BYTES } from '../src/backup-json';
 import { diagnoseBackup, planRestore, compareRestoreRow } from '../src/local-restore';
 import type { RestoreV3 } from '../src/local-restore';
@@ -18,6 +18,14 @@ function backup(data = current()) { return diagnoseBackup(bytes(JSON.stringify(e
 function ids(start = 100) { let n = start; return () => token(++n); }
 
 describe('制限付きJSON走査', () => {
+  it.each(['{"a":1,}', '[1,]', '{"a":1, }', '[1, ]', '{"a":[1,]}'])('末尾カンマは全体JSON.parseより前に拒否 %s', raw => {
+    // キー文字列の復号用parseと、走査後の全体parseを区別する。
+    const parse = vi.spyOn(JSON, 'parse');
+    try {
+      expect(() => parseBackupBytes(bytes(raw))).toThrow();
+      expect(parse.mock.calls.some(args => args[0] === raw)).toBe(false);
+    } finally { parse.mockRestore(); }
+  });
   it.each(['{}', '[]', '{"a":"\\\"\\\\\\/\\b\\f\\n\\r\\t\\u0061"}', '{"a":[null,true,false,-1.2e+3]}'])('正常な構文とescape %s', raw => {
     expect(parseBackupBytes(bytes(raw))).toEqual(JSON.parse(raw));
   });
@@ -126,6 +134,38 @@ describe('バックアップの行別診断・変換', () => {
 });
 
 describe('固定確認と単一保存', () => {
+  it.each(['load', 'prepareRestore', 'applyRestore'] as const)('遅延%s中の差替え・取消・連続操作は拒否し、確定候補を維持', async method => {
+    const f = saveFixture(current());
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const store = { ...f.store };
+    const delay = async () => { entered(); await gate; };
+    if (method === 'load') store.load = async () => { await delay(); return f.store.load(); };
+    if (method === 'prepareRestore') store.prepareRestore = async (...args) => { await delay(); return f.store.prepareRestore(...args); };
+    if (method === 'applyRestore') store.applyRestore = async (...args) => { await delay(); return f.store.applyRestore(...args); };
+    const controller = createLocalRestoreController({ store, createId: ids() });
+    const fileCommand = { kind: 'file' as const, bytes: bytes(JSON.stringify(envelope())) };
+    let pending: Promise<void>;
+    if (method === 'load') pending = controller.dispatch(fileCommand);
+    else {
+      await controller.dispatch(fileCommand);
+      await controller.dispatch({ kind: 'select', indexes: [0], selected: true });
+      if (method === 'prepareRestore') pending = controller.dispatch({ kind: 'prepare' });
+      else { await controller.dispatch({ kind: 'prepare' }); pending = controller.dispatch({ kind: 'confirm' }); }
+    }
+    await started;
+    const before = controller.getState();
+    await Promise.all([
+      controller.dispatch({ kind: 'reset' }), controller.dispatch(fileCommand),
+      controller.dispatch({ kind: 'cancel' }), controller.dispatch({ kind: 'prepare' }),
+      controller.dispatch({ kind: 'confirm' }), controller.dispatch({ kind: 'select', indexes: [1], selected: true }),
+    ]);
+    expect(controller.getState()).toEqual(before); expect(f.storage.writes).toHaveLength(0);
+    release(); await pending;
+    expect(controller.getState().phase).toBe(method === 'load' ? 'review' : method === 'prepareRestore' ? 'confirmation' : 'applied');
+    expect(f.storage.writes).toHaveLength(method === 'applyRestore' ? 1 : 0);
+  });
   it.each(['quota', 'after-write', 'readback'] as const)('障害%sはunknown・無自動再送・同request再利用拒否', async fault => {
     const f = saveFixture(current()), original = f.storage.values.get(NEW_STORAGE_KEY);
     const plan = await f.store.prepareRestore(backup(), [0], ids(), current());

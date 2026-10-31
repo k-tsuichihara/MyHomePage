@@ -9,7 +9,7 @@ const now = '2026-10-26T00:00:00Z';
 
 /** ブラウザ保存APIを参照しない合成保存先。ページを閉じればすべて失われる。 */
 export function createPreviewEnvironment(scenario: string) {
-  const deletion = scenario.startsWith('delete') || scenario === 'backup';
+  const deletion = scenario.startsWith('delete') || scenario === 'backup' || scenario === 'restore-slow';
   let raw = JSON.stringify({ version: deletion ? 3 : 2, ...(deletion ? { deletedMemoIds: scenario === 'backup' ? [id(99)] : [] } : {}), migration: { status: 'not-required' },
     memos: Array.from({ length: 12 }, (_, i) => ({ id: id(i + 1), title: i === 0 ? '仕事メモ' : `合成メモ ${i + 1}`,
       body: i === 0 ? '入力・保存・ドラフト保護を検証します。' : '合成データだけを使います。',
@@ -37,6 +37,13 @@ export function createPreviewEnvironment(scenario: string) {
   } };
   const base = createLocalMemoStore({ storage, locks, now: () => now });
   const store: typeof base = { ...base,
+    async prepareRestore(...args) {
+      if (scenario === 'restore-slow') await new Promise(resolve => setTimeout(resolve, 1200));
+      return base.prepareRestore(...args);
+    }, async applyRestore(...args) {
+      if (scenario === 'restore-slow') await new Promise(resolve => setTimeout(resolve, 1200));
+      return base.applyRestore(...args);
+    },
     async deletePermanently(input) {
       if (scenario === 'delete-slow') await new Promise(resolve => setTimeout(resolve, 600));
       return base.deletePermanently(input);
