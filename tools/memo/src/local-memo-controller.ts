@@ -14,7 +14,7 @@ import { createDuplicateEditor } from './memo-duplicate';
 import { parseDeleteTargets, parsePermanentDelete, sameTargets } from './local-delete-operations';
 
 export interface LocalControllerDependencies {
-  store: ReturnType<typeof createLocalMemoStore>;
+  store: Pick<ReturnType<typeof createLocalMemoStore>, 'load' | 'save' | 'changeState' | 'saveTag' | 'deleteTag' | 'deletePermanently' | 'emptyTrash'>;
   createId: () => string;
 }
 const done: CommandResult = { kind: 'done' };

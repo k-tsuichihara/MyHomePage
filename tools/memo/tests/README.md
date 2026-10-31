@@ -1,5 +1,7 @@
 # メモツール Ver1.1.0 入力契約のテスト方針
 
+追加型復元の承認済み入力制限・行診断・単一書込・試験方針は [LOCAL-RESTORE.md](LOCAL-RESTORE.md) を参照。
+
 ローカルJSONバックアップ出力の承認済み契約と試験は [LOCAL-BACKUP-EXPORT.md](LOCAL-BACKUP-EXPORT.md) を参照。
 
 完全削除・ゴミ箱一括削除の契約は [LOCAL-DELETE.md](LOCAL-DELETE.md) を参照。

@@ -8,6 +8,10 @@ import { deleteLocalTag, parseTagDelete, parseTagSave, saveLocalTag } from './lo
 import type { ReadyLocalData } from './local-data-store';
 import { parsePermanentDelete, parseEmptyTrash } from './local-delete-operations';
 import type { DeleteRequest } from './local-delete-operations';
+import { planRestore } from './local-restore';
+import type { RestoreBackup, RestoreV3 } from './local-restore';
+import type { RestoreBase } from './local-data-store';
+import type { MemoStorageV3 } from './local-format';
 
 interface LocalSaveRequest {
   id: string; title: string; body: string; tagIds: string[]; expectedRevision: number | null; requestId: string;
@@ -20,6 +24,8 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
   const data = createLocalDataStore(deps);
   // requestIdだけをインスタンス寿命中保持する。内容・receiptの永続化や暗黙の追い出しはしない。
   const used = new Set<string>();
+  let restoreSerial = 0;
+  let restorePlan: { token: number; base: RestoreBase; candidate: RestoreV3 } | null = null;
 
   function reserve(input: unknown): string {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new LocalDataError('invalid-input');
@@ -61,6 +67,28 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
   }
   return {
     load: data.load,
+    invalidateRestore() { restoreSerial++; restorePlan = null; },
+    /** 同じストア寿命内に一つだけ非公開の固定候補を保持する。準備は書込ではない。 */
+    async prepareRestore(backup: RestoreBackup, selected: readonly number[], createId: () => string, expected: MemoStorageV3) {
+      const token = ++restoreSerial; restorePlan = null;
+      const base = await data.captureRestore();
+      if (JSON.stringify(base.value) !== JSON.stringify(expected)) throw new LocalDataError('snapshot-changed');
+      const candidate = planRestore(base.value as RestoreV3, backup, [...selected], deps.now(), createId);
+      if (token !== restoreSerial) throw new LocalDataError('snapshot-changed');
+      restorePlan = { token, base, candidate };
+      return { token, memos: candidate.memos.length - base.value.memos.length, tags: candidate.tags.length - base.value.tags.length };
+    },
+    /** 利用者確認はcontrollerが管理する。requestIdは他操作と同じ集合へ受付時予約する。 */
+    async applyRestore(input: { token: number; requestId: string }) {
+      try {
+        reserve(input);
+        const plan = restorePlan; restorePlan = null; restoreSerial++;
+        if (!plan || input.token !== plan.token) throw new LocalDataError('snapshot-changed');
+        return await data.appendRestore(plan.base, plan.candidate);
+      } catch (error) {
+        return { kind: 'rejected' as const, reason: error instanceof LocalDataError ? error.reason : 'invalid-input' as const, writeOutcome: 'not-attempted' as const };
+      }
+    },
     /** controller内部の実行ポート。利用者確認は検証しないため、UIや他機能へ直接渡さない。 */
     deletePermanently(input: unknown) { return deleteOperation(input, parsePermanentDelete); },
     /** 確認済み全件集合をcontrollerから受ける。requestIdは確認の証明ではない。 */
