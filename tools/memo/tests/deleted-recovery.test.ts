@@ -107,6 +107,19 @@ describe('共通ストアと単件回復', () => {
 });
 
 describe('単件回復の状態・結果再診断', () => {
+  it('結果不明から一覧と同元IDのプレビューへ注意情報を保持し、戻る・再選択は0書込', async () => {
+    const f = controllerFixture(); await f.preview(); f.storage.beforeSet = () => { throw Error('private'); };
+    await f.controller.dispatch({ kind: 'restore' }); expect(f.controller.getState().phase).toBe('unknown');
+    await f.controller.dispatch({ kind: 'back' });
+    expect(f.controller.getState().uncertainSourceIds.map(id => id.toLowerCase())).toEqual([source().id.toLowerCase()]);
+    expect(f.controller.getState().newId).toBeNull();
+    await f.controller.dispatch({ kind: 'select', index: 0 });
+    expect(f.controller.getState().phase).toBe('preview'); expect(f.controller.getState().uncertainSourceIds).toEqual([source().id]);
+    await f.controller.dispatch({ kind: 'back' }); await f.controller.dispatch({ kind: 'select', index: 0 });
+    expect(f.controller.getState().uncertainSourceIds).toHaveLength(1); expect(f.storage.writes).toHaveLength(0);
+    await f.controller.dispatch({ kind: 'back' }); await f.controller.dispatch({ kind: 'file', bytes: bytes() });
+    expect(f.controller.getState().uncertainSourceIds).toEqual([]); expect(f.storage.writes).toHaveLength(0);
+  });
   it('未選択・プレビュー・戻るは0書込、通常編集中は開始不可', async () => {
     const f = controllerFixture(); await f.controller.dispatch({ kind: 'restore' }); await f.preview();
     expect(f.controller.getState().phase).toBe('preview'); expect(f.storage.writes).toHaveLength(0);

@@ -55,3 +55,23 @@ test('再診断失敗は結果不明、手動再診断と戻るだけでは追�
   await area.getByRole('button', { name: '復元せずに戻る' }).click(); await expect(area).toContainText('初期未選択');
   await expect(area).not.toContainText('メモの作成を確認しました');
 });
+
+test('結果不明から戻ると該当元IDの行と再プレビューだけに重複注意を表示する', async ({ page }) => {
+  await page.goto('/?scenario=recovery-quota');
+  const raw = JSON.parse(backup().toString('utf8')); raw.data.memos[1].id = id(98);
+  await page.getByLabel('単件回復のバックアップJSON').setInputFiles({ name: 'synthetic.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(raw)) });
+  const area = page.getByRole('region', { name: '完全削除後の回復', exact: true });
+  await area.getByRole('button', { name: '1: 過去メモ1をプレビュー' }).click();
+  await expect(area).not.toContainText('この元メモの前回の復元結果は不明');
+  await area.getByRole('button', { name: '新しいメモとして復元' }).click(); await expect(area).toContainText('復元結果は不明');
+  await area.getByRole('button', { name: '復元せずに戻る' }).click();
+  await expect(area).toContainText('1行目: この元メモの前回の復元結果は不明');
+  await expect(area).not.toContainText('2行目: この元メモの前回の復元結果は不明');
+  await area.getByRole('button', { name: '2: 過去メモ2をプレビュー' }).click();
+  await expect(area).not.toContainText('この元メモの前回の復元結果は不明');
+  await area.getByRole('button', { name: 'バックアップ一覧へ戻る' }).click();
+  await area.getByRole('button', { name: '1: 過去メモ1をプレビュー' }).click();
+  await expect(area.getByRole('article')).toContainText('再復元すると同内容のメモが重複する可能性');
+  await area.getByRole('button', { name: 'バックアップ一覧へ戻る' }).click(); await page.locator('#reload').click();
+  await expect(page.locator('#count')).toContainText('10件');
+});

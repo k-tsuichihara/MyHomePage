@@ -25,7 +25,7 @@ if ('storage' in navigator) Object.defineProperty(navigator, 'storage', { config
 
 const requested = new URL(location.href).searchParams.get('scenario') ?? 'normal';
 const scenario = ['normal', 'slow', 'slow-load', 'slow-mutation', 'rejected', 'unknown', 'reload-failure',
-  'delete', 'delete-slow', 'delete-unknown', 'delete-quota', 'delete-readback', 'backup', 'restore-slow', 'recovery', 'recovery-slow', 'recovery-unknown', 'recovery-unreadable'].includes(requested) ? requested : 'normal';
+  'delete', 'delete-slow', 'delete-unknown', 'delete-quota', 'delete-readback', 'backup', 'restore-slow', 'recovery', 'recovery-slow', 'recovery-unknown', 'recovery-unreadable', 'recovery-quota'].includes(requested) ? requested : 'normal';
 const migrationScenario = ['legacy', 'empty', 'invalid', 'pending', 'broken-pending', 'interrupted', 'readback-failure', 'no-locks',
   ...['empty', 'existing', 'migrated', 'recovered'].flatMap(source => [`handoff-${source}-pending`, `handoff-${source}-invalid`])].includes(requested) ? requested : null;
 const environment = migrationScenario ? createMigrationEnvironment(migrationScenario) : createPreviewEnvironment(scenario);

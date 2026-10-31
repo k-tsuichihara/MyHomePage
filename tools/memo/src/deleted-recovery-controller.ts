@@ -14,12 +14,13 @@ export interface RecoveryState {
   outcome: 'none' | 'created' | 'not-saved' | 'unknown';
   backup: RestoreBackup | null; current: RestoreV3 | null; selected: number | null; page: number; tagIds: string[];
   newId: string | null; unresolvedIds: string[]; message: string; navigation: 'none' | 'opened' | 'failed';
+  uncertainSourceIds: string[];
 }
 /** 単件回復固有の3状態と一時UUIDを管理する。Step 3の結果判定は変更しない。 */
 export function createDeletedRecoveryController(deps: { store: Store; createId: () => string; canStart?: () => boolean;
   openCreated?: (id: string) => Promise<boolean> }) {
   let state: RecoveryState = immutable({ phase: 'idle', outcome: 'none', backup: null, current: null, selected: null, page: 0,
-    tagIds: [], newId: null, unresolvedIds: [], message: '', navigation: 'none' });
+    tagIds: [], newId: null, unresolvedIds: [], uncertainSourceIds: [], message: '', navigation: 'none' });
   const patch = (part: Partial<RecoveryState>) => { state = immutable({ ...state, ...part }); };
   const busy = () => ['reading', 'writing', 'diagnosing', 'opening'].includes(state.phase);
   const readFailed = (reason: string) => {
@@ -63,7 +64,11 @@ export function createDeletedRecoveryController(deps: { store: Store; createId: 
       try {
         if (command.kind === 'inspect') { if (state.phase === 'unknown') await inspect(); return; }
         if (command.kind === 'back') {
-          patch({ phase: state.backup ? 'list' : 'idle', selected: null, tagIds: [], newId: null, navigation: 'none', message: '' }); return;
+          // 再診断用UUIDを引き継ぐ保証とは別に、同じ元メモの再選択時に注意を残す。
+          const sourceId = state.phase === 'unknown' ? state.backup?.rows[state.selected!]?.memo?.id : undefined;
+          const uncertainSourceIds = sourceId && !state.uncertainSourceIds.some(id => uuidKey(id) === uuidKey(sourceId))
+            ? [...state.uncertainSourceIds, sourceId] : state.uncertainSourceIds;
+          patch({ phase: state.backup ? 'list' : 'idle', selected: null, tagIds: [], newId: null, uncertainSourceIds, navigation: 'none', message: '' }); return;
         }
         if (command.kind === 'source') {
           if (state.phase !== 'created') return;
@@ -74,7 +79,7 @@ export function createDeletedRecoveryController(deps: { store: Store; createId: 
           return;
         }
         if (command.kind === 'file') {
-          patch({ phase: 'reading', backup: null, current: null, selected: null, page: 0, tagIds: [], newId: null, outcome: 'none', navigation: 'none', message: '' });
+          patch({ phase: 'reading', backup: null, current: null, selected: null, page: 0, tagIds: [], newId: null, uncertainSourceIds: [], outcome: 'none', navigation: 'none', message: '' });
           const backup = diagnoseBackup(command.bytes.slice());
           const current = await readCurrent();
           patch({ backup, current, phase: current ? 'list' : 'failed' }); return;

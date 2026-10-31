@@ -36,6 +36,10 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
     if (s.navigation === 'failed') status.textContent += ' 作成は確認済みですが通常詳細を開けませんでした。通常画面を再読込してください。';
     content.replaceChildren();
     if (!s.backup) return;
+    const uncertain = (id: string) => s.uncertainSourceIds.some(source => uuidKey(source) === uuidKey(id));
+    const warn = () => {
+      const node = doc.createElement('p'); node.textContent = 'この元メモの前回の復元結果は不明です。再復元すると同内容のメモが重複する可能性があります。'; return node;
+    };
     if (s.phase === 'list') {
       const heading = doc.createElement('p'); heading.textContent = `${s.page + 1}ページ・初期未選択。元ID重複行は同じ正常関連を参照します。警告${s.backup.warnings.length}件。`; content.append(heading);
       if (s.page > 0) content.append(button('単件回復の前ページ', { kind: 'page', page: s.page - 1 }));
@@ -43,6 +47,9 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
       for (const row of s.backup.rows.slice(s.page * 50, s.page * 50 + 50)) {
         const node = button(`${row.index + 1}: ${row.memo?.title ?? '不正なメモ'}をプレビュー`, { kind: 'select', index: row.index });
         node.disabled = !s.current || !canRecover(row, s.current); content.append(node);
+        if (row.memo && uncertain(row.memo.id)) {
+          const warning = warn(); warning.textContent = `${row.index + 1}行目: ${warning.textContent}`; content.append(warning);
+        }
       }
     }
     if (s.phase === 'preview' && s.selected !== null) {
@@ -51,6 +58,7 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
       renderMemoDetail({ title, body, tags }, { title: row.memo!.title, body: row.memo!.body,
         tags: s.current!.tags.filter(t => s.tagIds.some(id => uuidKey(id) === uuidKey(t.id))).map(t => t.name).join('・') });
       article.append(title, body, tags);
+      if (uncertain(row.memo!.id)) article.append(warn());
       for (const id of row.tagIds.filter(id => !s.tagIds.some(tag => uuidKey(tag) === uuidKey(id)))) {
         const warning = doc.createElement('p'); warning.textContent = `バックアップのタグ「${s.backup.tags.find(t => uuidKey(t.id) === uuidKey(id))?.name ?? 'タグ'}」は現在存在しないため復元されません。`; article.append(warning);
       }

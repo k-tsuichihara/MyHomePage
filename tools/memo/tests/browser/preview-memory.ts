@@ -11,7 +11,7 @@ const now = '2026-10-26T00:00:00Z';
 /** ブラウザ保存APIを参照しない合成保存先。ページを閉じればすべて失われる。 */
 export function createPreviewEnvironment(scenario: string) {
   const deletion = scenario.startsWith('delete') || scenario.startsWith('recovery') || scenario === 'backup' || scenario === 'restore-slow';
-  let raw = JSON.stringify({ version: deletion ? 3 : 2, ...(deletion ? { deletedMemoIds: scenario === 'backup' || scenario.startsWith('recovery') ? [id(99)] : [] } : {}), migration: { status: 'not-required' },
+  let raw = JSON.stringify({ version: deletion ? 3 : 2, ...(deletion ? { deletedMemoIds: scenario === 'recovery-quota' ? [id(99), id(98)] : scenario === 'backup' || scenario.startsWith('recovery') ? [id(99)] : [] } : {}), migration: { status: 'not-required' },
     memos: Array.from({ length: 12 }, (_, i) => ({ id: id(i + 1), title: i === 0 ? '仕事メモ' : `合成メモ ${i + 1}`,
       body: i === 0 ? '入力・保存・ドラフト保護を検証します。' : '合成データだけを使います。',
       createdAt: now, updatedAt: now, pinnedAt: i === 0 ? now : null, deletedAt: deletion && (i === 1 || i === 2) ? now : null, revision: 1, lastRequestId: null })),
@@ -27,7 +27,7 @@ export function createPreviewEnvironment(scenario: string) {
     },
     setItem(key: string, value: string) {
       if (key !== NEW_STORAGE_KEY) throw new Error('Unexpected synthetic key');
-      if (scenario === 'delete-quota') throw new Error('Synthetic quota');
+      if (scenario === 'delete-quota' || scenario === 'recovery-quota') throw new Error('Synthetic quota');
       raw = value; written = true;
       if (scenario === 'unknown' || scenario === 'delete-unknown' || scenario === 'recovery-unknown' || scenario === 'recovery-unreadable') throw new Error('Synthetic unknown write');
     },
