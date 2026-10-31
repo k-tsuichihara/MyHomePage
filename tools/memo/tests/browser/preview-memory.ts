@@ -2,6 +2,7 @@ import { createLocalMemoStore } from '../../src/local-memo-store';
 import { createLocalMemoController } from '../../src/local-memo-controller';
 import { NEW_STORAGE_KEY } from '../../src/local-migration';
 import type { LocalLockManager } from '../../src/local-lock';
+import { createLocalRestoreController } from '../../src/local-restore-controller';
 
 const id = (n: number) => `abcdef00-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const now = '2026-10-26T00:00:00Z';
@@ -62,6 +63,9 @@ export function createPreviewEnvironment(scenario: string) {
     return base.deleteTag(input);
   } };
   let sequence = 100;
-  return { controller: createLocalMemoController({ store, createId: () => id(++sequence) }),
+  const controller = createLocalMemoController({ store, createId: () => id(++sequence) });
+  return { controller, restore: createLocalRestoreController({ store, createId: () => id(++sequence), canStart: () => {
+    const state = controller.getState(); return !state.editor && state.write.kind !== 'writing' && state.read.kind === 'ready' && !state.confirmation;
+  } }),
     migration: { storage, locks, createId: () => id(++sequence) } };
 }

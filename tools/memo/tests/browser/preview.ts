@@ -5,6 +5,7 @@ import { createLocalMigrationController } from '../../src/local-migration-contro
 import { mountMigrationPreview } from '../../src/ui/migration-preview';
 import { createLocalBackup } from '../../src/local-backup';
 import { mountBackupPreview } from '../../src/ui/backup-preview';
+import { mountRestorePreview } from '../../src/ui/restore-preview';
 
 // アプリ側でも永続APIを利用不能にする。既存キーやCookieの内容は一切読まない。
 const denied: string[] = [];
@@ -34,6 +35,7 @@ const enter = async () => {
   if (!backupMounted) {
     mountBackupPreview(document, createLocalBackup({ ...environment.migration, now: () => new Date().toISOString() }));
     backupMounted = true;
+    if ('restore' in environment) mountRestorePreview(document, environment.restore);
   }
   mountMemoPreview(document, environment.controller);
   return true;

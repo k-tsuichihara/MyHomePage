@@ -25,6 +25,7 @@ export class LocalDataError extends Error {
 export interface LocalDataDependencies { storage: MigrationStorage; locks: LocalLockManager | undefined }
 type Written = { kind: 'written'; value: ReadyLocalData };
 type Unchanged = { kind: 'not-needed'; count: 0 };
+export interface RestoreBase { raw: string; legacyRaw: string | null; value: ReadyLocalData }
 
 /** pendingを通常保存へ流さない。構造不正を空データへ補正しない。 */
 function ready(raw: unknown): ReadyLocalData {
@@ -62,13 +63,14 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
   }
 
   /** 通常変換には履歴変更を許さず、専用削除経路だけが検証済み対象のIDを追加できる。 */
-  async function commit(transform: (current: ReadyLocalData) => ReadyLocalData, deletion?: DeleteRequest): Promise<Written | Unchanged | LocalWriteFailure> {
+  async function commit(transform: (current: ReadyLocalData) => ReadyLocalData, deletion?: DeleteRequest, restore?: RestoreBase): Promise<Written | Unchanged | LocalWriteFailure> {
     let attempted = false;
     let fallback: LocalFailureReason = 'lock-failure';
     try {
       return await withLocalDataLock(deps.locks, async () => {
         fallback = 'storage-failure';
         const state = read();
+        if (restore && (state.raw !== restore.raw || state.legacyRaw !== restore.legacyRaw)) throw new LocalDataError('snapshot-changed');
         const base: ReadyLocalData = state.value ?? { version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] };
         const metadata = JSON.stringify(base.migration), version = base.version;
         const expected = base.version === 3 ? [...base.deletedMemoIds] : null;
@@ -78,6 +80,11 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
         }
         fallback = 'invalid-input';
         const candidate = ready(deletion ? removeTrash(base, deletion) : transform(base));
+        if (restore && (base.version !== 3 || candidate.version !== 3
+          || ['memos', 'tags', 'memoTags'].some(field => {
+            const key = field as 'memos' | 'tags' | 'memoTags';
+            return JSON.stringify(candidate[key].slice(0, base[key].length)) !== JSON.stringify(base[key]);
+          }))) throw new LocalDataError('invalid-data');
         if (JSON.stringify(candidate.migration) !== metadata || candidate.version !== version
           || JSON.stringify(candidate.version === 3 ? candidate.deletedMemoIds : null) !== JSON.stringify(expected)) throw new LocalDataError('invalid-data');
         const nextRaw = JSON.stringify(candidate);
@@ -96,6 +103,17 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
     }
   }
   return {
+    /** 復元controller内部だけへ渡す確認基準。UIには生値を返さない。 */
+    async captureRestore(): Promise<RestoreBase> {
+      return withLocalDataLock(deps.locks, async () => {
+        const state = read();
+        if (!state.raw || state.value?.version !== 3) throw new LocalDataError('v3-required');
+        if (deps.storage.getItem(OLD_STORAGE_KEY) !== state.legacyRaw || deps.storage.getItem(NEW_STORAGE_KEY) !== state.raw) throw new LocalDataError('snapshot-changed');
+        return { raw: state.raw, legacyRaw: state.legacyRaw, value: state.value };
+      });
+    },
+    /** 通常ガードを維持し、固定した現在値への追加だけを単一書込する内部ポート。 */
+    appendRestore(base: RestoreBase, candidate: ReadyLocalData) { return commit(() => candidate, undefined, base); },
     /** 読取も共通ロック内で行い、結果は検証器が再構築した独立したデータとして返す。 */
     async load(): Promise<LocalLoadResult> {
       let fallback: LocalFailureReason = 'lock-failure';
