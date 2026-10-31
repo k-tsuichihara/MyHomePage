@@ -107,6 +107,22 @@ describe('共通ストアと単件回復', () => {
 });
 
 describe('単件回復の状態・結果再診断', () => {
+  it('不明後の独立再復元がタグ競合で拒否されても、以前の不明対象の注意を失わない', async () => {
+    const f = controllerFixture(); await f.preview();
+    f.storage.beforeSet = () => { throw Error('private'); };
+    await f.controller.dispatch({ kind: 'restore' }); const previousId = f.controller.getState().newId;
+    expect(f.controller.getState().phase).toBe('unknown');
+    delete f.storage.beforeSet;
+    const changed = current(); changed.tags = changed.tags.filter(t => t.id !== TAG); changed.memoTags = [];
+    f.storage.values.set(NEW_STORAGE_KEY, JSON.stringify(changed));
+    await f.controller.dispatch({ kind: 'retry' });
+    expect(f.controller.getState()).toMatchObject({ phase: 'preview', outcome: 'not-saved', tagIds: [] });
+    expect(f.controller.getState().unresolvedIds).toContain(previousId);
+    expect(f.controller.getState().uncertainSourceIds).toEqual([source().id]);
+    await f.controller.dispatch({ kind: 'back' }); await f.controller.dispatch({ kind: 'select', index: 0 });
+    expect(f.controller.getState().uncertainSourceIds).toEqual([source().id]);
+    expect(f.storage.writes).toHaveLength(0);
+  });
   it('結果不明から一覧と同元IDのプレビューへ注意情報を保持し、戻る・再選択は0書込', async () => {
     const f = controllerFixture(); await f.preview(); f.storage.beforeSet = () => { throw Error('private'); };
     await f.controller.dispatch({ kind: 'restore' }); expect(f.controller.getState().phase).toBe('unknown');

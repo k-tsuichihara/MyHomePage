@@ -101,8 +101,11 @@ export function createDeletedRecoveryController(deps: { store: Store; createId: 
         if (command.kind === 'restore' ? state.phase !== 'preview' : state.phase !== 'unknown') return;
         const row = state.backup!.rows[state.selected!]; if (!row?.memo) return;
         if (command.kind === 'retry') {
+          // 今回の試行が未書込で拒否されても、以前の不明結果による注意は消さない。
+          const uncertainSourceIds = state.uncertainSourceIds.some(id => uuidKey(id) === uuidKey(row.memo!.id))
+            ? state.uncertainSourceIds : [...state.uncertainSourceIds, row.memo.id];
           // 独立した新操作でも全条件を再確認。壊れた保存先を初期化しない。
-          patch({ phase: 'reading' }); const current = await readCurrent();
+          patch({ phase: 'reading', uncertainSourceIds }); const current = await readCurrent();
           if (!current) { patch({ phase: 'unknown' }); return; }
           patch({ current });
         }
