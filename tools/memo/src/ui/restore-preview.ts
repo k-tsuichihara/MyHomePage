@@ -18,6 +18,8 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
   file.onchange = () => { void read(); };
   async function read() {
     if (readingFile) return; const selected = file.files?.[0]; if (!selected) return;
+    // Fileは保持し、同じファイルの再選択でもchangeを発生させる。再診断は明示操作だけ。
+    file.value = '';
     readingFile = true; file.disabled = true; fileError = '';
     try {
       await send({ kind: 'reset' });

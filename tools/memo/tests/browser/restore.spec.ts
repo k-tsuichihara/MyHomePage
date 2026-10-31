@@ -65,6 +65,31 @@ test('確認後のファイル差替えは古い確認を失効する', async ({
   await expect(page.locator('#count')).toContainText('10件');
 });
 
+test('同じファイルで失敗後に再診断でき、成功後の再復元も新しい選択と確認が必要', async ({ page }) => {
+  await page.goto('/?scenario=backup');
+  const area = page.getByRole('region', { name: '追加型復元' }), input = page.getByLabel('バックアップJSONを選択');
+  const bad = { name: 'same-bad.json', mimeType: 'application/json', buffer: Buffer.from('{') };
+  await page.evaluate(() => {
+    const original = File.prototype.arrayBuffer;
+    let reads = 0;
+    File.prototype.arrayBuffer = async function () {
+      document.documentElement.setAttribute('data-file-reads', String(++reads));
+      return original.call(this);
+    };
+  });
+  await input.setInputFiles(bad); await expect(area).toContainText('操作を停止');
+  await expect(input).toHaveValue('');
+  // ファイル内容は変えずに再選択。読み取りが再実行されたことも確認する。
+  await input.setInputFiles(bad); await expect(page.locator('html')).toHaveAttribute('data-file-reads', '2'); await expect(input).toHaveValue('');
+  for (const expectedCount of [11, 12]) {
+    await upload(page); await expect(input).toHaveValue(''); await expect(area).toContainText('選択0件');
+    await expect(area.getByRole('dialog')).toHaveCount(0);
+    await area.getByRole('checkbox').first().check(); await area.getByRole('button', { name: '追加内容を確認' }).click();
+    await area.getByRole('button', { name: '確認して復元' }).click(); await expect(area).toContainText('追加型復元が成功');
+    await page.locator('#reload').click(); await expect(page.locator('#count')).toContainText(`${expectedCount}件`);
+  }
+});
+
 test('遅延ファイル読取中の差替え・通常操作は抑止し、最初のファイルだけ診断する', async ({ page }) => {
   await page.goto('/?scenario=backup');
   await page.evaluate(() => {
