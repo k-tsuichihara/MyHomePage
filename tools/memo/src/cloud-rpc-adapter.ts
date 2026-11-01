@@ -33,13 +33,15 @@ export function createCloudRpcAdapter(ownerId: string, transport: CloudTransport
     let call: CloudCall;
     try { call = freeze({ ownerId: owner, rpc, ...prepare() }); }
     catch { return { kind: 'not-attempted', reason: 'invalid-input' }; }
-    const failure = (reason: 'communication' | 'invalid-response' | 'owner-mismatch' | 'unclassified-http'): CloudResult<T> =>
+    const failure = (reason: 'communication' | 'invalid-response' | 'owner-mismatch' | 'unclassified-http' | 'unverified-response'): CloudResult<T> =>
       freeze({ kind: write ? 'unknown' : 'failed', reason, call });
     let response: Awaited<ReturnType<CloudTransport>>;
     try { response = await transport(rpc, call.args); }
     catch { return failure('communication'); }
     try {
-      const { status, body } = record(response, ['status', 'body']);
+      const { provenance, status, body } = record(response, ['provenance', 'status', 'body']);
+      // HTTP/codeの見た目だけでDBの拒否や成功を認定しない。信頼できない成功応答も同じ扱い。
+      if (provenance !== 'single-rpc') return failure('unverified-response');
       if (status !== (voidResponse ? 204 : 200)) {
         // PostgreSQLエラーの任意message/details/hintは返さない。操作・HTTP・codeの組だけで分類する。
         if (typeof status !== 'number' || !Number.isInteger(status) || status < 400 || status > 599) return failure('invalid-response');

@@ -6,6 +6,14 @@
 
 `createCloudRpcAdapter(ownerId, transport)`は固定した期待所有者と、HTTP status・解析済みbodyを返す注入関数だけを受ける。fetch、SDK、URL、認証情報、localStorage、UIには接続しない。通信先は自動再試行せず、解析失敗も例外として伝える責務を持つ。製品用通信実装は今回作らない。
 
+### 応答の出所と確定拒否の範囲（先生レビュー対応）
+
+transport結果にはクライアント内メタデータ`provenance`を必須とする。`single-rpc`は、その呼出しの引数・所有者に対応する正式RPCへの1回の実行の応答であり、transport/SDK/プロキシによる再試行・ヘッダーや本文の合成/差替えがないと信頼できる場合だけ指定する。SQLSTATEらしい文字列やHTTPステータスの一致だけでは指定してはならない。経路や試行回数が不明、プロキシ/中継/ローカルで生成された応答は`unverified`とする。本文解析不能・通信断は例外とする。これは信頼するtransport実装の責務で、adapterがネットワーク上の出所を証明する仕組みではない。
+
+adapterは`single-rpc`の場合だけ成功/SQLエラーを既存の規則で分類する。`unverified`はHTTP200/204や既知の拒否コードであっても読取failed/書込unknown（unverified-response）、欠落・不正形はinvalid-responseとする。後続の実transport接続前には、SDK等の自動再試行の無効化、エラー出所・要求対応・中継動作を検証し、確認不能ならsingle-rpcを付けない。このメタデータはSQL引数や応答JSONへ追加しない。
+
+`rejected`が示すのは**その1回のRPCトランザクションが拒否され、当該実行の変更がコミットされていないこと**だけである。SQLSTATEを返すDB例外では、そのRPC内の先行更新もロールバックされる契約を前提とする。ネットワーク全体や同requestIdの過去試行が未実行だったとは証明しない。unknown後の手動呼出しがrejectedになっても、過去unknownを消去・未保存へ変更してはならず、後続controllerが別に保持して照合する。特に個別/一括削除やタグ操作にはDB側requestId台帳による冪等性保証がなく、新たな対象確認等が必要。自動再操作は追加しない。
+
 load / save / resolve / changeState / deletePermanently / emptyTrash / saveTag / deleteTagを8つの正式RPCへ対応付ける。これは画面用MemoRepositoryの完成ではなく、null照合や失敗理由を失わない低レベル境界である。形式・所有者・参照整合性を検証し、snake_caseをcamelCaseへ明示変換、revisionを安全整数に変換する。
 
 - `ok`、送信前`not-attempted`、確定的な`rejected`、読取`failed`、書込`unknown`を区別する。所有者不一致・不正応答・通信失敗・未分類HTTPは理由で区別。
@@ -47,3 +55,5 @@ SDK/HTTP接続、JWT/セッション、RLS、SQL/TS共通ベクトルの実DB一
 - 差分チェック: PASS
 
 RPCの93件はすべて注入した合成関数で実行し、実HTTP・Supabase/Auth・DBは未接続。既存E2Eの実API利用は従来の所有profile・loopback・合成データ境界だけで、新アダプターはUIへ接続していない。遅延試験は各要求が独立した結果を返す範囲の検証であり、未実装のクラウド画面制御やユーザー切替の安全性を実証したものではない。既存SQL・型原本・ローカル保存/復元・公開資産の変更なし。
+
+先生レビュー後：出所未確認のHTTP/SQLSTATE・成功応答、provenance欠落、過去unknown後の別試行拒否を扱う12件を追加。型チェック・全Vitest1,219件（RPC契約計105件）、メモリE2E83件、永続化22件、形式16件、切替20件、4ビルド・差分チェックを再確認した。実transportがsingle-rpcを正しく認定できるかは未実装・未検証のまま引き継ぐ。

@@ -10,11 +10,16 @@ export interface CloudCall {
   /** SQL引数にない場合は送らず、削除操作のクライアント内識別にだけ使用する。 */
   readonly requestId: string | null;
 }
-/** transportは自動再試行せず、本文解析不能・応答消失をrejectする。Auth/HTTP実装は含めない。 */
-export type CloudTransport = (rpc: RpcName, args: CloudCall['args']) => Promise<{ status: number; body: unknown }>;
+/**
+ * single-rpcは当該呼出し1回の正式RPC応答で、再試行・応答差替えがないとtransportが確認した場合だけ指定する。
+ * プロキシ等の合成応答や出所/試行回数不明はunverified。HTTP/SQLSTATEだけでsingle-rpcに認定しない。
+ * 本文解析不能・応答消失はrejectする。これは信頼する注入実装の契約で、暗号学的な出所証明ではない。
+ */
+export interface CloudTransportResponse { readonly provenance: 'single-rpc' | 'unverified'; readonly status: number; readonly body: unknown }
+export type CloudTransport = (rpc: RpcName, args: CloudCall['args']) => Promise<CloudTransportResponse>;
 export type ConflictReason = 'used-memo-id' | 'memo-revision' | 'state-revision' | 'delete-not-found-or-revision'
   | 'trash-snapshot' | 'trash-revision' | 'tag-revision';
-export type FailureReason = 'communication' | 'invalid-response' | 'owner-mismatch' | 'unclassified-http';
+export type FailureReason = 'communication' | 'invalid-response' | 'owner-mismatch' | 'unclassified-http' | 'unverified-response';
 export type CloudResult<T> = { readonly kind: 'ok'; readonly value: T; readonly call: CloudCall }
   | { readonly kind: 'not-attempted'; readonly reason: 'invalid-input' }
   | { readonly kind: 'rejected'; readonly reason: 'conflict'; readonly conflict: ConflictReason; readonly call: CloudCall }

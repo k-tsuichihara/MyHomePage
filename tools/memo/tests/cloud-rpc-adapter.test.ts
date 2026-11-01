@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createCloudRpcAdapter } from '../src/cloud-rpc-adapter';
-import type { CloudCall, CloudResult, CloudSaveInput, CloudTransport, RpcName } from '../src/cloud-rpc-types';
+import type { CloudCall, CloudResult, CloudSaveInput, CloudTransport, CloudTransportResponse, RpcName } from '../src/cloud-rpc-types';
 import { token } from './local-save-fixtures';
 
 const OWNER = token(100), OTHER = token(101), ID = token(1), TAG = token(2), TAG2 = token(3), REQUEST = token(4);
@@ -14,7 +14,7 @@ const tag = () => ({ id: TAG, user_id: OWNER, name: 'Tag', created_at: DATE, rev
 const saved = () => ({ memo: memo(), tagIds: [TAG] });
 const snapshot = () => ({ memos: [memo()], tags: [tag()], memoTags: [{ user_id: OWNER, memo_id: ID, tag_id: TAG }] });
 function fixture(body: unknown, status = 200) {
-  const transport = vi.fn<CloudTransport>(async () => ({ status, body }));
+  const transport = vi.fn<CloudTransport>(async () => ({ provenance: 'single-rpc', status, body }));
   return { transport, adapter: createCloudRpcAdapter(OWNER, transport) };
 }
 function ok<T>(result: CloudResult<T>): T { expect(result.kind).toBe('ok'); if (result.kind !== 'ok') throw Error('Expected ok'); return result.value; }
@@ -105,6 +105,39 @@ describe('要求照合は現在値や未実行の証明と区別する', () => {
 });
 
 describe('HTTP/SQLSTATE/操作の分類', () => {
+  it.each([[401, '42501'], [403, '42501'], [400, '22023'], [409, '23505'], [409, '23503'],
+    [400, '23514'], [400, '23502'], [409, 'PT409'], [404, 'P0002']] as const)
+  ('出所未確認HTTP%s/%sは見た目が正式エラーでも確定拒否にしない', async (status, code) => {
+    const transport = vi.fn<CloudTransport>(async () => ({ provenance: 'unverified', status, body: error(code, 'memo revision conflict') }));
+    const adapter = createCloudRpcAdapter(OWNER, transport);
+    expect(await adapter.save(request())).toMatchObject({ kind: 'unknown', reason: 'unverified-response', call: { args: { p_id: ID } } });
+    expect(await adapter.load()).toMatchObject({ kind: 'failed', reason: 'unverified-response' });
+    expect(transport).toHaveBeenCalledTimes(2);
+  });
+  it('出所未確認の200/204も成功扱いせず全write経路を保護する', async () => {
+    const transport: CloudTransport = async rpc => ({ provenance: 'unverified', status: rpc === 'memo_delete_tag' ? 204 : 200, body: saved() });
+    const adapter = createCloudRpcAdapter(OWNER, transport);
+    const results = [await adapter.save(request()), await adapter.changeState(ID, 'pin', context()), await adapter.saveTag(TAG, 'Tag', null),
+      await adapter.deleteTag(TAG, 1), await adapter.deletePermanently(ID, context()), await adapter.emptyTrash([], REQUEST)];
+    results.forEach(result => expect(result).toMatchObject({ kind: 'unknown', reason: 'unverified-response' }));
+    expect(await adapter.resolve(request())).toMatchObject({ kind: 'failed', reason: 'unverified-response' });
+  });
+  it('古いtransportの許可情報欠落を実行時にも拒否する', async () => {
+    const transport = (async () => ({ status: 400, body: error('22023') })) as unknown as CloudTransport;
+    expect(await createCloudRpcAdapter(OWNER, transport).save(request())).toMatchObject({ kind: 'unknown', reason: 'invalid-response' });
+  });
+  it('後続の単一RPC拒否は過去試行の結果不明を取り消さない', async () => {
+    let calls = 0;
+    const transport = vi.fn<CloudTransport>(async () => {
+      if (++calls === 1) throw Error('Response lost');
+      return { provenance: 'single-rpc', status: 400, body: error('22023') };
+    });
+    const adapter = createCloudRpcAdapter(OWNER, transport), previous = await adapter.save(request());
+    const subsequent = await adapter.save(request());
+    expect(previous).toMatchObject({ kind: 'unknown', reason: 'communication' });
+    expect(subsequent).toMatchObject({ kind: 'rejected', reason: 'invalid-argument' });
+    expect(call(previous).args).toEqual(call(subsequent).args); expect(transport).toHaveBeenCalledTimes(2);
+  });
   const cases: [RpcName, string, string][] = [
     ['memo_save', 'previously used memo id', 'used-memo-id'], ['memo_save', 'memo revision conflict', 'memo-revision'],
     ['memo_change_state', 'revision conflict', 'state-revision'], ['memo_delete_permanently', 'not found or revision conflict', 'delete-not-found-or-revision'],
@@ -236,25 +269,25 @@ describe('送信前拒否・凍結・遅延・無自動再送', () => {
     expect(call(results[4]!).args).toEqual({ p_ids: [ID], p_revisions: [1] }); expect(transport).toHaveBeenCalledTimes(5);
   });
   it('後続入力変更は通信中の凍結内容に影響せず、独立した結果だけを返す', async () => {
-    let release!: (value: { status: number; body: unknown }) => void;
+    let release!: (value: CloudTransportResponse) => void;
     const transport = vi.fn<CloudTransport>(() => new Promise(resolve => { release = resolve; }));
     const input = { ...request(), tagIds: [TAG] }, adapter = createCloudRpcAdapter(OWNER, transport), pending = adapter.save(input);
     input.title = '後続編集'; input.tagIds.push(TAG2);
     expect(transport.mock.calls[0]![1].p_title).toBe('合成メモ'); expect(transport.mock.calls[0]![1].p_tag_ids).toEqual([TAG]);
-    release({ status: 200, body: saved() }); expect(ok(await pending).kind).toBe('saved');
+    release({ provenance: 'single-rpc', status: 200, body: saved() }); expect(ok(await pending).kind).toBe('saved');
   });
   it('同requestIdの明示的な同内容再呼出しをローカル使用済み集合で拒否しない', async () => {
     const { adapter, transport } = fixture(saved()); expect(ok(await adapter.save(request())).kind).toBe('saved');
     expect(ok(await adapter.save(request())).kind).toBe('saved'); expect(transport).toHaveBeenCalledTimes(2);
   });
   it('順序逆転でadapterの現在状態を上書きせず、各callの所有者/要求を返す', async () => {
-    const releases: ((value: { status: number; body: unknown }) => void)[] = [];
+    const releases: ((value: CloudTransportResponse) => void)[] = [];
     const transport: CloudTransport = () => new Promise(resolve => releases.push(resolve));
     const adapter = createCloudRpcAdapter(OWNER, transport);
     const first = adapter.save(request()), second = adapter.save({ ...request(), requestId: OTHER });
-    releases[1]!({ status: 200, body: { ...saved(), memo: { ...memo(), last_request_id: OTHER } } });
+    releases[1]!({ provenance: 'single-rpc', status: 200, body: { ...saved(), memo: { ...memo(), last_request_id: OTHER } } });
     const recent = await second; expect(call(recent).requestId).toBe(OTHER);
-    releases[0]!({ status: 200, body: saved() }); const old = await first; expect(call(old).requestId).toBe(REQUEST);
+    releases[0]!({ provenance: 'single-rpc', status: 200, body: saved() }); const old = await first; expect(call(old).requestId).toBe(REQUEST);
     expect(call(recent).requestId).toBe(OTHER); expect(Object.keys(adapter)).not.toContain('getState');
   });
 });
