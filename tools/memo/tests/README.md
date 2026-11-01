@@ -1,5 +1,7 @@
 # メモツール Ver1.1.0 入力契約のテスト方針
 
+通信なしSupabase RPCアダプターの境界・エラー分類・非同期責務は [CLOUD-RPC.md](CLOUD-RPC.md) を参照。
+
 バックアップ総合検証の実ブラウザ試験は [Step 6 Phase B](BACKUP-INTEGRATION-PHASE-B.md) を参照。
 
 Step 6 Phase Aの実出力→各復元→通常操作の横断検証は [BACKUP-INTEGRATION-PHASE-A.md](BACKUP-INTEGRATION-PHASE-A.md) を参照。
