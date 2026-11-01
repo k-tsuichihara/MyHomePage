@@ -26,6 +26,8 @@ export function createInitialRestoreController(deps: { store: Store; createId: (
     getState: () => state,
     async dispatch(command: InitialCommand): Promise<void> {
       if (busy()) return;
+      // 確定成功はこのcontrollerの終端。後続の再選択・拒否で成功結果を上書きしない。
+      if (state.result === 'written') return;
       if (deps.canStart && !deps.canStart()) { patch({ message: '通常画面の編集・保存・確認を終了してください。' }); return; }
       let attempted = false;
       try {

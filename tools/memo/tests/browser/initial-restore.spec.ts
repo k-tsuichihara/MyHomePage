@@ -89,3 +89,20 @@ test('復元成功と後続通常画面の読込失敗を分離', async ({ page 
   await expect(area(page)).toContainText('書込と読戻しを確認'); await expect(area(page)).toContainText('通常画面の読込に失敗');
   await expect(area(page)).not.toContainText('初期復元の結果は不明');
 });
+
+test('成功後は再選択・再準備を禁止し、強制changeでも成功表示と保存データを保持', async ({ page }) => {
+  await page.goto('/?scenario=initial'); await prepare(page); await area(page).getByRole('button', { name: '確認して初期復元' }).click();
+  await expect(area(page)).toContainText('書込と読戻しを確認');
+  await expect(page.getByLabel('初期復元のバックアップJSON')).toBeDisabled();
+  await expect(area(page).getByRole('button', { name: '初期復元の確認へ' })).toBeDisabled();
+  await expect(area(page)).toContainText('この画面から再実行はできません');
+  // disabledを無視するchangeを注入しても、controllerは確定成功から動かない。
+  await page.getByLabel('初期復元のバックアップJSON').evaluate((node: HTMLInputElement) => {
+    const transfer = new DataTransfer(); transfer.items.add(new File(['{'], 'invalid.json')); node.files = transfer.files;
+    node.dispatchEvent(new Event('change'));
+  });
+  await expect(page.getByLabel('初期復元のバックアップJSON')).toBeDisabled();
+  await expect(area(page)).toContainText('書込と読戻しを確認'); await expect(area(page)).not.toContainText('停止しました');
+  await expect(area(page).getByRole('dialog')).toHaveCount(0); await page.locator('#reload').click();
+  await expect(page.locator('#cards')).toContainText('初期復元1'); await expect(page.locator('#count')).toContainText('1件');
+});

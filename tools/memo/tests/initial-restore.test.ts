@@ -122,6 +122,18 @@ describe('不在時専用の保存入口', () => {
 });
 
 describe('初期復元controllerの安全性', () => {
+  it('成功後のファイル再選択・再準備・診断・離脱で確定結果を変更せず再書込しない', async () => {
+    const f = controllerFixture(); await f.prepare(); await f.confirm();
+    const success = f.controller.getState(); expect(success.result).toBe('written');
+    for (const command of [
+      { kind: 'file' as const, bytes: input() }, { kind: 'prepare' as const }, { kind: 'inspect' as const },
+      { kind: 'cancel' as const }, { kind: 'leave' as const }, { kind: 'file' as const, bytes: new Uint8Array([123]) },
+      { kind: 'confirm' as const, generation: success.generation },
+    ]) {
+      await f.controller.dispatch(command); expect(f.controller.getState()).toEqual(success);
+    }
+    expect(f.storage.writes).toHaveLength(1);
+  });
   it('確認中の依存差替えは別保存領域への書込を起こさない', async () => {
     const f = saveFixture(null), other = saveFixture(null), deps = { store: f.store, createId: () => token(100) };
     const c = createInitialRestoreController(deps);
