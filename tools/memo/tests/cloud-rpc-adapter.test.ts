@@ -94,7 +94,7 @@ describe('要求照合は現在値や未実行の証明と区別する', () => {
     expect(ok(await adapter.resolve(request()))).toEqual({ kind: 'previously-applied-deleted' });
   });
   it('状態要求のP0002削除履歴を通常変更成功・単なるnot-foundへ変換しない', async () => {
-    const { adapter } = fixture(error('P0002', 'previously applied, memo deleted'), 404);
+    const { adapter } = fixture(error('P0002', 'previously applied, memo deleted'), 500);
     expect(ok(await adapter.changeState(ID, 'pin', context()))).toEqual({ kind: 'previously-applied-deleted' });
     expect(await adapter.save(request())).toMatchObject({ kind: 'unknown', reason: 'unclassified-http' });
   });
@@ -105,8 +105,53 @@ describe('要求照合は現在値や未実行の証明と区別する', () => {
 });
 
 describe('HTTP/SQLSTATE/操作の分類', () => {
+  it.each(['save', 'state'] as const)('500/P0002/memo not foundを%sの確定拒否として扱う', async operation => {
+    const { adapter, transport } = fixture(error('P0002', 'memo not found'), 500);
+    const result = operation === 'save' ? await adapter.save(request()) : await adapter.changeState(ID, 'pin', context());
+    expect(result).toMatchObject({ kind: 'rejected', reason: 'not-found' }); expect(transport).toHaveBeenCalledTimes(1);
+  });
+  it.each(['memo not found', 'previously applied, memo deleted', 'unknown message'])('404/P0002/%sはsave/stateとも確定分類しない', async message => {
+    const { adapter } = fixture(error('P0002', message), 404);
+    expect(await adapter.save(request())).toMatchObject({ kind: 'unknown', reason: 'unclassified-http' });
+    expect(await adapter.changeState(ID, 'pin', context())).toMatchObject({ kind: 'unknown', reason: 'unclassified-http' });
+  });
+  it.each(['unknown message', 'memo not found ', 'previously applied, memo deleted '])('500/P0002の未知文言%sは確定分類しない', async message => {
+    const { adapter } = fixture(error('P0002', message), 500);
+    expect(await adapter.save(request())).toMatchObject({ kind: 'unknown', reason: 'unclassified-http' });
+    expect(await adapter.changeState(ID, 'pin', context())).toMatchObject({ kind: 'unknown', reason: 'unclassified-http' });
+  });
+  it.each(['memo not found', 'previously applied, memo deleted'])('500/P0002/%sでもunverifiedなら履歴/拒否へ格上げしない', async message => {
+    const transport = vi.fn<CloudTransport>(async () => ({ provenance: 'unverified', status: 500, body: error('P0002', message) }));
+    const adapter = createCloudRpcAdapter(OWNER, transport);
+    expect(await adapter.save(request())).toMatchObject({ kind: 'unknown', reason: 'unverified-response' });
+    expect(await adapter.changeState(ID, 'pin', context())).toMatchObject({ kind: 'unknown', reason: 'unverified-response' });
+    expect(await adapter.resolve(request())).toMatchObject({ kind: 'failed', reason: 'unverified-response' });
+    expect(transport).toHaveBeenCalledTimes(3);
+  });
+  it('別RPCの500/P0002を汎用not-foundや削除履歴へ変換しない', async () => {
+    const { adapter } = fixture(error('P0002', 'memo not found'), 500);
+    expect(await adapter.load()).toMatchObject({ kind: 'failed', reason: 'unclassified-http' });
+    expect(await adapter.resolve(request())).toMatchObject({ kind: 'failed', reason: 'unclassified-http' });
+    for (const result of [await adapter.saveTag(TAG, 'Tag', 1), await adapter.deleteTag(TAG, 1),
+      await adapter.deletePermanently(ID, context()), await adapter.emptyTrash([], REQUEST)])
+      expect(result).toMatchObject({ kind: 'unknown', reason: 'unclassified-http' });
+  });
+  it('過去の通信結果不明は後続500/P0002拒否・削除履歴とも独立して保持する', async () => {
+    let attempts = 0;
+    const transport = vi.fn<CloudTransport>(async () => {
+      if (++attempts === 1) throw Error('Synthetic response loss');
+      return { provenance: 'single-rpc', status: 500, body: error('P0002', attempts === 2 ? 'memo not found' : 'previously applied, memo deleted') };
+    });
+    const adapter = createCloudRpcAdapter(OWNER, transport), previous = await adapter.changeState(ID, 'pin', context());
+    const rejected = await adapter.changeState(ID, 'pin', context()), receipt = await adapter.changeState(ID, 'pin', context());
+    expect(previous).toMatchObject({ kind: 'unknown', reason: 'communication' });
+    expect(rejected).toMatchObject({ kind: 'rejected', reason: 'not-found' });
+    expect(ok(receipt)).toEqual({ kind: 'previously-applied-deleted' });
+    expect(call(previous).args).toEqual(call(receipt).args); expect(Object.isFrozen(previous)).toBe(true);
+    await Promise.resolve(); expect(transport).toHaveBeenCalledTimes(3);
+  });
   it.each([[401, '42501'], [403, '42501'], [400, '22023'], [409, '23505'], [409, '23503'],
-    [400, '23514'], [400, '23502'], [409, 'PT409'], [404, 'P0002']] as const)
+    [400, '23514'], [400, '23502'], [409, 'PT409'], [500, 'P0002']] as const)
   ('出所未確認HTTP%s/%sは見た目が正式エラーでも確定拒否にしない', async (status, code) => {
     const transport = vi.fn<CloudTransport>(async () => ({ provenance: 'unverified', status, body: error(code, 'memo revision conflict') }));
     const adapter = createCloudRpcAdapter(OWNER, transport);
@@ -164,7 +209,7 @@ describe('HTTP/SQLSTATE/操作の分類', () => {
     expect(await fixture(error(code, message), status).adapter.save(request())).toMatchObject({ kind: 'unknown', reason: 'unclassified-http' });
   });
   it.each([[401, '42501', 'permission'], [403, '42501', 'permission'], [400, '22023', 'invalid-argument'],
-    [409, '23505', 'constraint'], [409, '23503', 'constraint'], [400, '23514', 'constraint'], [400, '23502', 'constraint'], [404, 'P0002', 'not-found']] as const)
+    [409, '23505', 'constraint'], [409, '23503', 'constraint'], [400, '23514', 'constraint'], [400, '23502', 'constraint'], [500, 'P0002', 'not-found']] as const)
   ('HTTP%s/%sは%sとして確定拒否する', async (status, code, reason) => {
     expect(await fixture(error(code, code === 'P0002' ? 'memo not found' : '合成'), status).adapter.save(request())).toMatchObject({ kind: 'rejected', reason });
   });
