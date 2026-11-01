@@ -1,3 +1,4 @@
+import { runBackupPhaseB } from './backup-phase-b';
 import { chromium } from '@playwright/test';
 import type { BrowserContext, Page } from '@playwright/test';
 import { createServer } from 'node:http';
@@ -13,7 +14,7 @@ if (process.argv.length !== 2) throw new Error('Custom paths and arguments are f
 // bundleの.persistence固定位置を基準にする。cwdから任意profileを解釈しない。
 const root = fileURLToPath(new URL('../', import.meta.url));
 const owner = await createProfileOwner(await prepareProfileBase(root));
-const assets = new Map([['/', ['preview.html', 'text/html']], ['/preview.js', ['preview.js', 'text/javascript']], ['/preview.css', ['preview.css', 'text/css']]]);
+const assets = new Map([['/backup', ['backup-preview.html', 'text/html']], ['/backup.js', ['backup.js', 'text/javascript']], ['/', ['preview.html', 'text/html']], ['/preview.js', ['preview.js', 'text/javascript']], ['/preview.css', ['preview.css', 'text/css']]]);
 let origin = '';
 const server = createServer(async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
@@ -31,7 +32,7 @@ if (!address || typeof address === 'string' || address.port === 4173) {
   await new Promise<void>(resolve => server.close(() => resolve())); throw new Error('Dedicated origin unavailable');
 }
 origin = `http://127.0.0.1:${address.port}`;
-let passed = 0, quotaVerified = false;
+let passed = 0, unverified = 0, quotaVerified = false;
 
 async function launch(profile: string, permit = true, injection?: { fault: 'navigation' | 'pageerror' | 'existing-pageerror'; onClose: () => void }) {
   await owner.verify(profile);
@@ -72,10 +73,10 @@ async function launch(profile: string, permit = true, injection?: { fault: 'navi
   } };
   });
 }
-async function run(name: string, operation: (profile: string) => Promise<void>) {
+async function run(name: string, operation: (profile: string) => Promise<void>, verified?: () => boolean) {
   const profile = await owner.create();
   await runOwnedCase(owner, profile, () => operation(profile), value => process.stderr.write(`${JSON.stringify(value)}\n`));
-  if (name.startsWith('上限付き') && !quotaVerified) process.stdout.write(`UNVERIFIED ${name}\n`);
+  if ((verified && !verified()) || (name.startsWith('上限付き') && !quotaVerified)) { unverified++; process.stdout.write(`UNVERIFIED ${name}\n`); }
   else { passed++; process.stdout.write(`PASS ${name}\n`); }
 }
 const memoId = 'abcdef00-0000-4000-8000-000000009999';
@@ -100,6 +101,10 @@ try {
     const browser = await launch(profile, false);
     try {
       assert.equal(await browser.page.evaluate(() => window.__persistence === undefined), true);
+      assert.equal(await browser.page.evaluate(() => (window as unknown as { __storageAccessCount: number }).__storageAccessCount), 0);
+      assert.match(await browser.page.locator('#migration-status').innerText(), /安全条件/);
+      await browser.page.goto(`${origin}/backup`);
+      assert.equal(await browser.page.evaluate(() => window.__backupPhaseB === undefined), true);
       assert.equal(await browser.page.evaluate(() => (window as unknown as { __storageAccessCount: number }).__storageAccessCount), 0);
       assert.match(await browser.page.locator('#migration-status').innerText(), /安全条件/);
     } finally { await browser.close(); }
@@ -194,6 +199,7 @@ try {
     } else await page.locator('#migration-status').filter({ hasText: 'invalid-data' }).waitFor();
     await oldUnchanged(page);
   }));
+  const runBackupQuota = await runBackupPhaseB(run, launch, origin);
   // 容量試験は必ず最後に、他試験とは独立した新規profileで行う。
   await run('上限付き実QuotaExceededError・旧値と既存v2保持', async profile => withBrowser(profile, async page => {
     await seed(page); assert.equal((await page.evaluate(() => window.__persistence!.migrate())).kind, 'migrated');
@@ -204,5 +210,6 @@ try {
     assert.equal(result.kind, 'unknown'); assert.equal(await page.evaluate(() => window.__persistence!.snapshot()), snapshot); await oldUnchanged(page);
     quotaVerified = true; process.stdout.write(`QUOTA reproduced attempts=${quota.attempts} attemptedCharacters=${quota.attemptedCharacters}\n`);
   }));
-  process.stdout.write(`Persistence E2E: ${passed} passed; quota=${quotaVerified ? 'verified' : 'unverified'}\n`);
+  await runBackupQuota();
+  process.stdout.write(`Persistence E2E: ${passed} passed; ${unverified} unverified; quota=${quotaVerified ? 'verified' : 'unverified'}\n`);
 } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
