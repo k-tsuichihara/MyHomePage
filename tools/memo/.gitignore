@@ -11,3 +11,4 @@ playwright-report/
 .persistence/
 .transition/
 .format/
+.cloud-live/

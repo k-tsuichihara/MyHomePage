@@ -1,5 +1,7 @@
 # メモツール Ver1.1.0 入力契約のテスト方針
 
+実接続前の通信なしHTTP境界・段階許可・共通ベクトルは [CLOUD-CONNECTION-FOUNDATION.md](CLOUD-CONNECTION-FOUNDATION.md) を参照。
+
 通信なしSupabase RPCアダプターの境界・エラー分類・非同期責務は [CLOUD-RPC.md](CLOUD-RPC.md) を参照。
 
 バックアップ総合検証の実ブラウザ試験は [Step 6 Phase B](BACKUP-INTEGRATION-PHASE-B.md) を参照。
