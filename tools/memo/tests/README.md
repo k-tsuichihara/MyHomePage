@@ -1,5 +1,7 @@
 # メモツール Ver1.1.0 入力契約のテスト方針
 
+Step 6 Phase Aの実出力→各復元→通常操作の横断検証は [BACKUP-INTEGRATION-PHASE-A.md](BACKUP-INTEGRATION-PHASE-A.md) を参照。
+
 保存領域喪失時の全件初期復元・両キー不在確認・結果不明の扱いは [INITIAL-RESTORE.md](INITIAL-RESTORE.md) を参照。
 
 完全削除後の単件回復・新UUID再診断・現在タグだけの再利用は [DELETED-RECOVERY.md](DELETED-RECOVERY.md) を参照。
