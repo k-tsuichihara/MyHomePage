@@ -7,6 +7,7 @@ import { ReadValidationError, uuidKey } from './read-primitives';
 import type { LocalFormatResult } from './local-format';
 import { removeTrash } from './local-delete-operations';
 import type { DeleteRequest } from './local-delete-operations';
+import { validateInitialCandidate } from './initial-restore';
 
 export type ReadyLocalData = Exclude<LocalFormatResult, { kind: 'validated-pending' }>['value'];
 export type LocalFailureReason = 'invalid-input' | 'request-id-reused' | 'locks-unavailable' | 'lock-failure'
@@ -103,6 +104,44 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
     }
   }
   return {
+    /** 初期復元の読取診断。旧キーが存在すれば新キーが正常v3でも不在とはしない。 */
+    async inspectInitial(): Promise<{ kind: 'absent' | 'v3' | 'occupied' } | { kind: 'unavailable'; reason: LocalFailureReason }> {
+      try {
+        return await withLocalDataLock(deps.locks, async () => {
+          const legacy = deps.storage.getItem(OLD_STORAGE_KEY), raw = deps.storage.getItem(NEW_STORAGE_KEY);
+          if (deps.storage.getItem(OLD_STORAGE_KEY) !== legacy || deps.storage.getItem(NEW_STORAGE_KEY) !== raw) throw new LocalDataError('snapshot-changed');
+          if (legacy === null && raw === null) return { kind: 'absent' };
+          if (legacy === null && raw !== null) {
+            try { const result = parseLocalFormatJson(raw); if (result.value.version === 3 && result.kind !== 'validated-pending') return { kind: 'v3' }; } catch { /* 存在する不正値は上書きしない */ }
+          }
+          return { kind: 'occupied' };
+        });
+      } catch (error) { return { kind: 'unavailable', reason: classify(error, 'storage-failure') }; }
+    },
+    /** 通常transactとは独立した不在時専用ポート。存在する値の上書き・削除は行わない。 */
+    async initializeInitial(rawCandidate: unknown): Promise<Written | LocalWriteFailure> {
+      let attempted = false;
+      try {
+        const candidate = validateInitialCandidate(rawCandidate);
+        return await withLocalDataLock(deps.locks, async () => {
+          const absent = () => {
+            const legacy = deps.storage.getItem(OLD_STORAGE_KEY), raw = deps.storage.getItem(NEW_STORAGE_KEY);
+            if (legacy !== null || raw !== null) throw new LocalDataError('snapshot-changed');
+          };
+          absent();
+          const checked = validateInitialCandidate(candidate), nextRaw = JSON.stringify(checked);
+          absent(); attempted = true;
+          deps.storage.setItem(NEW_STORAGE_KEY, nextRaw);
+          const legacy = deps.storage.getItem(OLD_STORAGE_KEY), actual = deps.storage.getItem(NEW_STORAGE_KEY);
+          if (legacy !== null || actual !== nextRaw) throw new LocalDataError('snapshot-changed');
+          const value = validateInitialCandidate(JSON.parse(actual));
+          return { kind: 'written', value };
+        });
+      } catch (error) {
+        const reason = classify(error, 'storage-failure');
+        return attempted ? { kind: 'unknown', reason, writeOutcome: 'unverified' } : { kind: 'rejected', reason, writeOutcome: 'not-attempted' };
+      }
+    },
     /** 復元controller内部だけへ渡す確認基準。UIには生値を返さない。 */
     async captureRestore(): Promise<RestoreBase> {
       return withLocalDataLock(deps.locks, async () => {
