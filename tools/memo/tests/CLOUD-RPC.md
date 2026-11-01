@@ -26,6 +26,12 @@ load / save / resolve / changeState / deletePermanently / emptyTrash / saveTag /
 
 ## テスト観点
 
+### P0002のHTTP分類（実接続前修正）
+
+[PostgREST 14標準マッピング](https://docs.postgrest.org/en/v14/references/errors.html#http-status-codes)のP0*→HTTP500に従う。single-rpc確認済みの場合だけ、500/P0002/memo not foundをmemo_save・memo_change_stateのnot-found拒否、500/P0002/previously applied, memo deletedをmemo_change_stateの削除済み履歴へ分類する。後者は通常変更成功や現存メモではない。404/P0002、未知メッセージ、別RPCでの同エラーはunknown/failedのままとし、汎用500だけで拒否や履歴成功へ変換しない。unverifiedは従来どおり分類前に停止する。
+
+既存[ケース23](../../memo-db-test/ISOLATION-TEST.md)と`isolation-contract.mjs`のedit/state拒否は500/P0002/memo not foundを期待しており、本修正と一致する。正式SQLは同じSQLSTATE・メッセージをraiseし、HTTP404を指定していない。SQL原本・既存DB試験の期待値は変更しない。以前の404期待はアダプター側の誤りとして修正する。過去要求unknownは後続の500/P0002応答でも消去しない。
+
 | 対象 | 期待結果 |
 |---|---|
 | 全8RPC | 正式引数と応答、void204、件数整数、pin/unpin/trash/restore、未知フィールド拒否 |
@@ -57,3 +63,5 @@ SDK/HTTP接続、JWT/セッション、RLS、SQL/TS共通ベクトルの実DB一
 RPCの93件はすべて注入した合成関数で実行し、実HTTP・Supabase/Auth・DBは未接続。既存E2Eの実API利用は従来の所有profile・loopback・合成データ境界だけで、新アダプターはUIへ接続していない。遅延試験は各要求が独立した結果を返す範囲の検証であり、未実装のクラウド画面制御やユーザー切替の安全性を実証したものではない。既存SQL・型原本・ローカル保存/復元・公開資産の変更なし。
 
 先生レビュー後：出所未確認のHTTP/SQLSTATE・成功応答、provenance欠落、過去unknown後の別試行拒否を扱う12件を追加。型チェック・全Vitest1,219件（RPC契約計105件）、メモリE2E83件、永続化22件、形式16件、切替20件、4ビルド・差分チェックを再確認した。実transportがsingle-rpcを正しく認定できるかは未実装・未検証のまま引き継ぐ。
+
+P0002修正：main `3a16f5a9126ec63aa560205461fe0f33fa322b46`を基準とし、誤った404期待を500へ訂正した。正常分類・404不一致・未知文言・unverified・別RPC・過去unknownとの独立性の12件を追加し、型チェック・全Vitest1,231件（RPC契約117件）、メモリE2E83件、永続化22件、形式16件、切替20件、4ビルド・差分チェックはすべてPASS。既存DBケース23の期待値との静的照合であり、実Supabase/Auth/HTTP動作の再検証ではない。実DBとの一致・応答出所・実transport接続は引き続き未検証。別の正式契約不一致は本修正範囲の照合では検出していない。

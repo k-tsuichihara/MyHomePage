@@ -57,7 +57,8 @@ export function createCloudRpcAdapter(ownerId: string, transport: CloudTransport
         if (status === 400 && code === '22023') return freeze({ kind: 'rejected', reason: 'invalid-argument', call });
         if ((status === 409 && (code === '23505' || code === '23503')) || (status === 400 && (code === '23514' || code === '23502')))
           return freeze({ kind: 'rejected', reason: 'constraint', call });
-        if (status === 404 && code === 'P0002') {
+        // PostgREST 14はP0*を500へ写像する。404や汎用500だけを根拠にしない。
+        if (status === 500 && code === 'P0002') {
           if (rpc === 'memo_change_state' && message === 'previously applied, memo deleted' && deletedState)
             return freeze({ kind: 'ok', value: deletedState(), call });
           if ((rpc === 'memo_save' || rpc === 'memo_change_state') && message === 'memo not found')
