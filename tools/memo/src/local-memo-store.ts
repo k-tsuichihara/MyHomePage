@@ -14,6 +14,7 @@ import type { RestoreBase } from './local-data-store';
 import type { MemoStorageV3 } from './local-format';
 import { validateMemoData } from './snapshot-validation';
 import { recoverMemo } from './deleted-recovery';
+import { parseInitialBackup } from './initial-restore';
 
 interface LocalSaveRequest {
   id: string; title: string; body: string; tagIds: string[]; expectedRevision: number | null; requestId: string;
@@ -28,6 +29,8 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
   const used = new Set<string>();
   let restoreSerial = 0;
   let restorePlan: { token: number; base: RestoreBase; candidate: RestoreV3 } | null = null;
+  let initialSerial = 0;
+  let initialPlan: { token: number; candidate: RestoreV3 } | null = null;
 
   function reserve(input: unknown): string {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new LocalDataError('invalid-input');
@@ -69,6 +72,23 @@ export function createLocalMemoStore(deps: LocalDataDependencies & { now: () => 
   }
   return {
     load: data.load,
+    inspectInitial: data.inspectInitial,
+    invalidateInitial() { ++initialSerial; initialPlan = null; },
+    async prepareInitial(bytes: Uint8Array) {
+      const token = ++initialSerial; initialPlan = null;
+      const parsed = parseInitialBackup(bytes.slice());
+      if ((await data.inspectInitial()).kind !== 'absent' || token !== initialSerial) throw new LocalDataError('snapshot-changed');
+      initialPlan = { token, candidate: parsed.candidate };
+      return { token, ...parsed };
+    },
+    async applyInitial(input: { token: number; requestId: string }) {
+      try {
+        reserve(input);
+        const plan = initialPlan; initialPlan = null; ++initialSerial;
+        if (!plan || plan.token !== input.token) throw new LocalDataError('snapshot-changed');
+        return await data.initializeInitial(plan.candidate);
+      } catch (error) { return { kind: 'rejected' as const, reason: error instanceof LocalDataError ? error.reason : 'invalid-input' as const, writeOutcome: 'not-attempted' as const }; }
+    },
     /** 単件回復の明示操作を受ける内部ポート。通常保存とrequestId集合・commit基盤を共用する。 */
     async recoverDeleted(input: unknown): Promise<LocalSaveResult> {
       let source: Memo, sourceTags: string[], expectedTags: string[], id: string;

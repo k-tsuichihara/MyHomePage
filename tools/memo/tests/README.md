@@ -1,5 +1,7 @@
 # メモツール Ver1.1.0 入力契約のテスト方針
 
+保存領域喪失時の全件初期復元・両キー不在確認・結果不明の扱いは [INITIAL-RESTORE.md](INITIAL-RESTORE.md) を参照。
+
 完全削除後の単件回復・新UUID再診断・現在タグだけの再利用は [DELETED-RECOVERY.md](DELETED-RECOVERY.md) を参照。
 
 追加型復元の承認済み入力制限・行診断・単一書込・試験方針は [LOCAL-RESTORE.md](LOCAL-RESTORE.md) を参照。
