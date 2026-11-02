@@ -126,3 +126,32 @@
 | R06 | 原本と実施条件の追跡 | 先生との会話で結果提示済み。本記録は先生レビューの実測要約に基づく | 実施日時・A14属性値等、要約にない細部は必要時にサニタイズした補足で確認。生結果/秘密情報はPRへ掲載しない |
 
 手動監査済みと全機能の合格を区別する。DB接続・SQL実行・権限変更・公開をこの記録から追加承認しない。
+
+## 7. RPC本文監査チェックリスト（準備のみ・全項目未確認）
+
+取得・比較・情報保護は[手順第11章](DEV-DB-AUDIT.md)に従う。B番号はA01〜A17のカタログ監査と区別する。各行の「未確認」は実測本文未取得を意味し、正式原本から期待値を整理しただけでは合格にしない。記録時は判定、完全な署名、取得日時、非公開原本識別子、比較元Git SHA/関数、差分要約、影響、判断者・次の承認を残す。
+
+| ID/対象 | 本文で照合する正式契約・安全観点 | 判定 |
+|---|---|---|
+| B01 共通境界 | 第2章の署名・戻り値・SECURITY DEFINER・空search_path・owner/ACLと対応付け。全表アクセスのschema修飾、依存関数、動的SQL/未知の副作用の有無。ownerによるRLS回避を前提に本文の所有者制限を確認 | 未確認 |
+| B02 認証・所有者 | loadは未認証時null。他7RPCはauth.uid()がNULLなら42501。ユーザー由来のIDだけを信用せず、各取得/更新/削除/関連/台帳に現在のuser_id条件がある | 未確認 |
+| B03 競合・原子性 | 6変更RPCが同じhashtextextended(v_uid::text,911)によるpg_advisory_xact_lockを取得。save/stateのFOR UPDATEとrevision照合、その他の条件付きDML/集合検証を原本の順序で確認。複数変更は同一transaction、失敗例外が部分変更を確定させる形で握り潰されない。実競合/ロールバックは別試験 | 未確認 |
+| B04 memo_save | 引数NULL/配列次元/重複/期待revision範囲、タグ所有者・本文検証。正規化済みタイトル/本文を暗黙補正しない。作成時だけregistry登録し再利用をPT409で拒否。更新は所有者・revision一致かつゴミ箱外。メモ/関連/台帳を一体更新し、原子的なmemo＋ソート済みtagIdsを返す | 未確認 |
+| B05 save要求台帳 | サーバー構築のpayload（title/body/ソート済みtagIds/expectedRevision）とuser/request/operation/memoをUTF8→extensions.digest SHA256へ渡す。既存要求の対象/操作/ハッシュ不一致を22023で拒否。一致時は履歴結果、削除済みならreceipt。新規検証/変更との順序も原本どおりで、削除後のタグ存在検証による履歴返却妨害がない | 未確認 |
+| B06 memo_load_snapshot | 単一SQL/STABLEでmemos/tags/memoTagsの3集合すべてを所有者で絞る。空集合は配列、未認証null。ゴミ箱の関連を落とさず、正式原本の配列順序と行フィールドを維持。後続の別SELECTによる混在を作らない | 未確認 |
+| B07 memo_change_state | actionをpin/unpin/trash/restoreに限定。requestIdをaction・対象・期待revisionへ結び付け、混用拒否。履歴返却と現行更新を区別。ゴミ箱状態/revisionを検証し、本文/タグを変更しない。trash/restoreではpinned_at保持。更新日時/revision/last_request_idと台帳を一体更新 | 未確認 |
+| B08 memo_delete_permanently | 所有者・ゴミ箱内・期待revisionで対象を限定。該当なしはPT409。関連はFK CASCADEとの対応を確認。registryと要求行は保持し、当該メモの全要求resultをNULL、deleted_redacted=trueにする。他ユーザー/他メモの台帳やタグを変更しない | 未確認 |
+| B09 memo_empty_trash | NULL/次元/長さ/NULL要素/revision範囲を検証。確認IDの重複拒否、現行ゴミ箱全件数と全ID/revisionの一致をロック内で照合。一部一致で削除しない。対象の全台帳結果を秘匿化してから削除、registry/タグ保持、戻り値件数。0件も原本どおりに扱う | 未確認 |
+| B10 memo_resolve_request | 読取専用で、saveと同一の全凍結要求からハッシュ再計算。所有者/対象/operation/hashを照合。不在nullを未実行証明にしない。saved/resultと削除済みreceiptを区別し、現在のタグ存在検証・台帳書換え・自動再送をしない | 未確認 |
+| B11 memo_save_tag | 名前検証はmemo_valid_textとASCII限定tagKey一意indexの契約に従う。作成と改名をexpectedRevisionで区別。所有者/revision一致の改名だけ許可し、競合PT409。改名で関連メモのrevisionを変更しない | 未確認 |
+| B12 memo_delete_tag | 共通ロック下で所有者を限定し、関連メモ全件（ゴミ箱内含む）のrevision+1/updated_at更新/last_request_id=NULL。その後タグを期待revisionで削除し、不一致はPT409を伝播して先行変更もtransaction全体で取消す構造。関連除去はFK依存。上限違反等を握り潰さない | 未確認 |
+| B13 エラーと結果型 | Review8パッチの6関数8箇所の業務競合がPT409で正式メッセージを保持。save/stateのmemo not foundはP0002、stateのpreviously applied, memo deletedは別のP0002履歴。42501/22023/23505/制約例外を根拠なく変換しない。500/P0002等のHTTP分類は本文だけでは実証不能 | 未確認 |
+| B14 依存先と権限境界 | 補助4関数のUnicode空白/コードポイント/禁止文字/ASCIIキー、pgcryptoのschemaと呼出し型、FK/CHECK/indexとの対応を確認。依存先本文が未取得ならその範囲を未確認。補助EXECUTE・A17は別判断、本文一致を権限安全の証明にしない | 未確認 |
+
+### 提出前・次工程ゲート
+
+- [ ] 対象8RPCの全署名/overloadとA06の存在確認を突合し、欠落・切詰めを一致扱いしていない。
+- [ ] 原本・パッチ・統合仕様・型・アダプター間に矛盾があれば、推測で優先順位や仕様を変更せずまとめて報告した。
+- [ ] 公開要約に関数本文・断片・生diff・秘密情報・実ユーザーデータが含まれないことを人が確認した。
+- [ ] 不一致の修正、追加取得、Auth/RLS/HTTP・同時実行試験は別承認とし、監査の完了と実動作の合格を区別した。
+- [ ] 保管期限・閲覧者・保全/破棄の状況と未確認項目を引き継いだ。今回はすべて未取得・未実行であり、チェック済みにしない。
