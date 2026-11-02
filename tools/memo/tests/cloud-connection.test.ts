@@ -14,7 +14,7 @@ import { createCloudRpcAdapter } from '../src/cloud-rpc-adapter';
 import { createSyntheticPort } from './cloud-live/synthetic-port';
 const fresh = () => createSyntheticPort(syntheticReplies());
 
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const config = () => ({ origin: DEV_ORIGIN, publishableKey: 'sb_publishable_SYNTHETIC_ONLY', accessToken: 'synthetic.payload.signature' });
 function http(status = 200, text = '{}') {
   return vi.fn<FetchPort>(async url => ({ status, url, redirected: false, text: async () => text }));
@@ -39,7 +39,7 @@ describe('テスト専用HTTP境界（偽fetchのみ）', () => {
     expect(() => createTestHttpTransport(config(), undefined as unknown as FetchPort)).toThrow('boundary'); expect(fetchPort).not.toHaveBeenCalled();
   });
   it('8RPCのパスと引数だけをPOST1回/redirect:error/15秒signalで送る', async () => {
-    const fetchPort = http(), timeout = vi.spyOn(AbortSignal, 'timeout');
+    const fetchPort = http(), timeout = vi.spyOn(globalThis, 'setTimeout');
     const transport = createTestHttpTransport(config(), fetchPort);
     expect(Object.values(RPC_KEYS).every(Object.isFrozen)).toBe(true);
     for (const [rpc, keys] of Object.entries(RPC_KEYS)) {
@@ -48,7 +48,7 @@ describe('テスト専用HTTP境界（偽fetchのみ）', () => {
       expect(result).toEqual({ provenance: 'unverified', status: 200, body: {} });
       expect(fetchPort).toHaveBeenLastCalledWith(`${DEV_ORIGIN}/rest/v1/rpc/${rpc}`, expect.objectContaining({ method: 'POST', redirect: 'error', signal: expect.any(AbortSignal), body: JSON.stringify(args) }));
     }
-    expect(fetchPort).toHaveBeenCalledTimes(8); expect(timeout.mock.calls).toEqual(Array(8).fill([15000]));
+    expect(fetchPort).toHaveBeenCalledTimes(8); expect(timeout.mock.calls.filter(call => call[1] === 15000)).toHaveLength(8);
   });
   it('任意RPC・未知引数・toJSONや非JSON値を未通信で拒否する', async () => {
     const fetchPort = http(), transport = createTestHttpTransport(config(), fetchPort);
@@ -84,11 +84,46 @@ describe('テスト専用HTTP境界（偽fetchのみ）', () => {
       expect(fetchPort).toHaveBeenCalledTimes(1);
     }
   });
-  it.each(['fetch', 'body'] as const)('%s中のtimeoutも応答内容を漏らさない', async stage => {
-    const controller = new AbortController(); vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
-    const fail = () => { controller.abort(); throw Error('SYNTHETIC_SECRET'); };
-    const port: FetchPort = async url => stage === 'fetch' ? fail() : ({ status: 200, url, redirected: false, text: async () => fail() });
-    await expect(createTestHttpTransport(config(), port)('memo_load_snapshot', {})).rejects.toMatchObject({ reason: 'timeout', message: 'Test transport stopped: timeout' });
+  it.each(['fetch', 'body'] as const)('%sがsignalを無視して未解決でも15秒でtimeout/abortする', async stage => {
+    vi.useFakeTimers(); let signal!: AbortSignal; let settled = false;
+    const port = vi.fn<FetchPort>(async (url, init) => {
+      signal = init.signal!;
+      if (stage === 'fetch') return new Promise(() => {});
+      return { status: 200, url, redirected: false, text: () => new Promise(() => {}) };
+    });
+    const pending = createTestHttpTransport(config(), port)('memo_load_snapshot', {}).catch(error => { settled = true; return error; });
+    await vi.advanceTimersByTimeAsync(14999); expect(settled).toBe(false); expect(signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toMatchObject({ reason: 'timeout', message: 'Test transport stopped: timeout' });
+    expect(signal.aborted).toBe(true); expect(port).toHaveBeenCalledTimes(1); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('fetchに10秒かかっても本文の期限を15秒へ延長し直さない', async () => {
+    vi.useFakeTimers(); let release!: (response: Awaited<ReturnType<FetchPort>>) => void;
+    const port: FetchPort = () => new Promise(resolve => { release = resolve; });
+    const pending = createTestHttpTransport(config(), port)('memo_load_snapshot', {}).catch(error => error);
+    await vi.advanceTimersByTimeAsync(10000);
+    release({ status: 200, url: `${DEV_ORIGIN}/rest/v1/rpc/memo_load_snapshot`, redirected: false, text: () => new Promise(() => {}) });
+    await vi.advanceTimersByTimeAsync(5000); expect(await pending).toMatchObject({ reason: 'timeout' });
+  });
+  it('期限後のfetch成功は本文を読まず、遅延結果でtimeoutを上書きしない', async () => {
+    vi.useFakeTimers(); let release!: (response: Awaited<ReturnType<FetchPort>>) => void;
+    const text = vi.fn(async () => 'SYNTHETIC_SECRET');
+    const pending = createTestHttpTransport(config(), () => new Promise(resolve => { release = resolve; }))('memo_load_snapshot', {}).catch(error => error);
+    await vi.advanceTimersByTimeAsync(15000); const error = await pending;
+    release({ status: 200, url: `${DEV_ORIGIN}/rest/v1/rpc/memo_load_snapshot`, redirected: false, text });
+    await vi.advanceTimersByTimeAsync(0); expect(text).not.toHaveBeenCalled(); expect(error).toMatchObject({ reason: 'timeout' });
+  });
+  it('期限後の本文rejectを処理し、秘密や未処理rejectを表へ出さない', async () => {
+    vi.useFakeTimers(); let fail!: (reason: unknown) => void;
+    const pending = createTestHttpTransport(config(), async url => ({ status: 200, url, redirected: false,
+      text: () => new Promise((_resolve, reject) => { fail = reject; }) }))('memo_load_snapshot', {}).catch(error => error);
+    await vi.advanceTimersByTimeAsync(15000); const error = await pending; fail(Error('SYNTHETIC_SECRET'));
+    await vi.advanceTimersByTimeAsync(0); expect(String(error)).toBe('Error: Test transport stopped: timeout'); expect(vi.getTimerCount()).toBe(0);
+  });
+  it('早期成功・早期失敗ではタイマーを解除する', async () => {
+    vi.useFakeTimers();
+    await createTestHttpTransport(config(), http())('memo_load_snapshot', {}); expect(vi.getTimerCount()).toBe(0);
+    await expect(createTestHttpTransport(config(), http(200, 'bad'))('memo_load_snapshot', {})).rejects.toThrow('json'); expect(vi.getTimerCount()).toBe(0);
   });
 });
 

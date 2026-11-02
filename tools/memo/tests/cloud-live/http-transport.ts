@@ -36,27 +36,42 @@ export function createTestHttpTransport(config: { origin: string; publishableKey
       body = JSON.stringify(Object.fromEntries(Object.entries(values).map(([key, value]) => [key,
         Array.isArray(value) ? array(value).map(scalar) : scalar(value)])));
     } catch { throw new TestTransportError('boundary'); }
-    const url = `${origin}/rest/v1/rpc/${rpc}`, signal = AbortSignal.timeout(15000);
-    let response: Awaited<ReturnType<FetchPort>>;
-    try { response = await fetchPort(url, { method: 'POST', redirect: 'error', signal,
-      headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body }); }
-    catch { throw new TestTransportError(signal.aborted ? 'timeout' : 'communication'); }
-    let status: number;
-    try {
-      status = response.status;
-      if (!Number.isInteger(status) || status < 100 || status > 599) throw new TestTransportError('body');
-      if (response.redirected || (status >= 300 && status < 400) || response.url !== url) throw new TestTransportError('redirect');
-    } catch (error) { throw new TestTransportError(error instanceof TestTransportError ? error.reason : 'body'); }
-    let text: string;
-    try { text = await response.text(); }
-    catch { throw new TestTransportError(signal.aborted ? 'timeout' : 'body'); }
-    if (signal.aborted) throw new TestTransportError('timeout');
-    let parsed: unknown;
-    try {
-      if (status === 204) { if (text !== '') throw Error(); parsed = undefined; }
-      else parsed = JSON.parse(text) as unknown;
-    } catch { throw new TestTransportError('json'); }
-    // TLSやHTTP/codeの見た目だけで当該DB実行との対応を認定しない。実経路の認定は保留。
-    return { provenance: 'unverified', status, body: parsed };
+    const url = `${origin}/rest/v1/rpc/${rpc}`, controller = new AbortController(), signal = controller.signal;
+    // 注入先がsignalを無視しても呼出側の待機を終える。期限はfetchと本文で共用し延長しない。
+    let timer!: ReturnType<typeof setTimeout>;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => { reject(new TestTransportError('timeout')); controller.abort(); }, 15000);
+    });
+    const receive = async () => {
+      let response: Awaited<ReturnType<FetchPort>>;
+      try { response = await fetchPort(url, { method: 'POST', redirect: 'error', signal,
+        headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body }); }
+      catch { throw new TestTransportError(signal.aborted ? 'timeout' : 'communication'); }
+      // 期限後にfetchが遅れて返っても、その本文の読取は開始しない。
+      if (signal.aborted) throw new TestTransportError('timeout');
+      let status: number;
+      try {
+        status = response.status;
+        if (!Number.isInteger(status) || status < 100 || status > 599) throw new TestTransportError('body');
+        if (response.redirected || (status >= 300 && status < 400) || response.url !== url) throw new TestTransportError('redirect');
+      } catch (error) { throw new TestTransportError(error instanceof TestTransportError ? error.reason : 'body'); }
+      let text: string;
+      try { text = await response.text(); }
+      catch { throw new TestTransportError(signal.aborted ? 'timeout' : 'body'); }
+      if (signal.aborted) throw new TestTransportError('timeout');
+      let parsed: unknown;
+      try {
+        if (status === 204) { if (text !== '') throw Error(); parsed = undefined; }
+        else parsed = JSON.parse(text) as unknown;
+      } catch { throw new TestTransportError('json'); }
+      // TLSやHTTP/codeの見た目だけで当該DB実行との対応を認定しない。実経路の認定は保留。
+      return { provenance: 'unverified' as const, status, body: parsed };
+    };
+    try { return await Promise.race([receive(), deadline]); }
+    catch (error) {
+      // 中止はbest-effort。DB未実行/未コミットや、signalを無視する処理の終了は証明しない。
+      controller.abort();
+      throw new TestTransportError(error instanceof TestTransportError ? error.reason : 'communication');
+    } finally { clearTimeout(timer); }
   };
 }

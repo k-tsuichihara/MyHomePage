@@ -5,6 +5,7 @@
 ## 構成と安全境界
 
 - HTTP境界はNode標準fetchに適合する関数を必須注入する。global fetchへの既定値や設定読取は持たない。既存CLIと同じ固定開発Project Ref/HTTPS origin、8 RPCパス、正式引数キーを制限し、redirect:error、15秒timeout、1呼出しで停止する。結果は常にunverified。single-rpc認定は実装しない。
+- 15秒はfetch開始から本文読取まで共通のアプリ側待機期限。注入先がsignalを無視してもdeadlineとのraceで呼出側を固定timeoutにし、AbortControllerで中止を要求する。本文取得時に期限をリセットしない。成功/失敗後はタイマーを解除し、期限後のfetch結果から本文読取を開始せず、遅延rejectも処理する。中止はbest-effortで、裏側の処理終了・DB未実行/未コミットを証明しない。同期処理でイベントループが停止する場合のリアルタイム中断は保証しない。結果不明を解消せず、自動再試行しない。
 - 通信なし入口は固定の合成シナリオ・模擬応答だけをimportする。実HTTP境界、CLI設定読取、Auth、プロセス環境変数、任意URL/任意シナリオ指定を接続しない。実行引数があれば停止する。HTTP境界自体の試験も偽fetchだけを使う。
 - offlineランナーは任意のCloudTransportを受け取らず、合成応答データから生成した専用ポートだけを内部WeakMapで認定する。実HTTP関数や同形オブジェクトの誤注入は送信前拒否する。模擬遅延は解除用Promiseで表し、通信callbackを注入しない。これは固定テストコードの誤接続防止であり、任意の悪意あるNode.jsコードを隔離するsandboxではない。
 - ランナーはread（Auth済み相当の合成A/B識別確認）・write・conflict・deleteを分離する。Auth要求を実装したものではない。固定manifestにactor、対象ID、参照タグ、RPC、全引数、期待結果、変更件数の保守的上限を保持し、各段階の回数/変更上限を通信前に検査する。
@@ -47,3 +48,5 @@ SQLベクトルの実行は今回行わない。TS新規入力の整形とSQL正
 - 差分チェック、.cloud-live生成物/非公開証跡パスのGit除外: 確認済み
 
 offline入口の依存グラフにHTTP境界/CLI/Auth/設定を含まず、global fetchを禁止しても完走すること、実HTTP関数・同形偽ポートを拒否することを確認した。HTTP側の試験は全て偽fetchである。既存E2Eの実API利用は従来の所有profile・loopback・合成データ境界のみ。製品コード・SQL原本・既存DB試験・公開資産の変更は0件。実Supabase/Auth、SQL一致、稼働RLS/GRANT、実経路の応答出所、実データの変更件数は未検証。
+
+先生レビュー対応：注入先がsignalを無視するfetch未解決/本文未解決の2件を実際に期限まで待機する試験へ訂正し、共通期限・期限後fetch成功・期限後本文reject・早期終了時の解除の4件を追加した。fake timersで14,999msでは未完了、15,000msでtimeoutとabort要求になることを確認。型チェック、全Vitest1,300件（本基盤69件）、offline10ケース、既存E2E83/22/16/20件、5ビルド、差分チェックはPASS。実通信のキャンセル完了やDB未実行を検証したものではない。
