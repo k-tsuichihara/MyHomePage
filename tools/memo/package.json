@@ -14,7 +14,9 @@
     "build:format": "node scripts/build-format.mjs",
     "test:format": "npm run build:format && node .format/run.mjs",
     "build:transition": "node scripts/build-transition.mjs",
-    "test:transition": "npm run build:transition && node .transition/run.mjs"
+    "test:transition": "npm run build:transition && node .transition/run.mjs",
+    "build:cloud-offline": "node scripts/build-cloud-offline.mjs",
+    "test:cloud-offline": "npm run build:cloud-offline && node .cloud-live/offline.mjs"
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
