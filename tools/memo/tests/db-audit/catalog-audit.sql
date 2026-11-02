@@ -14,7 +14,7 @@ SELECT pg_catalog.current_setting('server_version') AS server_version,
 -- A02: 存在・種別・所有者・RLS。欠落も1行として残す。
 WITH expected(name) AS (VALUES ('memos'), ('tags'), ('memo_tags'), ('memo_id_registry'), ('memo_requests'))
 SELECT e.name, c.oid IS NOT NULL AS present, c.relkind,
-       pg_catalog.pg_get_userbyid(c.relowner) AS owner,
+       CASE WHEN c.oid IS NOT NULL THEN pg_catalog.pg_get_userbyid(c.relowner) END AS owner,
        c.relrowsecurity, c.relforcerowsecurity
 FROM expected e
 LEFT JOIN pg_catalog.pg_namespace n ON n.nspname = 'public'
@@ -25,7 +25,7 @@ ORDER BY e.name;
 SELECT c.relname, a.attnum, a.attname,
        pg_catalog.format_type(a.atttypid, a.atttypmod) AS data_type,
        a.attnotnull, a.attidentity, a.attgenerated,
-       pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS default_expression,
+       CASE WHEN d.oid IS NOT NULL THEN pg_catalog.pg_get_expr(d.adbin, d.adrelid) END AS default_expression,
        co.collname AS collation
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -55,20 +55,22 @@ WHERE n.nspname = 'public' AND t.relname IN ('memos', 'tags', 'memo_tags', 'memo
 ORDER BY t.relname, i.relname;
 
 -- A06: 8RPC+4検証関数。同名の全overloadを表示し、関数不在も残す。
+-- 存在しないOIDを逆解析関数へ渡さず、対象版のSTRICT属性に依存しない。
 WITH expected(name) AS (VALUES
  ('memo_load_snapshot'), ('memo_save'), ('memo_resolve_request'), ('memo_change_state'),
  ('memo_delete_permanently'), ('memo_empty_trash'), ('memo_save_tag'), ('memo_delete_tag'),
  ('memo_edge_spaces'), ('memo_trim_edges'), ('memo_valid_text'), ('memo_tag_key'))
 SELECT e.name, p.oid IS NOT NULL AS present, p.prokind,
-       pg_catalog.pg_get_function_identity_arguments(p.oid) AS identity_arguments,
-       pg_catalog.pg_get_function_arguments(p.oid) AS arguments_with_defaults,
-       pg_catalog.pg_get_function_result(p.oid) AS result_type,
-       pg_catalog.pg_get_userbyid(p.proowner) AS owner, l.lanname,
+       CASE WHEN p.oid IS NOT NULL THEN pg_catalog.pg_get_function_identity_arguments(p.oid) END AS identity_arguments,
+       CASE WHEN p.oid IS NOT NULL THEN pg_catalog.pg_get_function_arguments(p.oid) END AS arguments_with_defaults,
+       CASE WHEN p.oid IS NOT NULL THEN pg_catalog.pg_get_function_result(p.oid) END AS result_type,
+       CASE WHEN p.oid IS NOT NULL THEN pg_catalog.pg_get_userbyid(p.proowner) END AS owner, l.lanname,
        p.prosecdef, p.provolatile, p.proparallel, p.proleakproof, p.proretset,
-       ARRAY(SELECT pg_catalog.split_part(setting, '=', 1) FROM pg_catalog.unnest(p.proconfig) AS cfg(setting)) AS config_names,
-       ARRAY(SELECT setting FROM pg_catalog.unnest(p.proconfig) AS cfg(setting)
-             WHERE pg_catalog.split_part(setting, '=', 1) = 'search_path') AS search_path_settings,
-       CASE WHEN p.prokind = 'f' THEN pg_catalog.md5(pg_catalog.pg_get_functiondef(p.oid)) END AS definition_fingerprint
+       CASE WHEN p.oid IS NOT NULL THEN ARRAY(SELECT pg_catalog.split_part(setting, '=', 1)
+             FROM pg_catalog.unnest(p.proconfig) AS cfg(setting)) END AS config_names,
+       CASE WHEN p.oid IS NOT NULL THEN ARRAY(SELECT setting FROM pg_catalog.unnest(p.proconfig) AS cfg(setting)
+             WHERE pg_catalog.split_part(setting, '=', 1) = 'search_path') END AS search_path_settings,
+       CASE WHEN p.oid IS NOT NULL AND p.prokind = 'f' THEN pg_catalog.md5(pg_catalog.pg_get_functiondef(p.oid)) END AS definition_fingerprint
 FROM expected e
 LEFT JOIN pg_catalog.pg_namespace n ON n.nspname = 'public'
 LEFT JOIN pg_catalog.pg_proc p ON p.pronamespace = n.oid AND p.proname = e.name

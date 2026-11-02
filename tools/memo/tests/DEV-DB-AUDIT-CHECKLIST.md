@@ -39,6 +39,7 @@
 | memo_delete_tag | p_id uuid, p_expected_revision bigint | void | 未確認 |
 
 - [ ] 8RPCはSECURITY DEFINER、`SET search_path = ''`、default引数・SETOF・未知overloadなし。ownerは実行者由来で固定名を仮定せず、用途と権限をオーナーが確認。
+- [ ] 不在関数はpresent=false、逆解析等の結果はNULLとして記録する。CASEによる存在時評価を維持し、逆解析関数のNULL時動作を仮定しない。対象版の挙動は実行承認後に確認する。
 - [ ] loadはlanguage SQL/STABLE。他7関数はplpgsql/VOLATILE。原本にないLEAKPROOF・parallel属性等を確認。
 - [ ] 4補助関数：memo_edge_spaces()→text、memo_trim_edges(s text)→text、memo_valid_text(s text,field text)→boolean、memo_tag_key(s text)→text。IMMUTABLE、PARALLEL SAFE、空search_path、SECURITY INVOKER。
 - [ ] 定義本文を取得できなければ以下の本体確認は未確認のまま残す。fingerprintだけで一致扱いしない。
