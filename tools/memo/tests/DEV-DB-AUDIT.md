@@ -1,12 +1,12 @@
-# 開発Supabase DB：定義・権限監査の準備手順
+# 開発Supabase DB：定義・権限監査の手順と記録
 
-作成日：2026-11-02。基準main `3b74b6d048b5a89e2a54e19dfc66d9988751d0d4`（PR #29マージ済み）。**監査SQLは未実行案。DB接続・SQL実行・設定変更・認証情報取得を承認する資料ではない。** 本PRは資料だけであり、稼働DBとの一致は未確認。
+作成日：2026-11-02。準備時の基準main `3b74b6d048b5a89e2a54e19dfc66d9988751d0d4`（PR #29マージ済み）。PR #30作成時は監査SQL未実行。その後のオーナーによるA01〜A17手動監査の報告を第10章に記録する。**本資料はAIによるDB接続・SQL実行・設定変更・認証情報取得を承認するものではない。** 準備時の検証範囲と手動監査の報告を区別する。
 
 ## 1. 根拠と成果物
 
 - 正式原本：[Review8 SQL](../doc/v1.1.0/memo_v1_1_schema_review8.sql)、[6関数パッチ](../doc/v1.1.0/memo_v1_1_conflict_patch_review8.sql)、[統合仕様](../doc/v1.1.0/memo_v1_1_implementation_review8.md)、[正式型](../doc/v1.1.0/memo_v1_1_types_review8.ts)。原本は変更しない。schema SQL先頭のreview7等は履歴表記であり、ファイル名だけで適用済みと扱わない。
 - クライアント：[RPC契約](CLOUD-RPC.md)、src/cloud-rpc-adapter.ts、snapshot-validation.ts。固定HTTPマッピングは500/P0002、409/PT409、void204、JSON200。実transportのsingle-rpc認定は未検証。
-- 過去試験：[33項目サマリー](../../memo-db-test/TEST-SUMMARY-2026-10-25.md)、[ケース22](../../memo-db-test/UNAUTHENTICATED-TEST.md)、[ケース23](../../memo-db-test/ISOLATION-TEST.md)。最終33PASSは当時の公開RPCの結果であり、現行DBの全カタログ/ACL監査ではない。Auth/RLSの代表操作、競合、入力、タグ、完全削除等の実行実績と、今回の未実行定義監査を区別する。
+- 過去試験：[33項目サマリー](../../memo-db-test/TEST-SUMMARY-2026-10-25.md)、[ケース22](../../memo-db-test/UNAUTHENTICATED-TEST.md)、[ケース23](../../memo-db-test/ISOLATION-TEST.md)。最終33PASSは当時の公開RPCの結果であり、現行DBの全カタログ/ACL監査ではない。Auth/RLSの代表操作、競合、入力、タグ、完全削除等の実行実績と、第10章の手動カタログ監査報告を区別する。
 - [catalog-audit.sql](db-audit/catalog-audit.sql)：A01〜A17のSELECTだけ。
 - [function-definitions-optional.sql](db-audit/function-definitions-optional.sql)：別承認後に所有者が非公開で関数定義を取得するSELECTだけ。
 - [差分チェックリスト](DEV-DB-AUDIT-CHECKLIST.md)：期待値・判定・差分・判断を記録するテンプレート。
@@ -43,7 +43,7 @@
 
 A06のfingerprintは定義差分追跡用であり、安全性の証明や秘密情報の匿名化ではない。リポジトリSQLファイルのmd5とは比較できず、版や整形で変化し得る。同じ値だけで意味一致と判定しない。関数本体の所有者条件・要求台帳・PT409・原子性の定義確認は任意ファイルによる別承認の取得/非公開レビューが必要。不許可なら本体は未確認とする。
 
-A06は関数不在行を残し、identity_arguments/arguments_with_defaults/result_type/owner/設定一覧/fingerprintは存在時だけCASE内で評価する。逆解析関数のNULL引数時の挙動やSTRICT属性に依存しない。A02の不在表ownerとA03のdefault不在も同様に保護する。他の逆解析箇所は対象をINNER JOINした既存オブジェクトに限る。対象版での実際の挙動・SQL構文は未検証のまま、欠落時の動作をPASSと記録しない。
+A06は関数不在行を残し、identity_arguments/arguments_with_defaults/result_type/owner/設定一覧/fingerprintは存在時だけCASE内で評価する。逆解析関数のNULL引数時の挙動やSTRICT属性に依存しない。A02の不在表ownerとA03のdefault不在も同様に保護する。他の逆解析箇所は対象をINNER JOINした既存オブジェクトに限る。準備時の未実行記録と後続の手動監査報告は第9・10章で区別する。欠落対象が実際に存在した場合の動作は今回の報告では確認できないため、欠落時の動作をPASSと記録しない。
 
 search_path以外のproconfigは設定名だけを出力する。未知の設定名があれば停止して相談し、JWT等の設定値を追加取得しない。入力検証4関数のdefault PUBLIC EXECUTEは、8RPCへのPUBLIC EXECUTE残存と区別する。補助関数のACL変更方針を勝手に確定しない。
 
@@ -74,7 +74,7 @@ PostgreSQLはA01で取得する。PostgRESTは独立サービスであり、pg_e
 
 別途承認が必要：開発環境への接続、カタログSQL各群の実行、任意関数全文の取得と保管、既存管理権限でのオーナー実行、PostgREST版の確認、権限/設定/SQL定義の修正、一般ユーザーによるAuth/RLS/GRANTの実動作試験、台帳を含むデータ確認。必要権限が足りなければ昇格/付与せず相談する。差分があってもスキーマ全文や6関数パッチを自動適用しない。
 
-## 9. 今回の検証範囲と一次資料
+## 9. PR #30準備時の検証範囲と一次資料
 
 監査SQLの静的レビューだけを行い、DBでの構文・権限・応答・負荷は未検証。SQLファイルをCLIやビルドへ接続しない。型チェック・既存Vitestと差分チェックを資料変更の回帰として実施し、DB監査のPASSとは扱わない。公開HTML/JS/CSS・製品コード・既存SQL原本・DB試験手順は変更しない。
 
@@ -87,3 +87,29 @@ PostgreSQLはA01で取得する。PostgRESTは独立サービスであり、pg_e
 今回の確認結果：型チェックPASS、既存Vitest30ファイル1,300件PASS。SQLの静的点検では通常案22文・任意案1文がSELECT/CTEで、DML/DDLやアプリ表/関数への直接参照を含まないことを確認した（文字列リテラル内の対象名はカタログfilter用）。これはSQLパーサー/DBでの構文・権限検証や、安全性の完全な証明ではない。ステージ済み差分を含むgit diff --checkを実施する。資料だけの変更のためビルド/ブラウザE2Eは再実行しない。実接続・SQL実行・認証情報取得・DB監査結果は0件で、チェックリストは全項目未確認のまま提出する。
 
 先生レビュー後も同じ範囲で再確認し、A06の3種のpg_get_function_*、fingerprint、A02/A03に明示的な存在時CASEがあることを文字列ベースで静的点検した。型チェック・既存1,300件・差分チェックはPASS。対象版のSTRICT属性やNULL時の実動作、SQLの構文/実行は検証していない。関数全文の別承認・実行前の読取専用/期限確認は引き続き必要。
+
+## 10. オーナーによる手動カタログ監査の報告記録
+
+記録日：2026-11-02。記録作業の基準main：`c47bdca43158b605edff9292ccb3f24c1c875755`（PR #30マージ済み）。情報源はオーナーからの「開発用SupabaseでA01〜A17を手動実施し、既存テーブル・RPCの定義と権限が期待どおり」との報告である。AIは再接続・SQL実行・生結果の取得/独立照合を行っていない。
+
+オーナーは先生との会話でSQL Editor結果を提示済み。初回の本作業依頼には原本が転記されていなかったが、[先生レビュー](https://github.com/k-tsuichihara/MyHomePage/pull/31#issuecomment-6567886934)で提供された安全な実測要約を反映した。AIによるDBへの直接接続・生結果の独立照合ではない。実施日時、各ACLの全行、fingerprint、出力切詰め有無等、要約にない値は補完しない。記録日を実施日時に流用しない。対象は開発環境であり、本番環境の確認結果ではない。
+
+### 実施状況と確認範囲
+
+A01〜A17はすべて手動実施済み。既存テーブル/RPCの構造・定義メタデータ・RLSポリシー定義・権限は、オーナー報告の範囲で期待どおりと整理する。RPC本文の一致やRLSの実動作を含めない。
+
+実測要約：A01はPostgreSQL 17.11、UTF8、実行ロールpostgres、transaction_read_only=off、statement_timeout=2min、lock_timeout=0。read-only値はA01照会時の値であり、その後のBEGIN READ ONLYラッパーが有効だったことを単独では証明しない。A02は5表のRLS有効・FORCE RLS false、A06は12関数、手動A09の追加存在確認はpublicシーケンス0件、A15はpgcrypto 1.3/extensions/postgres、A16は非内部トリガー・ルール0件。A14の3ロール属性も先生との会話で提示済みだが、本レビュー要約には各属性値が転記されていないため推測しない。手動SQLとリポジトリSQL案の番号の違いは[チェックリスト第6章](DEV-DB-AUDIT-CHECKLIST.md)に記録する。
+
+### 継続レビュー事項
+
+1. **A17：将来の新規オブジェクトの公開リスク。** 実測要約では、postgres/supabase_adminがpublicスキーマに今後作成する表に対するanon/authenticatedの広範な権限、シーケンスへのSELECT/UPDATE/USAGE、関数へのEXECUTEがdefault ACLに存在する。既存5表・8RPCのACLは別途制限済みであり、その制限が新規オブジェクトにも自動適用されるとは限らない。表の権限の全内訳やGrant Option等、要約にない細部は補完しない。新規作成前にdefault ACLと作成後の実効権限を確認する工程を残す。現在の漏えいや権限修正済みとの判定にはしない。
+2. **入力補助4関数の公開EXECUTE。** memo_edge_spaces / memo_trim_edges / memo_valid_text / memo_tag_keyの公開EXECUTE権限をレビュー事項として残す。正式SQLはこれらに8RPCと同じREVOKEを適用していない。付与先の詳細や公開維持/制限の結論は本報告では確定しない。呼出し経路・必要性・変更時の影響を先生/オーナーが確認し、変更する場合は別途承認する。
+
+### 未検証・次工程
+
+- RPC本文（認証/所有者条件、ハッシュ、台帳保持、競合、削除、原子性）の一致は未検証。任意関数全文の取得/レビューは引き続き別承認。
+- RLS/GRANTの実動作、ユーザーA/B隔離、実際のJWT/ロール割当は今回未検証。カタログ上の権限一致から実動作PASSへ拡張しない。
+- PostgRESTの実版・実HTTPステータス/応答形、RPCアダプターとの往復、single-rpc認定、SQL/TSベクトル一致、結果不明時の実挙動は未検証。
+- 要求台帳/registryのデータ内容、削除済み履歴、再利用拒否等はデータ行を見て確認したものではない。
+
+この記録でDB/Auth/権限/SQLの変更は行っていない。追加監査・権限修正・実接続試験・公開の承認とはしない。以後の実行には既存の安全条件と個別承認を適用する。
