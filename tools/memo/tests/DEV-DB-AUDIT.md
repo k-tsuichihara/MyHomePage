@@ -138,3 +138,34 @@ A01〜A17はすべて手動実施済み。既存テーブル/RPCの構造・定�
 本文監査は認証/所有者条件、ロックと検証順序、要求照合、更新範囲、例外伝播の静的確認である。実Auth/RLS/GRANT、PostgREST実版・HTTPマッピング、通信経路のsingle-rpc認定、並行実行・ロールバック・障害注入・SQL/TS入力一致は別承認の実試験が必要。未確認を一致へ置き換えない。
 
 所有者条件の欠落、想定外の動的SQL/外部参照/秘密、ロック不整合、要求台帳や削除履歴の喪失、例外握潰し等が見つかった場合は該当判定を止め、安全な要約と修正案を報告する。本文取得を口実にSQL適用、RPC実行、データ確認、権限変更へ進まない。A17のdefault ACLと補助4関数の公開EXECUTEは別の継続レビュー事項で、本文一致でも解決済みにしない。
+
+## 12. 8RPC完全署名限定の取得SQL案（未実行）
+
+準備基準main：`a73d3c3928c8e61b5681eecca316f2facddb3df3`（PR #32マージ済み）。[rpc-definitions-exact.sql](db-audit/rpc-definitions-exact.sql)を8RPCのみの取得候補とする。既存function-definitions-optional.sqlは補助4関数・同名全overloadも取得する別案として残し、混同しない。新案もDBでの構文・権限・負荷・出力は未検証で、安全性を保証するものではない。
+
+### 対象限定と欠落検出
+
+固定VALUESの8署名を、public関数名とpg_catalog修飾の入力型・順序でto_regprocedureへ渡す。任意URL/入力/動的SQLは使わない。完全署名に対応するOIDだけをpg_get_functiondefへ渡し、同名の別overload・補助関数の本文は取得しない。引数名・default・戻り値は署名解決の対象外なので、actual_arguments/actual_resultと既存A06を正式原本と照合する。
+
+各行のtarget_statusはmissing / signature-mismatch / unexpected-overload / wrong-kind / exact。同名候補はpublicのpg_proc全種別を数え、想定外routineも安全側で停止対象にする。全8件の署名・OIDの一意性、全件exactが成立した場合だけacquisition_allowed=trueとし、それ以外は全件の本文をNULLにする。欠落行も固定VALUES側から残す。逆解析は存在時CASE、本文取得は全体ゲートと関数種別のCASEで保護する。SQL自体のエラーは「対象なし」に変換しない。
+
+### 実行前確認と手動実行の境界
+
+第3・8・11章の承認に加え、オーナーが次を確認する。今回は接続も実行も行わない。
+
+- 開発専用プロジェクトの名称/Refを正規手段で確認。本番は対象外。既存の取得権限だけを使い、権限不足なら昇格・GRANTせず停止。
+- 専用セッションで明示的なREAD ONLYトランザクションを開始し、取得SELECTと同じトランザクションでtransaction_read_only=onを確認できる手段を承認する。SQL Editorが各文を別transactionにする場合はこの条件を満たしたと扱わない。
+- そのtransactionだけに有効なstatement_timeout=15s、lock_timeout=3sと、クライアント側の中止上限を事前に承認する。BEGIN READ ONLY / SET LOCAL / 終了操作は取得ファイルには含めない運用操作で、個別承認後にだけ実施する。永続設定は変えない。
+- 読取専用・timeoutの事前確認が成立した後だけSELECTを実行する。結果内の3設定値でも照合し、不一致なら結果を採用しない。結果の値は事前確認の代替にはならない。
+- 同時DDL/権限変更を避け、SQL版、取得時刻、PG版、署名、実行者の権限区分を記録。長時間待機/エラーは自動再試行せず停止。エラー後は承認された方法でtransactionを終了し、関数定義のDDLを実行しない。
+- 実行前にSQL Editorの履歴、画面共有、ダウンロード、ログ、一時領域への露出と結果の行/セル制限を確認し、第11章の非公開保管条件を満たさなければ取得しない。
+
+### 結果の完全性・非公開比較・破棄
+
+2026-11-02の静的確認：[PostgreSQL 17公式§9.5](https://www.postgresql.org/docs/17/functions-binarystring.html)表9.13は`convert_to(string text, dest_encoding name) → bytea`、表9.12は`md5(bytea) → text`（16進表記）、表9.11は`octet_length(bytea) → integer`を定義する。したがって取得案の型は、definition（text）→convert_to(...,'UTF8')（bytea）→md5（text）となり、PostgreSQL 17の標準関数シグネチャに対応する。バイト数も同じUTF-8 byteaを対象とする。md5(text)への変更やpgcrypto依存の追加は不要と判断し、式は維持する。サーバー既定の文字列表現に任せず明示的にUTF-8化するため、非公開比較側も復号済みdefinitionをUTF-8へ符号化して照合する。これは公式仕様の確認であり、開発DB上の関数実在・実行権限・暗号ポリシー等による実行可否・SQL全体の動作を検証したものではない。実行時エラーは代替式へ自動切替せず停止する。
+
+結果はseq=1〜8が各1行、expected_signature重複なし、OID重複なし、same_name_count=1、全件exact/acquisition_allowed=true、本文/バイト数/checksumが非NULLであることを確認する。不一致なら取得完了とせず、本文を追加取得する前に原因と範囲をレビューする。別署名の本文を探して補完しない。
+
+definition_utf8_bytesとdefinition_utf8_md5はDB側で同じ定義文字列から計算する。承認された非公開環境でCSV/JSON等を正しく復号し、definitionフィールドそのもののUTF-8バイト数とMD5を各行照合する。エスケープ表記・CSV引用・表示用省略・改行変換・BOMを含むファイル全体の値と比較しない。SQL Editorの表示だけでなく保存された全8行/セルの完全性を確認する。検証できなければ切詰め未確認として停止し、制限解除や再取得を自動実行しない。checksumは偶発的な転記/切詰め確認用で、改ざん耐性・出所・意味一致・安全性の証明ではない。
+
+完全性確認後の原本比較・要約公開・保持期限・コピーの保全/個別破棄は第11章をそのまま適用する。definition_utf8_md5は本文から導出した機密の派生情報となり得るため、本文と同じ非公開の保管・共有・破棄条件を適用する。本文・生diff・checksumを公開証跡として追加せず、チェックリスト第8章の安全な要約だけを残す。依存補助4関数の本文、Auth/RLS実動作、HTTP/並行性はこのSQLでは確認しない。
