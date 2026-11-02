@@ -162,8 +162,10 @@ A01〜A17はすべて手動実施済み。既存テーブル/RPCの構造・定�
 
 ### 結果の完全性・非公開比較・破棄
 
+2026-11-02の静的確認：[PostgreSQL 17公式§9.5](https://www.postgresql.org/docs/17/functions-binarystring.html)表9.13は`convert_to(string text, dest_encoding name) → bytea`、表9.12は`md5(bytea) → text`（16進表記）、表9.11は`octet_length(bytea) → integer`を定義する。したがって取得案の型は、definition（text）→convert_to(...,'UTF8')（bytea）→md5（text）となり、PostgreSQL 17の標準関数シグネチャに対応する。バイト数も同じUTF-8 byteaを対象とする。md5(text)への変更やpgcrypto依存の追加は不要と判断し、式は維持する。サーバー既定の文字列表現に任せず明示的にUTF-8化するため、非公開比較側も復号済みdefinitionをUTF-8へ符号化して照合する。これは公式仕様の確認であり、開発DB上の関数実在・実行権限・暗号ポリシー等による実行可否・SQL全体の動作を検証したものではない。実行時エラーは代替式へ自動切替せず停止する。
+
 結果はseq=1〜8が各1行、expected_signature重複なし、OID重複なし、same_name_count=1、全件exact/acquisition_allowed=true、本文/バイト数/checksumが非NULLであることを確認する。不一致なら取得完了とせず、本文を追加取得する前に原因と範囲をレビューする。別署名の本文を探して補完しない。
 
 definition_utf8_bytesとdefinition_utf8_md5はDB側で同じ定義文字列から計算する。承認された非公開環境でCSV/JSON等を正しく復号し、definitionフィールドそのもののUTF-8バイト数とMD5を各行照合する。エスケープ表記・CSV引用・表示用省略・改行変換・BOMを含むファイル全体の値と比較しない。SQL Editorの表示だけでなく保存された全8行/セルの完全性を確認する。検証できなければ切詰め未確認として停止し、制限解除や再取得を自動実行しない。checksumは偶発的な転記/切詰め確認用で、改ざん耐性・出所・意味一致・安全性の証明ではない。
 
-完全性確認後の原本比較・要約公開・保持期限・コピーの保全/個別破棄は第11章をそのまま適用する。本文・生diff・checksumを公開証跡として追加せず、チェックリスト第8章の安全な要約だけを残す。依存補助4関数の本文、Auth/RLS実動作、HTTP/並行性はこのSQLでは確認しない。
+完全性確認後の原本比較・要約公開・保持期限・コピーの保全/個別破棄は第11章をそのまま適用する。definition_utf8_md5は本文から導出した機密の派生情報となり得るため、本文と同じ非公開の保管・共有・破棄条件を適用する。本文・生diff・checksumを公開証跡として追加せず、チェックリスト第8章の安全な要約だけを残す。依存補助4関数の本文、Auth/RLS実動作、HTTP/並行性はこのSQLでは確認しない。

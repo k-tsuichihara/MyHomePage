@@ -2,6 +2,10 @@
 -- publicの8つの完全署名のみ。補助関数・想定外overloadの本文を取得しない。
 -- 全8件の存在/種別/同名候補数が適合しない場合、全definitionをNULLにする。
 -- カタログだけを読む。実権限・負荷・クライアントの切詰めは未検証。
+-- PG17公式§9.5: convert_to(text,name)->bytea、md5(bytea)->text（16進）。
+-- https://www.postgresql.org/docs/17/functions-binarystring.html
+-- UTF8へ明示変換した同じbyteaのバイト数/MD5を比較する。md5(text)へ変更しない。
+-- definition_utf8_md5も本文由来の非公開情報。実DBでの利用可否/権限は未検証。
 WITH expected(seq, name, signature) AS (VALUES
  (1, 'memo_save', 'public.memo_save(pg_catalog.uuid,pg_catalog.text,pg_catalog.text,pg_catalog.uuid[],pg_catalog.int8,pg_catalog.uuid)'),
  (2, 'memo_load_snapshot', 'public.memo_load_snapshot()'),
