@@ -69,6 +69,8 @@ Ver1.1.0のTypeScript本体、認証・クラウド保存、移行等の完成�
 
 ## Ver1.1.0 先行実装の開発・テスト
 
+DBオブジェクト追加や本番公開を計画する際は、[A17の対応方針](tests/DEV-DB-AUDIT.md#14-a17の対応方針2026-11-06オーナー判断)と[将来の確認ゲート](tests/DEV-DB-AUDIT-CHECKLIST.md#10-a17対応保留と将来の確認ゲート2026-11-06決定)を確認してください。A17は未解決・権限変更は当面保留です。作成前のデフォルト権限確認、作成後の実効権限・RLS・公開範囲確認、本番公開前の権限レビューが必要です。DB操作や公開の承認を意味しません。
+
 [製造計画](doc/v1.1.0/IMPLEMENTATION-PLAN-2026-10-26.md) と [入力契約のテスト方針](tests/README.md) に従います。現在の先行実装は `src/types.ts` と `src/input.ts` の型・純粋な入力検証のみです。現行HTML/CSS/JavaScriptからは読み込まず、localStorage・Supabase・UIには接続していません。
 
 メモ専用のpackage.jsonとlockfileを使います。Node.jsは `^22.12.0 || ^24.0.0 || >=26.0.0` が対象です。TypeScript 7.0.2とVitest 5.0.5を開発依存として固定し、型チェックにはNodeの型定義も使用します。他のアプリの依存関係管理とは独立しています。
