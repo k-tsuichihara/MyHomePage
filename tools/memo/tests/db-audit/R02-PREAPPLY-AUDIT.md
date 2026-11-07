@@ -35,15 +35,44 @@ SQLはT00〜T05の6文。固定publicスキーマ・完全入力署名で12関�
 | 番号 | 出力/確認 | 欠落・判定の注意 |
 |---|---|---|
 | T00 | 実行ロール、PG版、server_encoding、read_only、timeout | 承認済みPG17/UTF8/on/時間上限と照合。dev-sandboxの外部確認は別に必要 |
-| T01 | 12署名と各ownerの対応。補助のvolatility/parallel/leakproof、search_path、他設定名 | 12行/署名各1件、全prokind=f、同名候補数1。補助はINVOKER/IMMUTABLE/PARALLEL SAFE/空search_pathを原本と照合。検索パス以外の設定値・本文は取得しない。未知設定名や欠落/別種別なら停止 |
+| T01 | 12署名と各ownerの対応、function_present/owner_present。同名候補数と補助属性 | 12行/署名各1件、存在フラグtrue、全prokind=f、同名候補数1。候補0/複数、署名不一致、owner欠落なら停止。補助はINVOKER/IMMUTABLE/PARALLEL SAFE/空search_pathを原本と照合。検索パス以外の設定値・本文は取得しない。未知設定名でも停止 |
 | T02 | 補助4署名のstored_acl、NULL判定/cardinality、付与先/付与者OID、Grant Option | NULL既定展開、明示空配列、明示ACLを区別。空ACLも対象行を保持。PUBLICはgrantee OID=0。生ACLは非公開で保全し、展開結果だけでNULL表現を失わない |
-| T03 | anon/authenticated/authenticator、12関数owner/5表ownerの各補助実効EXECUTE/Grant Optionとpublic USAGE | source別の同一主体行は意図的。NULLはfalseでなくUNKNOWN。PUBLICはログインロールとしてhas_function_privilegeへ渡さずT02で付与を確認。実効権限の由来はT02/T05と突合 |
+| T03 | 3固定ロール・12署名別owner・5表別ownerをseed_sourceとして各補助への実効権限を確認 | 期待20 source×4署名=80行。共有ownerもsource別に保持し、欠落はrole_present/function_present=falseやNULLとして残す。欠落/不足/未知値なら停止。PUBLICは実行ロールとして渡さずT02で確認 |
 | T04 | S05と同じ総合条件で3CHECK/一意indexの所属/種別/状態/直接依存を確認 | CATALOG-MATCHは限定的なカタログ一致。式全体・評価権限・実動作の合格ではない。UNKNOWN/REVIEWなら止める |
-| T05 | 関連主体から上位への所属とMEMBER/USAGE/SET、各辺フラグ、superuser/BYPASSRLS属性 | 再帰は関連主体起点・上位方向のみ、UNIONで再訪を抑制。到達と即時継承/SETは区別。出力行数をユニークロール数へ変換しない。NULL/欠落主体はT01/T03と突合 |
+| T05 | seed、vertex（到達状態）、edge（直接付与）を別CTE/record_typeで出力 | seedは期待20 source。vertexはseed OIDごとの到達先とMEMBER/USAGE/SET・ロール属性、edgeはseedと明示した始点/終点・membership OID・辺フラグ。辺フラグを到達経路の属性と解釈しない。UNKNOWN/欠落/切詰めなら停止 |
 
 PUBLICは全ロール向けの付与先で、単一の実効実行主体ではない。T02のPUBLIC付与と各実ロールのT03を組み合わせる。T03/T05が現在許可を示しても、PUBLIC撤回後にどの権限が残るかを自動シミュレーションした結果ではない。
 
 T04は既存S05の総合判定を独立SQLへ再利用する。登録された直接関数依存以外、本文の文字列解決・ジョブ・評価/保守の有効主体を網羅しない。T05でたどる上位ロールはクラスタ共通の情報を含み得る。必要性をレビューし、無制限の範囲拡大や全ロール取得はしない。
+
+### 欠落・overloadと期待行の確認
+
+- T01は固定12署名をLEFT JOINするため関数欠落も1行残る。同名候補が1件でも引数が違えばfunction_present=falseで停止する。候補数はpublic内の同名routine全種別で、正しい署名に加え別overloadがあれば複数として停止する。本文は取得しない。
+- T03/T05のseedは3固定ロール、12署名owner、5表ownerの計20 sourceを固定で保持する。関数・表・ロールが欠落したsourceを消さず、T03の存在フラグ/T05 seedのrow_status=UNKNOWNとして残す。T01のowner別対応も突合する。UNKNOWNを「辺がない/権限なし」へ変換しない。
+- T05は同一SELECT内で3種をUNION ALLして返す。seedはsource別20行、vertexは存在seed OIDと到達OIDの組ごと1行、edgeはseed OIDとmembership OIDの組ごと1行。複数sourceが同じownerなら頂点/辺は重複させず、seedレコードから対応付ける。欠落seedは頂点を生成しないのでseed行の点検を省略しない。
+- 頂点と辺の件数はグラフで変動する。seedだけ表示して他種別が切り詰められた結果は完全取得ではない。全record_typeの保全と対象ごとの突合ができなければ停止する。既存S06の33行という過去の値と新出力総数を比較しない。
+
+### T05の頂点・辺と実効判定
+
+vertices CTEは再帰のreachable(seed,oid)を頂点へ変換する。MEMBER/USAGE/SETはseedからその頂点へのpg_has_role判定。edges CTEは到達頂点を始点とするpg_auth_membersの直接付与を抽出し、edge_from=member、edge_to=roleidを明示する。admin_option/inherit_option/set_optionはその直接辺だけの属性であり、seedからの経路上の累積値ではない。
+
+vertex行の辺用フィールド、edge行の頂点実効判定フィールドはNULL。record_typeで意味を判別し、この構造上のNULLをUNKNOWNと混同しない。row_status=UNKNOWNは欠落を表す。seed行には存在確認だけを載せる。同じグラフを単一SQL文内で評価するため、頂点/辺の取得を別文へ分割しない。
+
+分岐で複数経路が合流してもUNIONで到達頂点を統合し、通過経路そのものは保存しない。辺フラグ1件からUSAGE/SETを決めず、pg_has_roleの実効判定を参照する。MEMBER到達、即時継承、SET可能性、admin optionは別概念。実Auth/JWT割当や将来のGRANT後の結果はこの監査で証明しない。
+
+### 合成例の静的検証（DB未実行）
+
+以下のS/A/B/Cは説明用の合成ラベルであり内部ロール名ではない。属性例は非superuser・通常ロールの簡略モデル。USAGE/SETの実値は実環境ではpg_has_roleを正とし、このモデルをSQLの実行検証と扱わない。辺属性は(inherit,set)で示す。
+
+| ケース | グラフ/状態 | 期待する頂点・辺の分離と判定 |
+|---|---|---|
+| 分岐・合流・属性差 | S→A(false,true)、S→B(true,true)、A→C(true,true)、B→C(true,false) | seed Sの頂点はS/A/B/Cの4件、辺は4件。C頂点は1件。簡略モデルではCのUSAGEはB経由、SETはA経由でtrue。Cへの個別辺フラグをCの実効値へ転記しない |
+| 多段で属性が途切れる | S→A(false,true)、A→B(true,false) | 頂点3件/辺2件。簡略モデルのBはMEMBER=true、USAGE=false、SET=false。A→Bのinherit=trueだけでBのUSAGEをtrueにしない |
+| 複数sourceで同一seed | source X/Yが同じSを参照し、上記分岐グラフを使用 | seed行は2件、頂点4件/辺4件。辺/頂点をsource数倍にしない |
+| 親なしの存在seed | Sに付与辺なし | seed1件・S頂点1件・辺0件。架空のNULL辺を生成しない |
+| 欠落する期待seed | source Zのロール不在 | seedにUNKNOWNを1件残す。頂点/辺0件でも正常な親なしseedと区別し、後続停止 |
+
+文字列ベースのSQL構造確認とPythonによる合成グラフモデルの照合を行う。カタログ/SQL構文/権限/実pg_has_roleの動作は検証しない。T00/T02/T04と既存S01〜S06の意味・範囲は維持する。
 
 ## 4. 安全なSQL Editor手順案（別承認後のみ）
 

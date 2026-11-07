@@ -30,6 +30,7 @@ WITH expected(kind, signature) AS (VALUES
 )
 SELECT f.kind, f.signature, f.oid AS function_oid, f.prokind, f.prosecdef,
        f.proowner AS owner_oid, r.rolname AS owner_name,
+       f.oid IS NOT NULL AS function_present, r.oid IS NOT NULL AS owner_present,
        f.proacl IS NULL AS acl_is_null,
        (SELECT count(*) FROM pg_catalog.pg_proc other
         JOIN pg_catalog.pg_namespace ns ON ns.oid=other.pronamespace
@@ -107,13 +108,15 @@ seeds AS (
  SELECT s.name AS source, r.oid FROM seed_names s
  LEFT JOIN pg_catalog.pg_roles r ON r.rolname=s.name
  UNION
- SELECT 'function-owner', proowner FROM functions WHERE prokind='f'
+ SELECT 'function-owner:' || signature, proowner FROM functions
  UNION
- SELECT 'table-owner', c.relowner FROM pg_catalog.pg_class c
- JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
- WHERE n.nspname='public' AND c.relname IN ('memos','tags','memo_tags','memo_id_registry','memo_requests')
+ SELECT 'table-owner:' || e.name, c.relowner
+ FROM (VALUES ('memos'),('tags'),('memo_tags'),('memo_id_registry'),('memo_requests')) e(name)
+ LEFT JOIN pg_catalog.pg_namespace n ON n.nspname='public'
+ LEFT JOIN pg_catalog.pg_class c ON c.relnamespace=n.oid AND c.relname=e.name
 ), roles AS (SELECT DISTINCT oid FROM seeds WHERE oid IS NOT NULL)
-SELECT s.source, r.rolname, s.oid AS role_oid, f.signature, f.oid AS function_oid,
+SELECT s.source, r.rolname, s.oid AS role_oid, r.oid IS NOT NULL AS role_present,
+       f.signature, f.oid AS function_oid, f.oid IS NOT NULL AS function_present,
        CASE WHEN s.oid IS NOT NULL AND f.oid IS NOT NULL AND f.prokind='f'
             THEN pg_catalog.has_function_privilege(s.oid,f.oid,'EXECUTE') END AS effective_execute,
        CASE WHEN s.oid IS NOT NULL AND f.oid IS NOT NULL AND f.prokind='f'
@@ -215,11 +218,12 @@ seeds AS (
  SELECT s.name AS source, r.oid FROM seed_names s
  LEFT JOIN pg_catalog.pg_roles r ON r.rolname=s.name
  UNION
- SELECT 'function-owner', proowner FROM functions WHERE prokind='f'
+ SELECT 'function-owner:' || signature, proowner FROM functions
  UNION
- SELECT 'table-owner', c.relowner FROM pg_catalog.pg_class c
- JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
- WHERE n.nspname='public' AND c.relname IN ('memos','tags','memo_tags','memo_id_registry','memo_requests')
+ SELECT 'table-owner:' || e.name, c.relowner
+ FROM (VALUES ('memos'),('tags'),('memo_tags'),('memo_id_registry'),('memo_requests')) e(name)
+ LEFT JOIN pg_catalog.pg_namespace n ON n.nspname='public'
+ LEFT JOIN pg_catalog.pg_class c ON c.relnamespace=n.oid AND c.relname=e.name
 ), roles AS (SELECT DISTINCT oid FROM seeds WHERE oid IS NOT NULL),
 reachable(seed, oid) AS (
  SELECT oid,oid FROM roles
@@ -227,16 +231,60 @@ reachable(seed, oid) AS (
  SELECT x.seed,m.roleid FROM reachable x
  JOIN pg_catalog.pg_auth_members m ON m.member=x.oid
 )
-SELECT s.rolname AS seed_role, r.rolname AS reached_role,
-       r.rolsuper, r.rolinherit, r.rolbypassrls,
-       pg_catalog.pg_has_role(x.seed,x.oid,'MEMBER') AS member_path,
-       pg_catalog.pg_has_role(x.seed,x.oid,'USAGE') AS usable_without_set_role,
-       pg_catalog.pg_has_role(x.seed,x.oid,'SET') AS can_set_role,
-       parent.rolname AS directly_granted_role,
-       m.admin_option, m.inherit_option, m.set_option
-FROM reachable x
-JOIN pg_catalog.pg_roles s ON s.oid=x.seed
-JOIN pg_catalog.pg_roles r ON r.oid=x.oid
-LEFT JOIN pg_catalog.pg_auth_members m ON m.member=x.oid
-LEFT JOIN pg_catalog.pg_roles parent ON parent.oid=m.roleid
-ORDER BY s.rolname,r.rolname,parent.rolname;
+-- 期待seedの欠落を残し、頂点の実効判定と直接辺の属性を別レコードへ分離する。
+, vertices AS (
+ SELECT x.seed, x.oid, r.rolname::text AS role_name,
+        r.rolsuper, r.rolinherit, r.rolbypassrls,
+        CASE WHEN s.oid IS NOT NULL AND r.oid IS NOT NULL
+             THEN pg_catalog.pg_has_role(x.seed,x.oid,'MEMBER') END AS member_path,
+        CASE WHEN s.oid IS NOT NULL AND r.oid IS NOT NULL
+             THEN pg_catalog.pg_has_role(x.seed,x.oid,'USAGE') END AS usable_without_set_role,
+        CASE WHEN s.oid IS NOT NULL AND r.oid IS NOT NULL
+             THEN pg_catalog.pg_has_role(x.seed,x.oid,'SET') END AS can_set_role,
+        s.rolname::text AS seed_role
+ FROM reachable x
+ LEFT JOIN pg_catalog.pg_roles s ON s.oid=x.seed
+ LEFT JOIN pg_catalog.pg_roles r ON r.oid=x.oid
+), edges AS (
+ SELECT DISTINCT x.seed, m.oid AS membership_oid, m.member AS from_oid, m.roleid AS to_oid,
+        a.rolname::text AS from_role, b.rolname::text AS to_role,
+        m.admin_option, m.inherit_option, m.set_option, s.rolname::text AS seed_role
+ FROM reachable x
+ JOIN pg_catalog.pg_auth_members m ON m.member=x.oid
+ LEFT JOIN pg_catalog.pg_roles a ON a.oid=m.member
+ LEFT JOIN pg_catalog.pg_roles b ON b.oid=m.roleid
+ LEFT JOIN pg_catalog.pg_roles s ON s.oid=x.seed
+), seed_rows AS (
+ SELECT 'seed'::text AS record_type, x.source AS seed_source, x.oid AS seed_oid,
+        r.rolname::text AS seed_role,
+        NULL::pg_catalog.oid AS vertex_oid, NULL::text AS vertex_role,
+        NULL::boolean AS rolsuper, NULL::boolean AS rolinherit, NULL::boolean AS rolbypassrls,
+        NULL::boolean AS member_path, NULL::boolean AS usable_without_set_role, NULL::boolean AS can_set_role,
+        NULL::pg_catalog.oid AS membership_oid,
+        NULL::pg_catalog.oid AS edge_from_oid, NULL::text AS edge_from_role,
+        NULL::pg_catalog.oid AS edge_to_oid, NULL::text AS edge_to_role,
+        NULL::boolean AS admin_option, NULL::boolean AS inherit_option, NULL::boolean AS set_option,
+        CASE WHEN r.oid IS NULL THEN 'UNKNOWN' ELSE 'present' END AS row_status
+ FROM seeds x LEFT JOIN pg_catalog.pg_roles r ON r.oid=x.oid
+), vertex_rows AS (
+ SELECT 'vertex'::text, NULL::text, v.seed, v.seed_role,
+        v.oid, v.role_name, v.rolsuper, v.rolinherit, v.rolbypassrls,
+        v.member_path, v.usable_without_set_role, v.can_set_role,
+        NULL::pg_catalog.oid, NULL::pg_catalog.oid, NULL::text, NULL::pg_catalog.oid, NULL::text,
+        NULL::boolean, NULL::boolean, NULL::boolean,
+        CASE WHEN v.seed_role IS NULL OR v.role_name IS NULL THEN 'UNKNOWN' ELSE 'observed' END
+ FROM vertices v
+), edge_rows AS (
+ SELECT 'edge'::text, NULL::text, e.seed, e.seed_role,
+        NULL::pg_catalog.oid, NULL::text, NULL::boolean, NULL::boolean, NULL::boolean,
+        NULL::boolean, NULL::boolean, NULL::boolean,
+        e.membership_oid, e.from_oid, e.from_role, e.to_oid, e.to_role,
+        e.admin_option, e.inherit_option, e.set_option,
+        CASE WHEN e.seed_role IS NULL OR e.from_role IS NULL OR e.to_role IS NULL
+             THEN 'UNKNOWN' ELSE 'observed' END
+ FROM edges e
+)
+SELECT * FROM seed_rows
+UNION ALL SELECT * FROM vertex_rows
+UNION ALL SELECT * FROM edge_rows
+ORDER BY record_type,seed_oid,seed_source,vertex_oid,edge_from_oid,edge_to_oid,membership_oid;
