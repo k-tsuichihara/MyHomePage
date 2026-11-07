@@ -61,6 +61,8 @@ Bを第一候補とする。現在の4署名と本文・属性・schema・CHECK/
 
 ## 5. 将来の変更・復旧計画（実行禁止・SQL未作成）
 
+後続の[適用前チェック・変更/復旧レビュー案](db-audit/R02-ACL-CHANGE-PLAN.md)に非実行のSQLひな型とE01〜E11の対応を整理した。以下と第8章の「SQL未作成」は当時の実行版未作成の履歴として保持する。現在もUNKNOWNを確定した実行可能SQLは未作成で、適用は禁止する。
+
 1. 開発専用環境・対象4完全署名・各owner・既存ACL/NULL/default・Grant Option・全継承・実効権限・schema USAGE・呼出し経路を別承認で確認。復旧用の変更前ACLは非公開保管する。未確認が残れば適用しない。
 2. 必要主体を経路ごとに確定し、対象4署名への最小EXECUTEを設計する。所有権/DEFINER化/スーパーユーザー化で回避しない。GRANTを必要主体へ確保したうえでPUBLIC・anon・authenticatedの直接付与をREVOKEする方針。継承による残存は別ロールへの広範REVOKEで勝手に解消せず相談する。
 3. 正確なGRANT/REVOKEと逆操作案を別PRで静的レビューし、適用・試験・復旧をそれぞれ承認する。default privileges、8RPC ACL、表ACL・RLSは今回の変更対象に含めない。
