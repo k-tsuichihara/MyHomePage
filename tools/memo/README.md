@@ -4,6 +4,8 @@
 
 ブラウザ内にメモを保存するMyHomePageのツールです。公開導線は `tools/memo/memo.html` です。
 
+Ver1.1.0の作業状況・残課題は、進捗管理の正本 [リリース進捗管理](../../docs/RELEASE-PLAN-v1.1.0.md) を参照してください。既存の設計・試験資料と、公開・受入の状態は区別して管理します。
+
 ## 2. 現行実装と利用できる機能
 
 現行本体は [memo.html](memo.html)、[js/memo.js](js/memo.js)、[css/memo.css](css/memo.css) で構成され、JavaScriptとlocalStorageを使用します。
