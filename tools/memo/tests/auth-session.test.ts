@@ -201,6 +201,33 @@ describe('C03 認証状態と通信なしSDK境界', () => {
     await p; expect(f.auth.getContext()).toBeNull(); await flush();
     expect(f.auth.getState().reason).toBe('different-user'); expect(f.auth.getContext()).toBeNull();
   });
+  it.each(['login', 'restore'] as const)('%sのgetUser完了と保留イベント照合の間にもcontextを公開しない', async kind => {
+    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getUser']>>>();
+    f.api.getUser.mockReturnValueOnce(d.promise);
+    const operation = kind === 'login' ? f.auth.login('a', 'b') : f.auth.restore();
+    await flush(); f.setSession(null); f.emit('SIGNED_OUT');
+    d.resolve({ data: { user: { id: A } }, error: null });
+    // verifyの継続直後、runのawait継続前に外部処理がcontextを要求する順序を再現する。
+    await Promise.resolve();
+    const context = f.auth.getContext(); const usable = context ? f.auth.isCurrent(context) : false;
+    expect(context).toBeNull(); expect(usable).toBe(false);
+    await operation; await flush(); expect(f.auth.getContext()).toBeNull();
+    expect(f.auth.getState().phase).toBe('blocked');
+    expect(f.api.signInWithPassword).toHaveBeenCalledTimes(kind === 'login' ? 1 : 0);
+  });
+  it('検証完了と公開の間に破棄した状態へ遅い検証結果を反映しない', async () => {
+    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getUser']>>>();
+    f.api.getUser.mockReturnValueOnce(d.promise); const operation = f.auth.restore(); await flush();
+    d.resolve({ data: { user: { id: A } }, error: null }); await Promise.resolve();
+    f.auth.dispose(); const disposed = f.auth.getState();
+    expect(await operation).toBe('stale'); expect(f.auth.getState()).toBe(disposed); expect(f.auth.getContext()).toBeNull();
+  });
+  it('検証後でも公開直前に期限を迎えた場合はcontextを発行しない', async () => {
+    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getUser']>>>();
+    f.api.getUser.mockReturnValueOnce(d.promise); const operation = f.auth.restore(); await flush();
+    d.resolve({ data: { user: { id: A } }, error: null }); await Promise.resolve(); f.time(200_000);
+    await operation; expect(f.auth.getState().reason).toBe('expired'); expect(f.auth.getContext()).toBeNull();
+  });
   it('破棄後の遅い応答・イベントは無効、購読解除は一度', async () => {
     const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getSession']>>>();
     f.api.getSession.mockReturnValueOnce(d.promise); const p = f.auth.restore(); f.auth.dispose(); f.auth.dispose(); f.emit();

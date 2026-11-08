@@ -55,7 +55,7 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
     if (state.phase === 'authenticated' && state.expiresAt! * 1000 <= now()) block('expired');
     return state;
   }
-  async function verify(raw: unknown, attempt: number): Promise<AuthOperationResult> {
+  async function verify(raw: unknown, attempt: number): Promise<AuthOperationResult | { userId: string; expiresAt: number }> {
     if (disposed || attempt !== serial) return 'stale';
     if (raw === null) {
       if (state.reauthenticateUserId) block('expired');
@@ -75,9 +75,8 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
         block('different-user'); return 'blocked';
       }
       if (identity.expiresAt * 1000 <= now()) { block('expired'); return 'blocked'; }
-      update('authenticated', 'none', verifiedId, identity.expiresAt);
-      state = Object.freeze({ ...state, reauthenticateUserId: null });
-      return 'applied';
+      // awaitの呼出元へ戻る間にも外部microtaskが動くため、ここでは認証状態を公開しない。
+      return { userId: verifiedId, expiresAt: identity.expiresAt };
     } catch {
       if (disposed || attempt !== serial) return 'stale';
       block('unavailable'); return 'blocked';
@@ -94,6 +93,7 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
     const attempt = serial;
     busy = true;
     let confirmedSession: ReturnType<typeof sessionIdentity> | null = null;
+    let verifiedSession: { userId: string; expiresAt: number } | null = null;
     let logoutSucceeded = false;
     try {
       if (kind === 'logout') {
@@ -115,13 +115,21 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
       try { candidate = response.data.session === null ? null : sessionIdentity(response.data.session); }
       catch { block('invalid-session'); return 'blocked'; }
       const result = await verify(response.data.session, attempt);
-      if (result === 'applied' && state.phase === 'authenticated') confirmedSession = candidate;
+      if (typeof result === 'object') {
+        if (disposed || attempt !== serial) return 'stale';
+        confirmedSession = candidate;
+        verifiedSession = result;
+        // 不一致イベントで停止しても、確認できたユーザーとドラフトの対応は保持する。
+        state = Object.freeze({ ...state, reauthenticateUserId: state.reauthenticateUserId ?? result.userId });
+        return 'applied';
+      }
       return result;
     } catch {
       if (disposed || attempt !== serial) return 'stale';
       block('unavailable'); return 'blocked';
     } finally {
       busy = false;
+      let canPublish = !pendingEvent;
       // 失敗したログアウト中の通知は消費だけ行い、意図せず書込許可を復活させない。
       if (pendingEvent && !disposed && (kind !== 'logout' || logoutSucceeded)) {
         const event = pendingEvent;
@@ -131,6 +139,7 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
           && uuidKey(confirmedSession.userId) === uuidKey(event.identity.userId)
           && confirmedSession.expiresAt === event.identity.expiresAt
           && confirmedSession.accessToken === event.identity.accessToken;
+        canPublish = !!duplicate;
         // 新しく確認したセッションとの一致だけをまとめ、以前のcontextは復活させない。
         if (!duplicate) {
           block('unavailable');
@@ -140,6 +149,14 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
         }
       }
       pendingEvent = null;
+      // 保留イベント照合と認証済み公開の間にawaitを置かず、一時的なcontext発行を防ぐ。
+      if (verifiedSession && canPublish && !disposed) {
+        if (verifiedSession.expiresAt * 1000 <= now()) block('expired');
+        else {
+          update('authenticated', 'none', verifiedSession.userId, verifiedSession.expiresAt);
+          state = Object.freeze({ ...state, reauthenticateUserId: null });
+        }
+      }
     }
   }
   let subscription: { unsubscribe(): void } | undefined;
