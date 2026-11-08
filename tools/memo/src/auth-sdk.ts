@@ -42,24 +42,23 @@ export function createMemoSdkAuth(config: { url: string; publicKey: string },
   const safeFetch: typeof fetch = async (input, init) => {
     try {
       if (closed) throw new Error();
-      const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-      const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
-      const password = url.pathname === '/auth/v1/token' && method === 'POST'
-        && url.searchParams.get('grant_type') === 'password';
-      const refresh = url.pathname === '/auth/v1/token' && method === 'POST'
-        && url.searchParams.get('grant_type') === 'refresh_token';
-      const user = url.pathname === '/auth/v1/user' && method === 'GET' && !url.search;
-      const logout = url.pathname === '/auth/v1/logout' && method === 'POST'
-        && url.searchParams.get('scope') === 'local';
-      if (url.origin !== config.url || url.hash || url.username || url.password
-        || !(password || refresh || user || logout)
-        || ((password || refresh || logout) && [...url.searchParams].length !== 1)) throw new Error();
+      if (typeof input !== 'string' && !(input instanceof URL) && !(input instanceof Request)) throw new Error();
+      // getterや元オブジェクトを送信時に再評価せず、判定したRequestそのものを送る。
+      const request = new Request(input instanceof URL ? input.href : input, { ...init, redirect: 'error' });
+      if (request.signal.aborted || typeof input === 'string' && input !== request.url) throw new Error();
+      const user = request.method === 'GET' && request.url === `${config.url}/auth/v1/user`;
+      const mutation = request.method === 'POST' && [
+        `${config.url}/auth/v1/token?grant_type=password`,
+        `${config.url}/auth/v1/token?grant_type=refresh_token`,
+        `${config.url}/auth/v1/logout?scope=local`,
+      ].includes(request.url);
+      if (!user && !mutation) throw new Error();
       const abort = new AbortController();
       const timeout = setTimeout(() => abort.abort(), 15_000);
       try {
-        const response = await transport(input, { ...init, redirect: 'error',
-          signal: init?.signal ? AbortSignal.any([init.signal, abort.signal]) : abort.signal });
-        if (closed || response.redirected || response.status >= 300 && response.status < 400) throw new Error();
+        const response = await transport(request, { redirect: 'error', signal: AbortSignal.any([request.signal, abort.signal]) });
+        if (closed || response.redirected || response.status >= 300 && response.status < 400
+          || response.url && response.url !== request.url) throw new Error();
         if (response.status === 204) return new Response(null, { status: 204 });
         // SDK内部のエラーログにも応答断片が入らないよう、JSON解析例外とエラー本文を固定化する。
         const data: unknown = JSON.parse(await response.text());

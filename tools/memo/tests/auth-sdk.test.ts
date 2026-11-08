@@ -31,7 +31,8 @@ function server(store = memory()) {
   let fail = '';
   const calls: { path: string; method: string; grant: string | null; scope: string | null }[] = [];
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
-    const url = new URL(String(input)); const method = init?.method ?? 'GET';
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
     if (url.origin !== config.url || !url.pathname.startsWith('/auth/v1/')) throw new Error('Unexpected synthetic request');
     expect(init?.redirect).toBe('error');
     calls.push({ path: url.pathname, method, grant: url.searchParams.get('grant_type'), scope: url.searchParams.get('scope') });
