@@ -136,10 +136,57 @@ describe('C03 認証状態と通信なしSDK境界', () => {
   });
   it('再確認中にイベントが続いてもSDK確認を無限再実行しない', async () => {
     const f = fixture(); f.api.getSession.mockImplementation(async () => {
-      f.emit(); return { data: { session: session() }, error: null };
+      f.emit('USER_UPDATED'); return { data: { session: session() }, error: null };
     });
     f.emit(); await flush(); expect(f.api.getSession).toHaveBeenCalledTimes(1);
     expect(f.auth.getContext()).toBeNull();
+  });
+  it('ログイン成功直後の同一イベント重複は新しい確認済みcontextを利用できる', async () => {
+    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
+    f.api.signInWithPassword.mockImplementationOnce(async () => {
+      f.emit('SIGNED_IN'); f.emit('SIGNED_IN'); return { data: { session: session() }, error: null };
+    });
+    expect(await f.auth.login('a', 'b')).toBe('applied'); await flush();
+    expect(f.auth.getState().phase).toBe('authenticated'); expect(f.auth.isCurrent(old)).toBe(false);
+    expect(f.auth.isCurrent(f.auth.getContext()!)).toBe(true); expect(f.api.getSession).toHaveBeenCalledTimes(1);
+    expect(f.api.signInWithPassword).toHaveBeenCalledTimes(1);
+  });
+  it('イベント再確認中の同一トークン更新イベントも確認成功をblockedへ戻さない', async () => {
+    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
+    f.api.getSession.mockImplementationOnce(async () => {
+      f.emit('TOKEN_REFRESHED'); f.emit('TOKEN_REFRESHED'); return { data: { session: session() }, error: null };
+    });
+    f.emit('TOKEN_REFRESHED'); expect(f.auth.getContext()).toBeNull(); await flush();
+    expect(f.auth.getState().phase).toBe('authenticated'); expect(f.auth.isCurrent(old)).toBe(false);
+    expect(f.api.getSession).toHaveBeenCalledTimes(2);
+  });
+  it.each(['getSession', 'getUser'] as const)('ログイン後の再確認%s失敗は停止し、明示restoreでのみ今回の再確認をやり直す', async method => {
+    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
+    f.api.signInWithPassword.mockImplementationOnce(async () => {
+      f.setSession({ ...session(), access_token: 'synthetic-new-token' }); f.emit('TOKEN_REFRESHED');
+      return { data: { session: session() }, error: null };
+    });
+    f.api[method].mockRejectedValueOnce(new Error('synthetic-private'));
+    // getUserは先にログイン応答の確認で使うため、失敗はその次の読取確認に限定する。
+    if (method === 'getUser') f.api.getUser.mockReset().mockResolvedValueOnce({ data: { user: { id: A } }, error: null })
+      .mockRejectedValueOnce(new Error('synthetic-private')).mockResolvedValue({ data: { user: { id: A } }, error: null });
+    await f.auth.login('a', 'b'); await flush();
+    expect(f.auth.getState().phase).toBe('blocked'); expect(f.auth.getState().reauthenticateUserId).toBe(A);
+    expect(f.auth.getContext()).toBeNull(); expect(f.auth.isCurrent(old)).toBe(false);
+    const calls = f.api.getSession.mock.calls.length; await flush(); expect(f.api.getSession).toHaveBeenCalledTimes(calls);
+    expect(await f.auth.restore()).toBe('applied'); expect(f.auth.getState().phase).toBe('authenticated');
+    expect(f.auth.isCurrent(old)).toBe(false); expect(f.api.signInWithPassword).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(f.auth.getState())).not.toContain('synthetic');
+  });
+  it.each([
+    { ...session(), access_token: 'synthetic-other-token' }, session(A, 300), session(B), null,
+  ])('再確認中のトークン・期限・ユーザー・失効の相違を重複扱いしない %#', async eventSession => {
+    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
+    f.api.getSession.mockImplementationOnce(async () => {
+      f.setSession(eventSession); f.emit('TOKEN_REFRESHED'); return { data: { session: session() }, error: null };
+    });
+    f.emit(); await flush(); expect(f.auth.getContext()).toBeNull(); expect(f.auth.isCurrent(old)).toBe(false);
+    expect(f.api.getSession).toHaveBeenCalledTimes(2); expect(f.api.signInWithPassword).not.toHaveBeenCalled();
   });
   it('イベントの生sessionだけを認証根拠にせず、SDKの現在値を確認する', async () => {
     const f = fixture(); await f.auth.restore(); f.setSession(null); f.emit('SIGNED_OUT');

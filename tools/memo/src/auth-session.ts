@@ -23,13 +23,13 @@ export interface MemoAuthState {
 export interface AuthContext { readonly userId: string; readonly generation: number }
 export type AuthOperationResult = 'applied' | 'blocked' | 'busy' | 'stale';
 
-function sessionIdentity(raw: unknown): { userId: string; expiresAt: number } {
+function sessionIdentity(raw: unknown): { userId: string; expiresAt: number; accessToken: string } {
   const value = raw as { user?: { id?: unknown }; expires_at?: unknown; access_token?: unknown } | null;
   if (!value || typeof value.access_token !== 'string' || !value.access_token
     || typeof value.expires_at !== 'number' || !Number.isSafeInteger(value.expires_at) || value.expires_at <= 0) {
     throw new Error('invalid-session');
   }
-  return { userId: uuid(value.user?.id), expiresAt: value.expires_at };
+  return { userId: uuid(value.user?.id), expiresAt: value.expires_at, accessToken: value.access_token };
 }
 
 /** 画面や保存先を変更せず、認証世代に結び付けた利用許可だけを返す。 */
@@ -39,7 +39,8 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
   let serial = 0;
   let busy = false;
   let disposed = false;
-  let pendingEvent = false;
+  // トークンは処理中の同一性比較だけに使い、状態・contextへ含めず消費後に参照を外す。
+  let pendingEvent: { name: string; identity: ReturnType<typeof sessionIdentity> | null } | null = null;
   const contexts = new WeakSet<object>();
   function update(phase: AuthPhase, reason: AuthReason = 'none', userId: string | null = null, expiresAt: number | null = null) {
     state = Object.freeze({ phase, reason, generation: ++serial, userId, expiresAt,
@@ -92,6 +93,7 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
     state = Object.freeze({ ...state, reauthenticateUserId: previous });
     const attempt = serial;
     busy = true;
+    let confirmedSession: ReturnType<typeof sessionIdentity> | null = null;
     try {
       if (kind === 'logout') {
         const response = await auth.signOut({ scope: 'local' });
@@ -106,26 +108,46 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
       if (disposed || attempt !== serial) return 'stale';
       if (response.error) { block('unavailable'); return 'blocked'; }
       if (kind === 'login' && response.data.session === null) { block('invalid-session'); return 'blocked'; }
-      return await verify(response.data.session, attempt);
+      // await中のSDKオブジェクト変更を、検証済みセッションの変更と誤認しない。
+      let candidate: ReturnType<typeof sessionIdentity> | null;
+      try { candidate = response.data.session === null ? null : sessionIdentity(response.data.session); }
+      catch { block('invalid-session'); return 'blocked'; }
+      const result = await verify(response.data.session, attempt);
+      if (result === 'applied' && state.phase === 'authenticated') confirmedSession = candidate;
+      return result;
     } catch {
       if (disposed || attempt !== serial) return 'stale';
       block('unavailable'); return 'blocked';
     } finally {
       busy = false;
       if (pendingEvent && !disposed) {
-        pendingEvent = false;
-        block('unavailable');
-        const generation = serial;
-        // 再確認中のイベントから再確認を連鎖させず、確認不能なら明示操作を待つ。
-        if (!fromEvent) queueMicrotask(() => { if (!disposed && generation === serial) void run('restore', undefined, true); });
+        const event = pendingEvent;
+        pendingEvent = null;
+        const duplicate = confirmedSession && event.identity
+          && ['SIGNED_IN', 'TOKEN_REFRESHED', 'INITIAL_SESSION'].includes(event.name)
+          && uuidKey(confirmedSession.userId) === uuidKey(event.identity.userId)
+          && confirmedSession.expiresAt === event.identity.expiresAt
+          && confirmedSession.accessToken === event.identity.accessToken;
+        // 新しく確認したセッションとの一致だけをまとめ、以前のcontextは復活させない。
+        if (!duplicate) {
+          block('unavailable');
+          const generation = serial;
+          // 異なるイベントの再確認を連鎖させず、上限に達したら書込停止する。
+          if (!fromEvent) queueMicrotask(() => { if (!disposed && generation === serial) void run('restore', undefined, true); });
+        }
       }
+      pendingEvent = null;
     }
   }
   let subscription: { unsubscribe(): void } | undefined;
   try {
-    subscription = auth.onAuthStateChange((_event, _session) => {
+    subscription = auth.onAuthStateChange((event, session) => {
       if (disposed) return;
-      if (busy) { pendingEvent = true; return; }
+      if (busy) {
+        let identity: ReturnType<typeof sessionIdentity> | null = null;
+        try { identity = sessionIdentity(session); } catch { /* 不正イベントは重複と認めない。 */ }
+        pendingEvent = { name: event, identity }; return;
+      }
       // SDK callbackから別のSDK処理をawaitしない。受信内容自体を認証済みと扱わない。
       block('unavailable');
       const eventGeneration = serial;
@@ -161,6 +183,7 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
     dispose() {
       if (disposed) return;
       disposed = true; update('disposed');
+      pendingEvent = null;
       try { subscription?.unsubscribe(); } catch { /* SDK例外を秘密値ごと外へ渡さない。 */ }
     },
   });
