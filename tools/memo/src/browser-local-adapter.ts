@@ -14,8 +14,9 @@ export class BrowserBoundaryError extends Error {
   constructor() { super('Persistence test boundary rejected'); }
 }
 
-/** originだけでプロファイル所有を証明できない。permitは所有検証済みランナーだけが専用入口へ注入する。 */
-export function createBrowserLocalAdapter(env: BrowserLocalEnvironment, permit: PersistencePermit | undefined) {
+/** 実APIの取得前に共通の隔離条件を確認する。originだけで所有を証明したとは扱わない。 */
+export function requirePersistencePermit(env: Pick<BrowserLocalEnvironment, 'origin' | 'secure' | 'topLevel'>,
+  permit: PersistencePermit | undefined): void {
   let allowed = false;
   try {
     const url = new URL(env.origin);
@@ -24,6 +25,11 @@ export function createBrowserLocalAdapter(env: BrowserLocalEnvironment, permit: 
       && Number(url.port) >= 1024 && url.port !== '4173' && env.secure && env.topLevel;
   } catch { /* 不正な許可情報では実APIを取得しない */ }
   if (!allowed) throw new BrowserBoundaryError();
+}
+
+/** permitは所有検証済みランナーだけが専用入口へ注入する。 */
+export function createBrowserLocalAdapter(env: BrowserLocalEnvironment, permit: PersistencePermit | undefined) {
+  requirePersistencePermit(env, permit);
   let locks: LocalLockManager | undefined;
   try { locks = env.getLocks(); } catch { throw new BrowserBoundaryError(); }
   const storage: MigrationStorage = Object.freeze({

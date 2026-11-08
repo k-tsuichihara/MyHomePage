@@ -12,3 +12,4 @@ playwright-report/
 .transition/
 .format/
 .cloud-live/
+.auth-browser/
