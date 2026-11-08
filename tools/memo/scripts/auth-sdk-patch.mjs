@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { readFile, realpath, lstat, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, realpath, lstat, mkdir, writeFile, unlink } from 'node:fs/promises';
 import { resolve, join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -65,6 +65,11 @@ export function requireArtifact(manifest, code) {
 }
 /** すべての検査後だけ出力する。元SDKの書換え・別形式への自動パッチはしない。 */
 export async function buildAuthBrowser({ root, entryPoint, outfile, write = true }) {
+  // 前回のJSは診断用に残すが、新しい試行が失敗した後は起動検証を通さない。
+  if (write) {
+    try { await unlink(`${outfile}.patch.json`); }
+    catch (error) { if (error?.code !== 'ENOENT') fail(); }
+  }
   const installed = await inspectInstalledSdk(root);
   let count = 0;
   const result = await build({ absWorkingDir: installed.root, entryPoints: [entryPoint], outfile, write: false,

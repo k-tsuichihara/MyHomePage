@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, mkdtemp, writeFile, unlink, rmdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { transform } from 'esbuild';
 import { requireVersions, replaceDebugInitializer, patchLocksSource, inspectInstalledSdk,
-  buildAuthBrowser, requireArtifact, requireSingleModule, SOURCE_PATH, SOURCE_SHA256, INITIALIZER, sha256 } from '../../scripts/auth-sdk-patch.mjs';
+  buildAuthBrowser, verifyAuthArtifact, requireArtifact, requireSingleModule, SOURCE_PATH, SOURCE_SHA256, INITIALIZER, sha256 } from '../../scripts/auth-sdk-patch.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const target = join(root, SOURCE_PATH);
@@ -48,6 +48,28 @@ test('古い・書換え済み成果物を拒否', async () => {
 });
 test('未知のパッチ記録を拒否', async () => {
   const { manifest, code } = await compile(); assert.throws(() => requireArtifact({ ...manifest, patchId: 'other' }, code));
+});
+
+test('ビルド失敗後は旧JSを残しても検証記録を失効し、専用起動検証が拒否する', async () => {
+  await mkdir(join(root, '.auth-browser'), { recursive: true });
+  const dir = await mkdtemp(join(root, '.auth-browser/patch-test-'));
+  const outfile = join(dir, 'bundle.js'), entryPoint = join(dir, 'without-sdk.js');
+  try {
+    await buildAuthBrowser({ root, entryPoint: target, outfile });
+    await verifyAuthArtifact(root, outfile);
+    const oldCode = await readFile(outfile);
+    await writeFile(entryPoint, 'export const marker = true;');
+    // SDKがない入力は置換0件となる。失敗を旧ビルドの成功として扱わない。
+    await assert.rejects(buildAuthBrowser({ root, entryPoint, outfile }), /Auth SDK patch verification failed/);
+    assert.deepEqual(await readFile(outfile), oldCode);
+    await assert.rejects(readFile(`${outfile}.patch.json`), { code: 'ENOENT' });
+    await assert.rejects(verifyAuthArtifact(root, outfile));
+  } finally {
+    for (const path of [outfile, `${outfile}.patch.json`, entryPoint]) {
+      try { await unlink(path); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    await rmdir(dir);
+  }
 });
 
 async function loadLocks(request = async (_name, _options, fn) => fn({ name: 'synthetic-lock' })) {

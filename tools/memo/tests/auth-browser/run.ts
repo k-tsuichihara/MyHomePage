@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { createProfileOwner, prepareProfileBase } from '../persistence/profile-guard';
 import { initializeContext, runOwnedCase } from '../persistence/lifecycle';
+import { installAuthStorageGuard } from './storage-guard';
 import type {} from './entry';
 
 if (process.argv.length !== 2) throw new Error('Custom arguments forbidden');
@@ -52,12 +53,7 @@ async function launch(profile: string, permit = true) {
       if (url.origin !== origin || !assets.has(url.pathname) || url.search) { unexpectedRequests++; await route.abort(); }
       else await route.continue();
     });
-    await context.addInitScript(value => {
-      let gets = 0; const getter = Object.getOwnPropertyDescriptor(window, 'localStorage')!.get!;
-      Object.defineProperty(window, '__authStorageGets', { get: () => gets });
-      Object.defineProperty(window, 'localStorage', { get() { gets++; if (!value.permit) throw new Error('Unpermitted storage'); return getter.call(window); } });
-      if (value.permit) Object.defineProperty(window, '__authPermit', { value: Object.freeze({ origin: value.origin, runId: value.runId }) });
-    }, { permit, origin, runId: owner.runId });
+    await context.addInitScript(installAuthStorageGuard, { permit, origin, runId: owner.runId });
     const page = await context.newPage(); await page.goto(origin);
     if (permit) {
       await page.waitForFunction(() => !!window.__authBrowser);
@@ -89,7 +85,8 @@ async function audit(page: Page) {
 }
 try {
   await run('未許可起動はStorage取得0件で停止', profile => withBrowser(profile, async page => {
-    assert.equal(await page.evaluate(() => window.__authStorageGets), 0);
+    assert.deepEqual(await page.evaluate(() => window.__authStorageAudit!()),
+      { gets: 0, reads: 0, writes: 0, removals: 0, denied: 0, touched: [] });
   }, false));
   await run('実Storage保存・再読込・管理Chromium再起動からの復元', async profile => {
     await withBrowser(profile, async page => {

@@ -7,27 +7,15 @@ import { navigatorLock, processLock, NavigatorLockAcquireTimeoutError, createCli
 declare global { interface Window {
   __authPermit?: PersistencePermit;
   __authBrowser?: ReturnType<typeof createHarness>;
-  __authStorageGets?: number;
 } }
 const KEY = 'myhomepage.memo.auth.v1';
-const keys = new Set([KEY, `${KEY}-user`, `${KEY}-code-verifier`, `${KEY}-flows-code-verifier`]);
 const A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const env = { origin: location.origin, secure: isSecureContext, topLevel: window.top === window };
 
 function createHarness() {
   requirePersistencePermit(env, window.__authPermit);
-  let reads = 0, writes = 0, removals = 0, denied = 0, mode = '', sequence = 0, busy = false;
-  const touched = new Set<string>();
-  // 値を収集せず、専用キー以外のアクセスを実Storageへ到達する前に拒否する。
-  for (const method of ['getItem', 'setItem', 'removeItem'] as const) {
-    const original = Storage.prototype[method];
-    Object.defineProperty(Storage.prototype, method, { value: function (this: Storage, key: string, value?: string) {
-      if (!keys.has(key)) { denied++; throw new Error('Forbidden storage key'); }
-      touched.add(key); if (method === 'getItem') reads++; else if (method === 'setItem') writes++; else removals++;
-      return Reflect.apply(original, this, method === 'setItem' ? [key, value] : [key]);
-    } });
-  }
-  for (const method of ['key', 'clear']) Object.defineProperty(Storage.prototype, method, { value() { denied++; throw new Error('Storage enumeration forbidden'); } });
+  let mode = '', sequence = 0, busy = false;
+  if (!window.__authStorageAudit) throw new Error('Early storage guard missing');
   for (const name of ['sessionStorage', 'indexedDB', 'caches', 'cookieStore']) Object.defineProperty(window, name, { get() { throw new Error('Forbidden persistence API'); } });
   Object.defineProperty(Document.prototype, 'cookie', { get() { throw new Error('Forbidden cookie API'); }, set() { throw new Error('Forbidden cookie API'); } });
   for (const name of ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'Worker', 'SharedWorker', 'RTCPeerConnection'])
@@ -134,7 +122,7 @@ function createHarness() {
       window.localStorage.setItem(KEY, JSON.stringify(saved));
     },
     present: () => window.localStorage.getItem(KEY) !== null,
-    audit: () => ({ reads, writes, removals, denied, touched: [...touched], calls: { ...calls } }),
+    audit: () => ({ ...window.__authStorageAudit!(), calls: { ...calls } }),
   };
 }
 try { window.__authBrowser = createHarness(); }
