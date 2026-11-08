@@ -2,6 +2,8 @@
 
 C03のAuth・セッション境界と通信なし試験は [AUTH-SESSION.md](AUTH-SESSION.md) を参照。
 
+実SDK接続も同契約に従い、`auth-sdk.test.ts`で合成保存先と模擬fetchだけを使って検証する。`npm run build:auth`の出力はGit除外済みの検証用資産であり、公開画面へ接続しない。
+
 実接続前の通信なしHTTP境界・段階許可・共通ベクトルは [CLOUD-CONNECTION-FOUNDATION.md](CLOUD-CONNECTION-FOUNDATION.md) を参照。
 
 通信なしSupabase RPCアダプターの境界・エラー分類・非同期責務は [CLOUD-RPC.md](CLOUD-RPC.md) を参照。
