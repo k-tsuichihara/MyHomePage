@@ -218,6 +218,29 @@ describe('C03 認証状態と通信なしSDK境界', () => {
     const f = fixture(); await f.auth.restore(); f.api.signOut.mockResolvedValueOnce({ error: { message: 'private' } });
     expect(await f.auth.logout()).toBe('blocked'); expect(f.auth.getState().reauthenticateUserId).toBe(A);
   });
+  it.each([
+    ['error', 'restore'], ['throw', 'restore'], ['error', 'event'], ['throw', 'event'],
+  ] as const)('ログアウト%sと待機中イベントでは自動復帰せず、後続%sで再確認する', async (failure, recovery) => {
+    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
+    const d = deferred<{ error: unknown }>();
+    f.api.signOut.mockImplementationOnce(async () => {
+      const result = await d.promise;
+      if (failure === 'throw') throw new Error('synthetic-private');
+      return result;
+    });
+    const operation = f.auth.logout(); f.emit('TOKEN_REFRESHED');
+    d.resolve({ error: { message: 'synthetic-private' } });
+    expect(await operation).toBe('blocked'); await flush();
+    expect(f.auth.getState().phase).toBe('blocked'); expect(f.auth.getState().reauthenticateUserId).toBe(A);
+    expect(f.auth.getContext()).toBeNull(); expect(f.auth.isCurrent(old)).toBe(false);
+    expect(f.api.getSession).toHaveBeenCalledTimes(1); expect(f.api.getUser).toHaveBeenCalledTimes(1);
+    await flush(); expect(f.api.getSession).toHaveBeenCalledTimes(1);
+    if (recovery === 'restore') expect(await f.auth.restore()).toBe('applied');
+    else { f.emit('TOKEN_REFRESHED'); await flush(); }
+    expect(f.auth.getState().phase).toBe('authenticated'); expect(f.auth.isCurrent(old)).toBe(false);
+    expect(f.api.signOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' });
+    expect(f.api.signInWithPassword).not.toHaveBeenCalled();
+  });
 });
 
 describe('明示クライアント生成とセッション保持設定', () => {

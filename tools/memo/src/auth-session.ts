@@ -94,11 +94,13 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
     const attempt = serial;
     busy = true;
     let confirmedSession: ReturnType<typeof sessionIdentity> | null = null;
+    let logoutSucceeded = false;
     try {
       if (kind === 'logout') {
         const response = await auth.signOut({ scope: 'local' });
         if (disposed || attempt !== serial) return 'stale';
         if (response.error) { block('unavailable'); return 'blocked'; }
+        logoutSucceeded = true;
         update('signed-out');
         state = Object.freeze({ ...state, reauthenticateUserId: null });
         return 'applied';
@@ -120,7 +122,8 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
       block('unavailable'); return 'blocked';
     } finally {
       busy = false;
-      if (pendingEvent && !disposed) {
+      // 失敗したログアウト中の通知は消費だけ行い、意図せず書込許可を復活させない。
+      if (pendingEvent && !disposed && (kind !== 'logout' || logoutSucceeded)) {
         const event = pendingEvent;
         pendingEvent = null;
         const duplicate = confirmedSession && event.identity
