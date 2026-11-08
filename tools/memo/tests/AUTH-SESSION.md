@@ -1,5 +1,69 @@
 # C03：Auth・セッション接続契約と試験方針
 
+## PR #51後：実ブラウザStorageへの接続と限定ビルドパッチ
+
+### 現在の境界・検証結果
+
+オーナー承認により、以下の固定SDKの`lib/locks`にある`internals.debug`初期化式だけを、esbuild読込時にメモリ上で`false`へ置換する。node_modules、ロック取得・解放・待機・例外処理は変更しない。SDK/TypeScriptの版と既存の型検査設定も維持する。
+
+| 検証対象 | 固定値・条件 |
+|---|---|
+| @supabase/supabase-js | 2.119.0（実package.jsonとlockfileを別々に確認） |
+| @supabase/auth-js | 2.119.0（上記とは別パッケージ。実版・依存指定・lockfileを確認） |
+| 対象 | `node_modules/@supabase/auth-js/dist/module/lib/locks.js`だけ |
+| 元ファイルSHA-256 | `dff51f514d51045d15216c9c76239290b15a646f12e34449234960622e0366ff`（公開SDKのハッシュ） |
+| 置換 | 既知の初期化式1件だけ。前後のコードが不変であることを照合 |
+| 停止 | 版・パス・実体パス・SHA・置換件数の不一致、別経路のauth-js locks混入、成果物に未適用デバッグキー参照が残る場合 |
+
+`scripts/auth-sdk-patch.mjs`をAuthブラウザビルドの共通入口とし、`build:auth`と`build:auth-browser`から使用する。検査完了までは成果物を書き出さず、失敗時に未適用ビルドへフォールバックしない。ブラウザランナーもSDKと成果物ハッシュ・パッチ記録を起動前に再照合する。この記録はビルドの対応確認であり、署名・悪意ある同一OS利用者への防御・アプリソースの鮮度保証ではない。
+
+SDKを未加工のままブラウザへ直接importする経路は未対応である。将来の製品入口や別ビルドにSDKを追加するときも、この検証付きビルドを利用し、未許可import時のStorage取得0件を確認する。SDK更新・対象変更・ハッシュ更新は別承認とレビューを必要とし、デバッグ初期化修正が上流で提供された場合はパッチ廃止を検討する。
+
+検証は次の順序とし、最初の安全ゲートで失敗した場合は後続を実行しない。
+
+1. `test:auth-patch`：22件。固定版・元SHA・パス・置換件数・前後不変・別経路/CJS混入・成果物照合の拒否、ブラウザ相当importでStorage取得0件、navigatorLock/processLockの委譲・例外・直列化・解放を確認する。実Storageを使用しない。
+2. `test:auth-browser`：所有ガード付き新規Chromium profileと専用loopback originで11件。最初に未許可起動のStorage取得0件を確認してから、以下の合成Auth試験を行う。
+
+| ケース | 実測結果と範囲 |
+|---|---|
+| 未許可起動 | PASS。実Storage getter取得0件で停止 |
+| 保存・再読込・再起動 | PASS。実localStorageの専用キーへ保存し、ページ再読込・管理Chromium終了/再起動後に復元 |
+| localログアウト | PASS。専用セッションを除去し再読込後も未ログイン、旧context無効 |
+| 期限切れ | PASS。合成expires_at注入後のSDK更新と旧context無効化 |
+| 更新拒否 | PASS。書込停止後に明示的な同一ユーザー再認証 |
+| ユーザー照会拒否 | PASS。書込停止後に明示的な同一ユーザー再認証 |
+| Storage取得例外 | PASS。空セッション扱いせず停止、明示的な再初期化で復帰 |
+| 破棄・再初期化・二重操作 | PASS。旧context無効、処理中の二重ログインは送信1件 |
+| 複数タブ通知 | PASS。同一専用originの2タブでログイン通知・localログアウトによる他タブ書込停止 |
+| 遅いSDK更新 | PASS。他タブログアウト後の更新応答でセッション・旧contextを復活させない |
+| ロック | PASS。実Web Locks取得・取得不可例外・解放後再取得、processLockの待機timeoutと再取得、SDK custom lock委譲を確認 |
+
+各ケースで専用4キー以外へのStorage操作拒否、外部要求・機密値ログ・pageerror・Cookieの検出を行う。通常のSDKセッション制御と、明示的に呼ぶロック単体試験は別であり、全Auth操作がWeb Locksを使用するという保証ではない。HTTP応答はメモリ内の合成応答で、Authサービスの更新トークン失効や競合の実証ではない。
+
+本番Auth、実アカウント、サーバー側local失効、実時間経過による全自動更新/バックオフ、実Storage容量不足・端末固有の拒否、Firefox/WebKitは未検証。製品UI・環境設定・C04/C05は未結線であり、C03は進行中とする。過去の失敗profileは保全したまま触れず、今回成功したprofileだけを既存の所有検証付き手順で破棄する。
+
+### 今回の回帰確認
+
+基準mainは`337556b`（PR #51マージ後）。型チェック、全Vitest34ファイル1,445件（既存1,438件＋ブラウザ許可境界7件）、パッチ専用Node試験22件、Auth隔離ブラウザ11件、既存メモリE2E83件、永続化E2E22件、形式更新E2E16件、切替E2E20件、通信なしクラウド10件がPASS。auth/auth-browser/preview/persistence/format/transition/cloud-offlineの7ビルドを確認した。既存の永続化容量試験はテスト所有の独立profile内で再現してPASSしたが、Auth専用保存先の容量不足試験とは区別する。
+
+通常データ用アダプターの既存許可条件を`requirePersistencePermit`へ切り出し、Auth用もStorage取得前に同じ条件を適用する。旧キー・v2/v3保存形式・保存API・移行/復旧・公開HTML/JS/CSS・メモリE2Eの禁止APIガードは変更しない。SDK元ファイルのSHAは試験・ビルド後も固定値と一致し、node_modulesを直接変更していない。
+
+### 限定パッチ承認前の停止記録（以下は当時の状況）
+
+**安全ゲートで停止中。** 最初の未許可起動試験で、Storage getterの取得回数が期待0件に対し1件になった。getterは拒否を返すため実Storageの値は取得していない。SDK 2.119.0に含まれるauth-jsの`lib/locks`はモジュール初期化時に`internals.debug`を判定し、`supportsLocalStorage()`を呼ぶ。同関数には`lswt-*`キーの書込/除去probeがあり、その後`supabase.gotrue-js.locks.debug`も参照する構造がある。SDK生成時の専用storage注入やdebug:falseでは、このimport時の処理を防げない。
+
+既存のNode試験をブラウザimport時の安全性確認へ流用できないため、後続のブラウザ試験は未実施とした。SDK依存処理の限定的な修正、又は別の隔離方法は設計承認待ちであり、ガードを緩めたりSDKバージョンを変更したりしていない。失敗した所有profileはContext終了後に既存ガードで保全し、自動削除していない。パス・保存内容は公開資料へ載せない。
+
+ここまでの型チェックと接続前の単体20ケース（新規Auth許可7件・既存ローカル境界13件）、専用ビルドはPASS。実ブラウザ試験は最初の安全ゲート1ケースがFAILで停止。再読込・再起動・失効等の後続シナリオは未実施であり合格扱いしない。コミット・push・PR作成前に停止している。
+
+- 既存の所有プロファイル・専用loopback origin・permitを再利用する。Storage取得前の許可判定を通常データ用アダプターと共有し、許可なし・公開origin・埋込画面等は取得0件で停止する。専用入口は本番で使用する許可情報の代替ではない。
+- `browser-auth.ts`はgetStorageを明示注入し、既存SDK接続と専用キー制限を再利用する。Storage列挙・clearを公開せず、旧/新メモキー・読書アプリキーへアクセスしない。SDKのメモ専用BroadcastChannel通知はAuthセッションの通知であり、メモデータ同期ではない。
+- 専用HTMLは合成Auth操作の検証だけを表示する。パスワード欄や実Auth設定の入力機能は作らず、合成資格情報・合成JWTをページ内だけで生成する。ネイティブfetch等を禁止し、SDKへ注入する関数がAuth応答をメモリ内で返す。CSP connect-src none・到達不能proxy・Context要求監視で外部通信を遮断する。
+- 実localStorageの4専用キー以外へのget/set/remove、列挙・clearを試験ページで監視・禁止する。監視にはキー名・件数だけを使い、保存値・本文・資格情報をDOM/Node側/ログへ渡さない。Cookie・IndexedDB等の他の永続APIは使用しない。
+- 合成ログイン→実Storage保存→ページ再読込→同一所有profileでChromium再起動→復元、localログアウト→再読込後の未ログイン、合成期限切れ→SDK更新/更新拒否、ユーザー照会失効→同一ユーザー再認証、明示dispose→再初期化を検証する。期限切れは専用キー内の合成expires_at変更による注入であり、長時間経過の実証ではない。
+- 未許可起動・Storage取得例外・処理中二重操作・古いcontextも検証する。失敗はブラウザ終了後にprofileを保全し、成功した所有profileだけを既存ガードで破棄する。
+- 製品UIへはまだ接続しない。将来の画面ホストはAuthインスタンスを画面再描画ごとに作り直さず、初期化/終了と処理中の離脱を管理する。ログアウト前の離脱確認、C04要求の照合、C05保存先切替は別責務。ページ終了時のdisposeはベストエフォートであり、既に開始した処理やサーバー側操作の取消保証ではない。
+
 ## PR #50後のSDK接続作業と型宣言障害
 
 導入時にSDK 2.111.0と2.119.0で、既存TypeScript 7.0.2のDOM型とSDK内部の`PublicKeyCredentialFuture`宣言が衝突し、変更前設定の型チェックはTS2430でFAILした。その時点で停止・報告し、オーナー承認後に下記の対応で再開した。以下のPR #50の合格記録を今回のSDK結線の合格へ流用しない。
