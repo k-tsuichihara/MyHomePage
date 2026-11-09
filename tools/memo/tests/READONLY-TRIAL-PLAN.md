@@ -10,7 +10,8 @@ PR #58 の `PRELIVE-RPC-AUDIT.md` と `SINGLE-RPC-ACCEPTANCE.md` に基づく、
 
 オーナーが各項目を確認し、未確認の項目があれば停止する。
 
-- [ ] 対象が開発用Supabase Project Ref `dev-sandbox` であり、本番Projectではない。
+- [ ] Dashboardの表示名が `dev-sandbox` であることを確認する。
+- [ ] DashboardのProject Refが固定設定値 `yohoppqflnhhvqypwhfv` と一致し、固定 `MEMO_RPC_ORIGIN` がそのRefに対応することを確認する。表示名だけで合格にしない。
 - [ ] HTTPS origin がリポジトリの固定 `MEMO_RPC_ORIGIN` と一致する。
 - [ ] Review8 SQLの適用状態、`memo_load_snapshot()` の存在・署名・`authenticated` EXECUTE、対象テーブルのRLSをDashboardで確認する（実測値は非公開記録）。
 - [ ] PostgREST設定とAPI到達先が対象Projectのものだと確認する。
