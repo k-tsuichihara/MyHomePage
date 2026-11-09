@@ -11,7 +11,8 @@ const input = (): CloudSaveInput => ({ memoId: ID, title: '復元対象', body: 
 const saved = () => ({ memo: { id: ID, user_id: OWNER, title: '復元対象', body: '本文', created_at: DATE, updated_at: DATE,
   pinned_at: null, deleted_at: null, revision: 1, last_request_id: REQUEST }, tagIds: [TAG] });
 const response = (body: unknown, status = 200): CloudTransportResponse => ({ provenance: 'single-rpc', status, body });
-function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
+function deferred<T>() { let resolve!: (value: T) => void, reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((r, j) => { resolve = r; reject = j; }); return { promise, resolve, reject }; }
 
 function fixture(senderImplementation: AuthenticatedRpcSender = async (_token, rpc) => response(rpc === 'memo_load_snapshot'
   ? { memos: [], tags: [], memoTags: [] } : saved())) {
@@ -161,14 +162,61 @@ describe('C04 認証世代に結び付けたRPC制御', () => {
     expect(f.sender).not.toHaveBeenCalled();
   });
 
-  it('dispose後は保持要求を含む全操作を停止する', async () => {
-    const f = fixture(async () => { throw new Error('disconnect'); });
+  it('未確定pendingがあればdisposeを拒否し、明示resolve経路を維持する', async () => {
+    const f = fixture(async (_secret, rpc) => {
+      if (rpc === 'memo_save') throw new Error('disconnect');
+      return response({ status: 'previously-applied-deleted' });
+    });
     const first = await f.controller.save(context(), input());
     if (first.kind !== 'unresolved') throw new Error('expected unresolved');
-    f.controller.dispose();
-    expect(await f.controller.resolve(context(), first.pending)).toEqual({ kind: 'stopped', reason: 'disposed' });
+    expect(f.controller.dispose()).toBe('pending');
+    const diagnosis = await f.controller.resolve(context(), first.pending);
+    expect(diagnosis).toMatchObject({ kind: 'diagnosed', pendingActive: false,
+      result: { kind: 'ok', value: { kind: 'previously-applied-deleted' } } });
+    expect(f.controller.dispose()).toBe('applied');
     expect(await f.controller.load(context())).toEqual({ kind: 'stopped', reason: 'disposed' });
-    expect(f.sender).toHaveBeenCalledOnce();
+    expect(f.sender).toHaveBeenCalledTimes(2);
+  });
+
+  it('送信中saveのdisposeをbusyで拒否し、結果不明要求を引き続き診断できる', async () => {
+    const gate = deferred<CloudTransportResponse>();
+    const f = fixture((_secret, rpc) => rpc === 'memo_save' ? gate.promise : Promise.resolve(response(null)));
+    const operation = f.controller.save(context(), input());
+    await vi.waitFor(() => expect(f.sender).toHaveBeenCalledOnce());
+    expect(f.controller.dispose()).toBe('busy');
+    gate.reject(new Error('disconnect'));
+    const result = await operation;
+    expect(result.kind).toBe('unresolved');
+    if (result.kind !== 'unresolved') throw new Error('expected unresolved');
+    expect(f.controller.dispose()).toBe('pending');
+    expect(await f.controller.resolve(context(), result.pending)).toMatchObject({ kind: 'diagnosed', pendingActive: true,
+      result: { kind: 'ok', value: { kind: 'no-record' } } });
+  });
+
+  it('送信中loadのdisposeをbusyで拒否し、応答後に安全に終了できる', async () => {
+    const gate = deferred<CloudTransportResponse>(); const f = fixture(() => gate.promise);
+    const operation = f.controller.load(context());
+    await vi.waitFor(() => expect(f.sender).toHaveBeenCalledOnce());
+    expect(f.controller.dispose()).toBe('busy');
+    gate.resolve(response({ memos: [], tags: [], memoTags: [] }));
+    expect((await operation).kind).toBe('completed');
+    expect(f.controller.dispose()).toBe('applied');
+  });
+
+  it('送信中resolveのdisposeをbusyで拒否し、no-record後はpendingを維持する', async () => {
+    const gate = deferred<CloudTransportResponse>();
+    const f = fixture(async (_secret, rpc) => {
+      if (rpc === 'memo_save') throw new Error('disconnect');
+      return gate.promise;
+    });
+    const first = await f.controller.save(context(), input());
+    if (first.kind !== 'unresolved') throw new Error('expected unresolved');
+    const operation = f.controller.resolve(context(), first.pending);
+    await vi.waitFor(() => expect(f.sender).toHaveBeenCalledTimes(2));
+    expect(f.controller.dispose()).toBe('busy');
+    gate.resolve(response(null));
+    expect(await operation).toMatchObject({ kind: 'diagnosed', pendingActive: true });
+    expect(f.controller.dispose()).toBe('pending');
   });
 
   it('処理中の二重操作をbusyで拒否し、自動再送しない', async () => {

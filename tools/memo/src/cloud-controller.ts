@@ -38,6 +38,7 @@ export type CloudResolveControlResult =
   | { readonly kind: 'diagnosed'; readonly result: CloudResolveResult; readonly pending: PendingCloudSave;
     readonly pendingActive: boolean }
   | { readonly kind: 'unresolved'; readonly result: CloudResolveResult; readonly pending: PendingCloudSave };
+export type CloudControllerDisposeResult = 'applied' | 'busy' | 'pending';
 
 function freezeSaveInput(input: CloudSaveInput): CloudSaveInput {
   return Object.freeze({
@@ -57,6 +58,7 @@ function freezeSaveInput(input: CloudSaveInput): CloudSaveInput {
 export function createCloudController(auth: CloudAuthBoundary) {
   let busy = false;
   let disposed = false;
+  let openPendingCount = 0;
   const pendingSaves = new WeakMap<object, 'pending' | 'closed'>();
 
   const stopped = (preparation: Exclude<AuthRpcPreparation, { readonly kind: 'ready' }>): CloudControlResult<never> => ({
@@ -74,6 +76,7 @@ export function createCloudController(auth: CloudAuthBoundary) {
   function makePending(context: AuthContext, input: CloudSaveInput): PendingCloudSave {
     const pending = Object.freeze({ ownerId: context.userId, authGeneration: context.generation, input });
     pendingSaves.set(pending, 'pending');
+    openPendingCount++;
     return pending;
   }
 
@@ -145,10 +148,19 @@ export function createCloudController(auth: CloudAuthBoundary) {
           return { kind: 'unresolved', result, pending } as const;
         }
         const pendingActive = result.kind !== 'ok' || result.value.kind === 'no-record';
-        if (!pendingActive) pendingSaves.set(pending, 'closed');
+        if (!pendingActive) {
+          pendingSaves.set(pending, 'closed');
+          openPendingCount--;
+        }
         return { kind: 'diagnosed', result, pending, pendingActive } as const;
       });
     },
-    dispose() { disposed = true; },
+    dispose(): CloudControllerDisposeResult {
+      if (disposed) return 'applied';
+      if (busy) return 'busy';
+      if (openPendingCount > 0) return 'pending';
+      disposed = true;
+      return 'applied';
+    },
   });
 }

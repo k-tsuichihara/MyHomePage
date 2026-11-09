@@ -23,7 +23,8 @@
 - `diagnosed`は照合RPCが確定応答を返したことだけを表し、「保存済み」や「未送信確定」を一律には表さない。呼出側は内包するC01結果と`pendingActive`を確認する。
 - `no-record`は未実行の証明ではない。保持要求を`pending`のまま残し、利用者の別の明示操作による再診断を可能にする。自動再診断・自動再送はしない。
 - saved履歴または削除済みreceiptを確認した保持要求は`closed`にし、同じpendingでの二重resolveを`request-closed`として拒否する。これは現在のメモ状態が同じことの保証ではない。
-- controllerを`dispose()`した後は新規操作と既存pendingのresolveを拒否する。画面終了をまたぐpending永続化は今回実装しない。
+- `dispose()`は処理中なら`busy`、未確定pendingが残るなら`pending`を返して終端化を拒否する。呼出側は操作結果または未確定要求を利用者へ提示し、確定照合後に再度disposeする。これらの戻り値を無視して画面を破棄してはならない。
+- 処理中でも未確定要求がなく、disposeが`applied`を返した後だけ新規操作を拒否する。画面終了をまたぐpending永続化は今回実装しないため、pendingを保持したままのdispose成功を許可しない。
 - controller内では1操作だけを実行し、処理中の二重操作は`busy`で拒否する。
 
 ## C01・C02との境界
@@ -48,5 +49,6 @@
 - 保存元を後から変更しても、ID、本文、タグ、revision、requestId、所有者が変化しないこと。
 - 結果不明後も自動再送せず、明示resolveで同じ要求を使うこと。`no-record`と削除済みreceiptを区別すること。
 - 送信前transport停止がC01で通信不明へ変換されても、`wasSent() === false`ならC04が`stopped`へ戻すこと。
-- `no-record`後は同じpendingを再診断でき、saved履歴・削除済みreceipt後の二重resolveとdispose後の操作は拒否すること。
+- `no-record`後は同じpendingを再診断でき、saved履歴・削除済みreceipt後の二重resolveを拒否すること。
+- save/load/resolveの送信中はdisposeを`busy`で拒否すること。未確定pendingがあれば`pending`で拒否し、確定照合後だけ`applied`で終端化すること。
 - 処理中の二重操作を拒否し、Bearer値や送信例外の本文が公開結果へ混入しないこと。
