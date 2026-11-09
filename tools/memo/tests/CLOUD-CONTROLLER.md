@@ -20,7 +20,10 @@
 - C01が書込結果不明を返した場合は`unresolved`として固定要求を保持し、自動再送・自動ロールバック・自動resolveを行わない。
 - `resolve`は、このcontrollerが発行した保持要求に対する明示操作だけを受け付ける。偽造した要求、別所有者への付替えを拒否する。
 - 同じ所有者が再認証した場合は、新しい現在の`AuthContext`で元要求を明示照合できる。元のrequestIdや送信内容は変更しない。
-- `no-record`は未実行の証明ではなく診断結果として返し、保持要求を暗黙に再送しない。削除済みreceiptも通常の保存成功と区別する。
+- `diagnosed`は照合RPCが確定応答を返したことだけを表し、「保存済み」や「未送信確定」を一律には表さない。呼出側は内包するC01結果と`pendingActive`を確認する。
+- `no-record`は未実行の証明ではない。保持要求を`pending`のまま残し、利用者の別の明示操作による再診断を可能にする。自動再診断・自動再送はしない。
+- saved履歴または削除済みreceiptを確認した保持要求は`closed`にし、同じpendingでの二重resolveを`request-closed`として拒否する。これは現在のメモ状態が同じことの保証ではない。
+- controllerを`dispose()`した後は新規操作と既存pendingのresolveを拒否する。画面終了をまたぐpending永続化は今回実装しない。
 - controller内では1操作だけを実行し、処理中の二重操作は`busy`で拒否する。
 
 ## C01・C02との境界
@@ -28,6 +31,8 @@
 - C01の`CloudResult`、厳格なDB応答検証、所有者照合、エラー分類は変更しない。認証停止・古い応答・保持中要求はC04の上位結果で表す。
 - C02の固定開発origin、8 RPC、リダイレクト拒否、回数制限、`unverified`などのテスト専用契約を緩めない。
 - 今回の合成senderは通信なし試験専用であり、実HTTP経路を`single-rpc`として認定しない。
+- 現在の`createMemoSdkAuth()`は`rpcSender`を注入しておらず、製品用RPC能力は未結線である。後続PRでは製品composition rootで、承認済みorigin・8 RPC・リダイレクト拒否・出所判定を満たすsenderをAuth生成時だけに注入する。UIへsenderやBearerを渡さない。
+- Auth用`safeFetch`の許可範囲は拡張しない。実送信経路と`single-rpc`認定は別のレビュー・検証を必要とする。
 
 ## 結果が保証しないこと
 
@@ -42,4 +47,6 @@
 - 送信後失効では応答を反映せず、saveの固定要求だけを照合用に保持すること。
 - 保存元を後から変更しても、ID、本文、タグ、revision、requestId、所有者が変化しないこと。
 - 結果不明後も自動再送せず、明示resolveで同じ要求を使うこと。`no-record`と削除済みreceiptを区別すること。
+- 送信前transport停止がC01で通信不明へ変換されても、`wasSent() === false`ならC04が`stopped`へ戻すこと。
+- `no-record`後は同じpendingを再診断でき、saved履歴・削除済みreceipt後の二重resolveとdispose後の操作は拒否すること。
 - 処理中の二重操作を拒否し、Bearer値や送信例外の本文が公開結果へ混入しないこと。

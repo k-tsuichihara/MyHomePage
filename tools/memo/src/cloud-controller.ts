@@ -21,7 +21,8 @@ export interface PendingCloudSave {
 
 type CloudControlResult<T> =
   | { readonly kind: 'completed'; readonly result: T }
-  | { readonly kind: 'stopped'; readonly reason: 'auth-not-current' | 'auth-unavailable' | 'owner-mismatch' }
+  | { readonly kind: 'stopped'; readonly reason: 'auth-not-current' | 'auth-unavailable' | 'owner-mismatch'
+    | 'invalid-pending' | 'request-closed' | 'disposed' }
   | { readonly kind: 'busy' };
 
 export type CloudLoadControlResult = CloudControlResult<CloudLoadResult>
@@ -34,7 +35,8 @@ export type CloudSaveControlResult = CloudControlResult<CloudSaveResult>
 export type CloudResolveControlResult =
   | CloudControlResult<CloudResolveResult>
   | { readonly kind: 'stale-response'; readonly pending: PendingCloudSave }
-  | { readonly kind: 'diagnosed'; readonly result: CloudResolveResult; readonly pending: PendingCloudSave }
+  | { readonly kind: 'diagnosed'; readonly result: CloudResolveResult; readonly pending: PendingCloudSave;
+    readonly pendingActive: boolean }
   | { readonly kind: 'unresolved'; readonly result: CloudResolveResult; readonly pending: PendingCloudSave };
 
 function freezeSaveInput(input: CloudSaveInput): CloudSaveInput {
@@ -54,7 +56,8 @@ function freezeSaveInput(input: CloudSaveInput): CloudSaveInput {
  */
 export function createCloudController(auth: CloudAuthBoundary) {
   let busy = false;
-  const pendingSaves = new WeakSet<object>();
+  let disposed = false;
+  const pendingSaves = new WeakMap<object, 'pending' | 'closed'>();
 
   const stopped = (preparation: Exclude<AuthRpcPreparation, { readonly kind: 'ready' }>): CloudControlResult<never> => ({
     kind: 'stopped',
@@ -70,7 +73,7 @@ export function createCloudController(auth: CloudAuthBoundary) {
 
   function makePending(context: AuthContext, input: CloudSaveInput): PendingCloudSave {
     const pending = Object.freeze({ ownerId: context.userId, authGeneration: context.generation, input });
-    pendingSaves.add(pending);
+    pendingSaves.set(pending, 'pending');
     return pending;
   }
 
@@ -84,12 +87,12 @@ export function createCloudController(auth: CloudAuthBoundary) {
   return Object.freeze({
     async load(context: AuthContext): Promise<CloudLoadControlResult> {
       return exclusive(async () => {
+        if (disposed) return { kind: 'stopped', reason: 'disposed' } as const;
         const preparation = await prepare(context);
         if (preparation.kind !== 'ready') return stopped(preparation);
         const result = await createCloudRpcAdapter(preparation.ownerId, preparation.transport).load();
-        if (!auth.isCurrent(context)) return preparation.wasSent()
-          ? { kind: 'stale-response' } as const
-          : { kind: 'stopped', reason: 'auth-not-current' } as const;
+        if (!preparation.wasSent()) return { kind: 'stopped', reason: 'auth-not-current' } as const;
+        if (disposed || !auth.isCurrent(context)) return { kind: 'stale-response' } as const;
         return { kind: 'completed', result } as const;
       });
     },
@@ -97,16 +100,20 @@ export function createCloudController(auth: CloudAuthBoundary) {
     async save(context: AuthContext, input: CloudSaveInput): Promise<CloudSaveControlResult> {
       const frozen = freezeSaveInput(input);
       return exclusive(async () => {
+        if (disposed) return { kind: 'stopped', reason: 'disposed' } as const;
         const preparation = await prepare(context);
         if (preparation.kind !== 'ready') return stopped(preparation);
         if (uuidKey(preparation.ownerId) !== uuidKey(context.userId)) {
           return { kind: 'stopped', reason: 'owner-mismatch' } as const;
         }
         const result = await createCloudRpcAdapter(preparation.ownerId, preparation.transport).save(frozen);
-        if (!auth.isCurrent(context)) {
+        if (!preparation.wasSent() && result.kind !== 'not-attempted') {
+          return { kind: 'stopped', reason: 'auth-not-current' } as const;
+        }
+        if (disposed || !auth.isCurrent(context)) {
           return preparation.wasSent()
             ? { kind: 'stale-response', pending: makePending(context, frozen) } as const
-            : { kind: 'stopped', reason: 'auth-not-current' } as const;
+            : { kind: 'stopped', reason: disposed ? 'disposed' : 'auth-not-current' } as const;
         }
         if (result.kind === 'unknown') {
           return { kind: 'unresolved', result, pending: makePending(context, frozen) } as const;
@@ -117,23 +124,31 @@ export function createCloudController(auth: CloudAuthBoundary) {
 
     async resolve(context: AuthContext, pending: PendingCloudSave): Promise<CloudResolveControlResult> {
       return exclusive(async () => {
-        if (!pendingSaves.has(pending) || uuidKey(pending.ownerId) !== uuidKey(context.userId)) {
-          return { kind: 'stopped', reason: 'owner-mismatch' } as const;
-        }
+        if (disposed) return { kind: 'stopped', reason: 'disposed' } as const;
+        const pendingState = pendingSaves.get(pending);
+        if (!pendingState) return { kind: 'stopped', reason: 'invalid-pending' } as const;
+        if (pendingState === 'closed') return { kind: 'stopped', reason: 'request-closed' } as const;
+        if (uuidKey(pending.ownerId) !== uuidKey(context.userId)) return { kind: 'stopped', reason: 'owner-mismatch' } as const;
         const preparation = await prepare(context);
         if (preparation.kind !== 'ready') return stopped(preparation);
         if (uuidKey(preparation.ownerId) !== uuidKey(pending.ownerId)) {
           return { kind: 'stopped', reason: 'owner-mismatch' } as const;
         }
         const result = await createCloudRpcAdapter(preparation.ownerId, preparation.transport).resolve(pending.input);
-        if (!auth.isCurrent(context)) return preparation.wasSent()
+        if (!preparation.wasSent() && result.kind !== 'not-attempted') {
+          return { kind: 'stopped', reason: 'auth-not-current' } as const;
+        }
+        if (disposed || !auth.isCurrent(context)) return preparation.wasSent()
           ? { kind: 'stale-response', pending } as const
-          : { kind: 'stopped', reason: 'auth-not-current' } as const;
+          : { kind: 'stopped', reason: disposed ? 'disposed' : 'auth-not-current' } as const;
         if (result.kind === 'failed' || result.kind === 'unknown') {
           return { kind: 'unresolved', result, pending } as const;
         }
-        return { kind: 'diagnosed', result, pending } as const;
+        const pendingActive = result.kind !== 'ok' || result.value.kind === 'no-record';
+        if (!pendingActive) pendingSaves.set(pending, 'closed');
+        return { kind: 'diagnosed', result, pending, pendingActive } as const;
       });
     },
+    dispose() { disposed = true; },
   });
 }

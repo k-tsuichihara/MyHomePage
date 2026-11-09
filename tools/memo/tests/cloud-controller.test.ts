@@ -61,6 +61,23 @@ describe('C04 認証世代に結び付けたRPC制御', () => {
     expect(f.sender).not.toHaveBeenCalled();
   });
 
+  it('transportが送信前停止を通知した場合はC01のunknownをstoppedへ戻す', async () => {
+    const boundary: CloudAuthBoundary = {
+      isCurrent: () => true,
+      prepareRpc: async () => ({ kind: 'ready', ownerId: OWNER,
+        transport: async () => { throw new Error('auth-context-stale'); }, wasSent: () => false }),
+    };
+    const result = await createCloudController(boundary).save(context(), input());
+    expect(result).toEqual({ kind: 'stopped', reason: 'auth-not-current' });
+  });
+
+  it('入力不正によるnot-attemptedは認証停止へ読み替えず、送信0件を維持する', async () => {
+    const f = fixture();
+    const result = await f.controller.save(context(), { ...input(), memoId: 'invalid' });
+    expect(result).toEqual({ kind: 'completed', result: { kind: 'not-attempted', reason: 'invalid-input' } });
+    expect(f.sender).not.toHaveBeenCalled();
+  });
+
   it('資格情報取得中の世代変更を停止し、RPCを呼ばない', async () => {
     const f = fixture(), gate = deferred<void>();
     f.beforePrepared(() => gate.promise);
@@ -124,15 +141,34 @@ describe('C04 認証世代に結び付けたRPC制御', () => {
     expect(resolved.kind).toBe('diagnosed');
     if (resolved.kind !== 'diagnosed') throw new Error('expected diagnosis');
     expect(resolved.result).toMatchObject({ kind: 'ok', value: expected });
+    expect(resolved.pendingActive).toBe(body === null);
     expect(f.sender).toHaveBeenCalledTimes(2);
     expect(f.sender.mock.calls[1]?.[2]).toEqual(f.sender.mock.calls[0]?.[2]);
+    const repeated = await f.controller.resolve(context(), first.pending);
+    if (body === null) {
+      expect(repeated.kind).toBe('diagnosed');
+      expect(f.sender).toHaveBeenCalledTimes(3);
+    } else {
+      expect(repeated).toEqual({ kind: 'stopped', reason: 'request-closed' });
+      expect(f.sender).toHaveBeenCalledTimes(2);
+    }
   });
 
   it('別所有者・偽造pendingをresolveへ付け替えない', async () => {
     const f = fixture();
     const forged = { ownerId: OWNER, authGeneration: 7, input: input() };
-    expect(await f.controller.resolve({ userId: OTHER, generation: 7 }, forged)).toEqual({ kind: 'stopped', reason: 'owner-mismatch' });
+    expect(await f.controller.resolve({ userId: OTHER, generation: 7 }, forged)).toEqual({ kind: 'stopped', reason: 'invalid-pending' });
     expect(f.sender).not.toHaveBeenCalled();
+  });
+
+  it('dispose後は保持要求を含む全操作を停止する', async () => {
+    const f = fixture(async () => { throw new Error('disconnect'); });
+    const first = await f.controller.save(context(), input());
+    if (first.kind !== 'unresolved') throw new Error('expected unresolved');
+    f.controller.dispose();
+    expect(await f.controller.resolve(context(), first.pending)).toEqual({ kind: 'stopped', reason: 'disposed' });
+    expect(await f.controller.load(context())).toEqual({ kind: 'stopped', reason: 'disposed' });
+    expect(f.sender).toHaveBeenCalledOnce();
   });
 
   it('処理中の二重操作をbusyで拒否し、自動再送しない', async () => {
