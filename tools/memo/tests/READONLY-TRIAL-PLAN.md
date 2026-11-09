@@ -68,6 +68,12 @@ Gitには手順とサニタイズ済み結果だけを置く。記録項目は�
 - [ ] 非公開証跡の保管・破棄担当を承認
 - [ ] 試験後も `single-rpc` 未認定、C04進行中を維持することを確認
 
-## 8. 未確認事項
+## 8. オフライン実施状況と人間試験の可否
+
+`readonly-trial-boundary.test.ts` で、C03のAuthContextを模した注入境界からC04 controllerを通して、`memo_load_snapshot`のみを呼ぶこと、他RPCを呼ばないこと、`unverified`・通信断後に自動再送しないことを検証する。このテストは実Auth・実HTTPを使わない。
+
+現時点で人間による実地試験は **NO**。実Supabase用の製品入口・Auth開始操作・実senderへの安全な接続・通信観測を公開UIへ接続する実装がなく、既存のNode/合成runnerだけでは人間の実地試験経路にならないためである。これらを追加し、専用origin・所有プロファイル・Project Ref確認を組み込んだ後に、別承認で実地試験を開始する。
+
+## 9. 未確認事項
 
 実Authのrefresh回数、Hosted版SQL Editor/API設定、PostgRESTの実応答、プロキシ/CDNの再送・redirect、RLS/GRANTの実効動作、実ブラウザのStorageとTLSは未確認である。これらを確認するには、本書とは別にオーナーの実接続承認が必要である。
