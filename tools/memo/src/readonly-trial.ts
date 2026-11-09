@@ -1,4 +1,8 @@
 import type { AuthContext } from './auth-session';
+import type { AuthenticatedRpcSender } from './auth-session';
+import { createBrowserMemoAuth, type BrowserAuthEnvironment } from './browser-auth';
+import type { PersistencePermit } from './browser-local-adapter';
+import { createMemoRpcSender } from './cloud-rpc-sender';
 import { createCloudController, type CloudAuthBoundary, type CloudLoadControlResult } from './cloud-controller';
 import type { CloudTransport } from './cloud-rpc-types';
 
@@ -46,4 +50,15 @@ export function createReadonlyTrial(auth: CloudAuthBoundary) {
     },
     dispose: () => controller.dispose(),
   });
+}
+
+/** 実環境値を呼出側から注入する、ブラウザ用composition root。表示UIやBearerを返さない。 */
+export function createBrowserReadonlyTrial(env: BrowserAuthEnvironment, permit: PersistencePermit | undefined,
+  config: { url: string; publicKey: string }, authTransport: typeof fetch,
+  rpcConfig: { origin: string; publishableKey: string }, rpcFetch: Parameters<typeof createMemoRpcSender>[1]) {
+  const sender: AuthenticatedRpcSender = (accessToken, rpc, args) =>
+    createMemoRpcSender({ ...rpcConfig, accessToken }, rpcFetch)(rpc, args);
+  const auth = createBrowserMemoAuth(env, permit, config, authTransport, sender);
+  const trial = createReadonlyTrial(auth.session);
+  return Object.freeze({ session: auth.session, trial, dispose: auth.dispose });
 }
