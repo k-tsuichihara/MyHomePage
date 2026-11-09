@@ -1,5 +1,5 @@
 import type { CloudTransport, RpcName } from './cloud-rpc-types';
-import { array, record } from './read-primitives';
+import { array, nullable, record, revision, uuid } from './read-primitives';
 
 /** 現在の承認済み開発origin。製品composition rootへの接続は別承認とする。 */
 export const MEMO_RPC_ORIGIN = 'https://yohoppqflnhhvqypwhfv.supabase.co';
@@ -18,9 +18,51 @@ export class RpcSenderError extends Error {
   constructor(readonly reason: RpcSenderErrorReason) { super(`Memo RPC sender stopped: ${reason}`); }
 }
 
-function scalar(value: unknown): string | number | null {
-  if (value === null || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))) return value;
-  throw new RpcSenderError('boundary');
+function stringValue(value: unknown): string {
+  if (typeof value !== 'string') throw new RpcSenderError('boundary');
+  return value;
+}
+
+function uuidValue(value: unknown): string { try { return uuid(value); } catch { throw new RpcSenderError('boundary'); } }
+function revisionValue(value: unknown): number { try {
+  const result = revision(value); return typeof result === 'number' ? result : (() => { throw new RpcSenderError('boundary'); })();
+} catch { throw new RpcSenderError('boundary'); } }
+function optionalRevision(value: unknown): number | null {
+  try { return nullable(value, revisionValue); } catch { throw new RpcSenderError('boundary'); }
+}
+function uuidArray(value: unknown): string[] {
+  try { return Object.freeze(array(value).map(uuidValue)) as unknown as string[]; } catch { throw new RpcSenderError('boundary'); }
+}
+function revisionArray(value: unknown): number[] {
+  try { return Object.freeze(array(value).map(revisionValue)) as unknown as number[]; } catch { throw new RpcSenderError('boundary'); }
+}
+
+function validateArgs(rpc: RpcName, raw: unknown): Record<string, string | number | null | readonly string[] | readonly number[]> {
+  const values = record(raw, MEMO_RPC_KEYS[rpc]);
+  switch (rpc) {
+    case 'memo_load_snapshot': return {};
+    case 'memo_save': return { p_id: uuidValue(values.p_id), p_title: stringValue(values.p_title),
+      p_body: stringValue(values.p_body), p_tag_ids: uuidArray(values.p_tag_ids),
+      p_expected_revision: optionalRevision(values.p_expected_revision), p_request_id: uuidValue(values.p_request_id) };
+    case 'memo_resolve_request': return { p_id: uuidValue(values.p_id), p_request_id: uuidValue(values.p_request_id),
+      p_title: stringValue(values.p_title), p_body: stringValue(values.p_body), p_tag_ids: uuidArray(values.p_tag_ids),
+      p_expected_revision: optionalRevision(values.p_expected_revision) };
+    case 'memo_change_state': {
+      const action = stringValue(values.p_action);
+      if (!['pin', 'unpin', 'trash', 'restore'].includes(action)) throw new RpcSenderError('boundary');
+      return { p_id: uuidValue(values.p_id), p_expected_revision: revisionValue(values.p_expected_revision),
+        p_request_id: uuidValue(values.p_request_id), p_action: action };
+    }
+    case 'memo_delete_permanently': return { p_id: uuidValue(values.p_id), p_expected_revision: revisionValue(values.p_expected_revision) };
+    case 'memo_empty_trash': {
+      const ids = uuidArray(values.p_ids), revisions = revisionArray(values.p_revisions);
+      if (ids.length !== revisions.length) throw new RpcSenderError('boundary');
+      return { p_ids: ids, p_revisions: revisions };
+    }
+    case 'memo_save_tag': return { p_id: uuidValue(values.p_id), p_name: stringValue(values.p_name),
+      p_expected_revision: optionalRevision(values.p_expected_revision) };
+    case 'memo_delete_tag': return { p_id: uuidValue(values.p_id), p_expected_revision: revisionValue(values.p_expected_revision) };
+  }
 }
 
 /**
@@ -29,17 +71,17 @@ function scalar(value: unknown): string | number | null {
  */
 export function createMemoRpcSender(config: { origin: string; publishableKey: string; accessToken: string },
   fetchPort: RpcFetchPort): CloudTransport {
-  if (config.origin !== MEMO_RPC_ORIGIN || !/^sb_publishable_[A-Za-z0-9_-]+$/.test(config.publishableKey)
-    || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(config.accessToken)
+  const { origin, publishableKey, accessToken } = config;
+  if (origin !== MEMO_RPC_ORIGIN || !/^sb_publishable_[A-Za-z0-9_-]+$/.test(publishableKey)
+    || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(accessToken)
     || typeof fetchPort !== 'function') throw new RpcSenderError('boundary');
 
   return async (rpc, args) => {
     let body: string;
     try {
       if (!Object.hasOwn(MEMO_RPC_KEYS, rpc)) throw new RpcSenderError('boundary');
-      const values = record(args, MEMO_RPC_KEYS[rpc]);
-      body = JSON.stringify(Object.fromEntries(Object.entries(values).map(([key, value]) => [key,
-        Array.isArray(value) ? array(value).map(scalar) : scalar(value)])));
+      const values = validateArgs(rpc, args);
+      body = JSON.stringify(values);
     } catch (error) { throw error instanceof RpcSenderError ? error : new RpcSenderError('boundary'); }
 
     const url = `${MEMO_RPC_ORIGIN}/rest/v1/rpc/${rpc}`;
@@ -52,7 +94,7 @@ export function createMemoRpcSender(config: { origin: string; publishableKey: st
       let response: Awaited<ReturnType<RpcFetchPort>>;
       try {
         response = await fetchPort(url, { method: 'POST', redirect: 'error', signal: controller.signal,
-          headers: { apikey: config.publishableKey, Authorization: `Bearer ${config.accessToken}`, 'Content-Type': 'application/json' }, body });
+          headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body });
       } catch { throw new RpcSenderError(controller.signal.aborted ? 'timeout' : 'communication'); }
       if (controller.signal.aborted) throw new RpcSenderError('timeout');
       let status: number;

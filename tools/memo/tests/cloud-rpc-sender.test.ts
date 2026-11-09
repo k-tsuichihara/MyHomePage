@@ -43,6 +43,18 @@ describe('通信なし製品RPC sender境界', () => {
     expect(JSON.stringify(result)).not.toContain(TOKEN);
   });
 
+  it('生成時に検証した認証情報を固定し、後続config変更を送信へ反映しない', async () => {
+    const config = { origin: MEMO_RPC_ORIGIN, publishableKey: KEY, accessToken: TOKEN };
+    const fetchPort = vi.fn<Parameters<typeof createMemoRpcSender>[1]>(async (_url, init) => {
+      expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+      return response('memo_load_snapshot');
+    });
+    const sender = createMemoRpcSender(config, fetchPort);
+    config.accessToken = 'header.other.signature'; config.publishableKey = 'sb_publishable_other';
+    await sender('memo_load_snapshot', {});
+    expect(fetchPort).toHaveBeenCalledOnce();
+  });
+
   it('引数キー・型を拒否し、fetchを呼ばない', async () => {
     const fetchPort = vi.fn<Parameters<typeof createMemoRpcSender>[1]>(async () => response('memo_save'));
     const sender = factory(fetchPort);
@@ -50,6 +62,20 @@ describe('通信なし製品RPC sender境界', () => {
       .rejects.toThrow('boundary');
     await expect(sender('memo_save', { p_id: 'id', p_title: 'x', p_body: 'x', p_tag_ids: [], p_expected_revision: null, p_request_id: 'id', extra: 1 }))
       .rejects.toThrow('boundary');
+    expect(fetchPort).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['memo_save', { ...args('memo_save'), p_title: 42 }],
+    ['memo_save', { ...args('memo_save'), p_body: [] }],
+    ['memo_save', { ...args('memo_save'), p_tag_ids: 'not-an-array' }],
+    ['memo_save', { ...args('memo_save'), p_expected_revision: [] }],
+    ['memo_change_state', { ...args('memo_change_state'), p_action: 'delete' }],
+    ['memo_empty_trash', { p_ids: ['00000000-0000-0000-0000-000000000001'], p_revisions: [] }],
+    ['memo_save_tag', { ...args('memo_save_tag'), p_name: 42 }],
+  ] as const)('RPCごとの型・意味不正%sを送信前に拒否する', async (rpc, invalid) => {
+    const fetchPort = vi.fn<Parameters<typeof createMemoRpcSender>[1]>(async () => response(rpc));
+    await expect(factory(fetchPort)(rpc, invalid)).rejects.toThrow('boundary');
     expect(fetchPort).not.toHaveBeenCalled();
   });
 
