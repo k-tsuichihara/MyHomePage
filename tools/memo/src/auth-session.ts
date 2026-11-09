@@ -21,6 +21,7 @@ export interface MemoAuthState {
   readonly reason: AuthReason;
 }
 export interface AuthContext { readonly userId: string; readonly generation: number }
+export type AuthStateListener = (state: MemoAuthState) => void;
 export type AuthOperationResult = 'applied' | 'blocked' | 'busy' | 'stale';
 
 function sessionIdentity(raw: unknown): { userId: string; expiresAt: number; accessToken: string } {
@@ -42,9 +43,31 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
   // トークンは処理中の同一性比較だけに使い、状態・contextへ含めず消費後に参照を外す。
   let pendingEvent: { name: string; identity: ReturnType<typeof sessionIdentity> | null } | null = null;
   const contexts = new WeakSet<object>();
+  const listeners = new Map<object, { listener: AuthStateListener; generation: number }>();
+  let notificationQueued = false;
+  // 認証処理の途中へUIを同期再入させず、確定した最新状態だけを通知する。
+  function queueNotification() {
+    if (notificationQueued || listeners.size === 0) return;
+    notificationQueued = true;
+    queueMicrotask(() => {
+      notificationQueued = false;
+      const snapshot = getState();
+      for (const [key, observer] of [...listeners]) {
+        if (state.generation !== snapshot.generation) { queueNotification(); break; }
+        if (!listeners.has(key) || observer.generation === snapshot.generation) continue;
+        observer.generation = snapshot.generation;
+        try {
+          // async関数を渡された場合も、拒否理由をログや認証状態へ流さない。
+          void Promise.resolve(observer.listener(snapshot)).catch(() => {});
+        } catch { /* 表示先の例外で認証処理や他の購読を壊さない。 */ }
+      }
+      if (snapshot.phase === 'disposed') listeners.clear();
+    });
+  }
   function update(phase: AuthPhase, reason: AuthReason = 'none', userId: string | null = null, expiresAt: number | null = null) {
     state = Object.freeze({ phase, reason, generation: ++serial, userId, expiresAt,
       reauthenticateUserId: state.reauthenticateUserId });
+    queueNotification();
   }
   function block(reason: AuthReason) {
     const previous = state.userId ?? state.reauthenticateUserId;
@@ -179,6 +202,14 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
   } catch { block('unavailable'); }
   return Object.freeze({
     getState,
+    /** 表示専用。初回も最新値を非同期で渡し、解除後と終端通知後は配信しない。 */
+    subscribe(listener: AuthStateListener): () => void {
+      if (disposed) return () => {};
+      const key = {};
+      listeners.set(key, { listener, generation: -1 });
+      queueNotification();
+      return () => { listeners.delete(key); };
+    },
     restore: () => run('restore'),
     login: (email: string, password: string) => run('login', { email, password }),
     logout: () => run('logout'),

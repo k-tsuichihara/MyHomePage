@@ -72,6 +72,41 @@ afterEach(async () => {
   vi.unstubAllGlobals(); vi.restoreAllMocks();
 });
 
+describe('UI非依存の実SDKライフサイクルと状態通知', () => {
+  it('明示復元・ログイン・localログアウト・終了を通知し、購読から秘密値を出さない', async () => {
+    const s = server(), c = s.create(), states: unknown[] = [];
+    c.session.subscribe(state => { states.push(state); });
+    await c.session.restore(); await settle();
+    expect(c.session.getState().phase).toBe('signed-out');
+    await c.session.login('synthetic@example.invalid', 'synthetic-password'); await settle();
+    expect(c.session.getContext()).not.toBeNull();
+    expect(states.at(-1)).toMatchObject({ phase: 'authenticated' });
+    await c.session.logout(); await settle(); expect(states.at(-1)).toMatchObject({ phase: 'signed-out' });
+    await c.dispose(); await settle(); expect(states.at(-1)).toMatchObject({ phase: 'disposed' });
+    const count = states.length; await c.session.restore(); await settle(); expect(states).toHaveLength(count);
+    expect(JSON.stringify(states)).not.toMatch(/synthetic|password|token|email|eyJ/);
+    expect(s.calls.filter(call => call.path.endsWith('/logout'))).toEqual([
+      { path: '/auth/v1/logout', method: 'POST', grant: null, scope: 'local' },
+    ]);
+  });
+  it('合成Storageから新インスタンスへ復元して通知し、購読解除後は終了通知も止める', async () => {
+    const s = server(), first = s.create(); await settle();
+    await first.session.login('synthetic@example.invalid', 'synthetic-password'); await settle(); await first.dispose();
+    const next = s.create(), listener = vi.fn(); const off = next.session.subscribe(listener);
+    await next.session.restore(); await settle(); expect(listener.mock.lastCall?.[0]).toMatchObject({ phase: 'authenticated', userId: A });
+    off(); off(); const count = listener.mock.calls.length; await next.dispose(); await settle();
+    expect(listener).toHaveBeenCalledTimes(count);
+  });
+  it('Storage読取障害はblockedを通知し、空セッションや成功へ読み替えない', async () => {
+    const m = memory(); vi.mocked(m.backing.getItem).mockImplementation(() => { throw new Error('synthetic-private-storage'); });
+    const s = server(m), c = s.create(), listener = vi.fn(); c.session.subscribe(listener);
+    await c.session.restore(); await settle();
+    expect(listener.mock.lastCall?.[0]).toMatchObject({ phase: 'blocked', reason: 'unavailable' });
+    expect(c.session.getContext()).toBeNull(); expect(s.fetch).not.toHaveBeenCalled();
+    expect(JSON.stringify(listener.mock.calls)).not.toContain('synthetic-private');
+  });
+});
+
 describe('専用セッション保存先', () => {
   it('SDKの専用主キー・補助キーだけを許可する', async () => {
     const m = memory(), owner = createMemoSessionStorage(m.backing);
