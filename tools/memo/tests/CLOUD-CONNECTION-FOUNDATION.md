@@ -4,7 +4,7 @@
 
 ## 構成と安全境界
 
-- HTTP境界はNode標準fetchに適合する関数を必須注入する。global fetchへの既定値や設定読取は持たない。既存CLIと同じ固定開発Project Ref/HTTPS origin、8 RPCパス、正式引数キーを制限し、redirect:error、15秒timeout、1呼出しで停止する。結果は常にunverified。single-rpc認定は実装しない。
+- HTTP境界はNode標準fetchに適合する関数を必須注入する。global fetchへの既定値や設定読取は持たない。既存CLIと同じ固定開発Project Ref/HTTPS origin、8 RPCパス、正式引数キーを制限し、redirect:error、15秒timeout、1呼出しで停止する。`src/cloud-rpc-sender.ts`へ通信なし製品sender境界を切り出したが、結果は常にunverified。single-rpc認定は実装しない。
 - 15秒はfetch開始から本文読取まで共通のアプリ側待機期限。注入先がsignalを無視してもdeadlineとのraceで呼出側を固定timeoutにし、AbortControllerで中止を要求する。本文取得時に期限をリセットしない。成功/失敗後はタイマーを解除し、期限後のfetch結果から本文読取を開始せず、遅延rejectも処理する。中止はbest-effortで、裏側の処理終了・DB未実行/未コミットを証明しない。同期処理でイベントループが停止する場合のリアルタイム中断は保証しない。結果不明を解消せず、自動再試行しない。
 - 通信なし入口は固定の合成シナリオ・模擬応答だけをimportする。実HTTP境界、CLI設定読取、Auth、プロセス環境変数、任意URL/任意シナリオ指定を接続しない。実行引数があれば停止する。HTTP境界自体の試験も偽fetchだけを使う。
 - offlineランナーは任意のCloudTransportを受け取らず、合成応答データから生成した専用ポートだけを内部WeakMapで認定する。実HTTP関数や同形オブジェクトの誤注入は送信前拒否する。模擬遅延は解除用Promiseで表し、通信callbackを注入しない。これは固定テストコードの誤接続防止であり、任意の悪意あるNode.jsコードを隔離するsandboxではない。

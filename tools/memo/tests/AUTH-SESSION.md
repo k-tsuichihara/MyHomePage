@@ -1,6 +1,6 @@
 # C03：Auth・セッション接続契約と試験方針
 
-C04へはBearer値ではなく、現在の`AuthContext`に結び付いた1回限りのRPC transportを渡す。資格情報は内部で取得し、資格情報取得後と送信直前にも認証世代・所有者・期限を再確認する。状態通知はこの送信許可の代わりにはならない。現在の`createMemoSdkAuth()`にはsenderを注入しておらず、実SDK・製品HTTPとの接続は未実装である。後続の製品composition rootだけが安全性を検証したsenderをAuth生成時に注入し、UIへsenderやBearerを公開しない。詳細は[CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md)を参照する。
+C04へはBearer値ではなく、現在の`AuthContext`に結び付いた1回限りのRPC transportを渡す。資格情報は内部で取得し、資格情報取得後と送信直前にも認証世代・所有者・期限を再確認する。状態通知はこの送信許可の代わりにはならない。`src/cloud-rpc-sender.ts`に固定開発origin・8 RPC・引数・timeout・redirect拒否を検証する通信なしsender境界を追加したが、経路出所を証明できないため常に`unverified`を返す。`createMemoSdkAuth()`へのsender注入、実SDK・製品HTTP・本番originへの接続は未実装である。後続の製品composition rootだけが別承認後にsenderをAuth生成時へ注入し、UIへsenderやBearerを公開しない。詳細は[CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md)を参照する。
 
 ## UI非依存の状態購読・ライフサイクル
 
