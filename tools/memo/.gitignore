@@ -13,3 +13,4 @@ playwright-report/
 .format/
 .cloud-live/
 .auth-browser/
+.readonly-trial/

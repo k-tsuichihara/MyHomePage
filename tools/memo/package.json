@@ -19,6 +19,7 @@
     "build:auth": "node scripts/build-auth.mjs",
     "test:auth-patch": "node --test tests/auth-browser/sdk-patch.test.mjs",
     "build:auth-browser": "node scripts/build-auth-browser.mjs",
+    "build:readonly-trial-browser": "node scripts/build-readonly-trial-browser.mjs",
     "test:auth-browser": "npm run build:auth-browser && node .auth-browser/run.mjs",
     "test:cloud-offline": "npm run build:cloud-offline && node .cloud-live/offline.mjs"
   },
