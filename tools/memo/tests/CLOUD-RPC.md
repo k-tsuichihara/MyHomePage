@@ -1,5 +1,7 @@
 # 通信なしSupabase RPC境界の契約・テスト方針
 
+C01のアダプター結果型と応答検証は維持し、C04の認証停止・古い応答・結果不明要求の保持は上位の[CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md)で扱う。C02の実接続検証用HTTP境界を製品transportへ流用したり、`unverified`を認定済みに変更したりしない。
+
 根拠はReview8統合仕様§4・6・7、正式SQL・型、既存validateCloudSnapshot。今回の承認は模擬通信による限定先行実装だけで、SQL/TS実DB一致ゲート、Auth、公開接続を解除しない。
 
 ## 境界

@@ -1,0 +1,54 @@
+# C04 クラウド制御層契約
+
+## 対象
+
+この段階では、C01のRPCアダプターとC03の認証境界を組み合わせ、`memo_load_snapshot`、`memo_save`、`memo_resolve_request`をUI非依存で制御する。実HTTP、製品UI、保存先切替、状態変更・削除・タグ操作は対象外とする。
+
+## 認証境界
+
+- 操作開始時、資格情報取得後、RPC送信直前、応答反映前に同じ`AuthContext`が現在有効か確認する。
+- 資格情報はC03内部で取得し、用途限定の1回限りのtransportへ閉じ込める。UI、公開状態、結果、ログ、例外へBearer値を返さない。
+- 資格情報の所有者と`AuthContext.userId`が異なる場合は送信しない。
+- 送信前に認証が失効した場合はRPC呼出し0件で`stopped`を返す。
+- 送信後に認証世代が変わった場合は、応答内容を現在の画面状態へ反映せず`stale-response`を返す。保存要求は照合のため保持する。
+- 状態通知は書込許可ではない。各操作は`isCurrent()`と用途限定transportで独立して検証する。
+
+## load / save / resolve
+
+- `load`は現在の所有者についてのみ実行し、古い応答を反映しない。
+- `save`は操作開始時にID、本文、タグID、revision、requestId、所有者を固定する。入力元を後から変更しても送信内容を変えない。
+- C01が書込結果不明を返した場合は`unresolved`として固定要求を保持し、自動再送・自動ロールバック・自動resolveを行わない。
+- `resolve`は、このcontrollerが発行した保持要求に対する明示操作だけを受け付ける。偽造した要求、別所有者への付替えを拒否する。
+- 同じ所有者が再認証した場合は、新しい現在の`AuthContext`で元要求を明示照合できる。元のrequestIdや送信内容は変更しない。
+- `diagnosed`は照合RPCが確定応答を返したことだけを表し、「保存済み」や「未送信確定」を一律には表さない。呼出側は内包するC01結果と`pendingActive`を確認する。
+- `no-record`は未実行の証明ではない。保持要求を`pending`のまま残し、利用者の別の明示操作による再診断を可能にする。自動再診断・自動再送はしない。
+- saved履歴または削除済みreceiptを確認した保持要求は`closed`にし、同じpendingでの二重resolveを`request-closed`として拒否する。これは現在のメモ状態が同じことの保証ではない。
+- `dispose()`は処理中なら`busy`、未確定pendingが残るなら`pending`を返して終端化を拒否する。呼出側は操作結果または未確定要求を利用者へ提示し、確定照合後に再度disposeする。これらの戻り値を無視して画面を破棄してはならない。
+- 処理中でも未確定要求がなく、disposeが`applied`を返した後だけ新規操作を拒否する。画面終了をまたぐpending永続化は今回実装しないため、pendingを保持したままのdispose成功を許可しない。
+- controller内では1操作だけを実行し、処理中の二重操作は`busy`で拒否する。
+
+## C01・C02との境界
+
+- C01の`CloudResult`、厳格なDB応答検証、所有者照合、エラー分類は変更しない。認証停止・古い応答・保持中要求はC04の上位結果で表す。
+- C02の固定開発origin、8 RPC、リダイレクト拒否、回数制限、`unverified`などのテスト専用契約を緩めない。
+- 今回の合成senderは通信なし試験専用であり、実HTTP経路を`single-rpc`として認定しない。
+- 現在の`createMemoSdkAuth()`は`rpcSender`を注入しておらず、製品用RPC能力は未結線である。後続PRでは製品composition rootで、承認済みorigin・8 RPC・リダイレクト拒否・出所判定を満たすsenderをAuth生成時だけに注入する。UIへsenderやBearerを渡さない。
+- Auth用`safeFetch`の許可範囲は拡張しない。実送信経路と`single-rpc`認定は別のレビュー・検証を必要とする。
+
+## 結果が保証しないこと
+
+- 実Supabase、実Bearer送信、RLS、GRANT、PostgRESTの動作は未検証。
+- 製品UIへの反映、画面世代、ドラフト保護、保存先切替は未結線。
+- 状態変更・完全削除・タグ操作は後続のC04実装単位で扱う。
+- 自動同期、自動転送、自動フォールバック、自動再送は実装しない。
+
+## 通信なし試験
+
+- 送信前失効、資格情報取得中の世代変更、所有者不一致ではRPC呼出しが0件であること。
+- 送信後失効では応答を反映せず、saveの固定要求だけを照合用に保持すること。
+- 保存元を後から変更しても、ID、本文、タグ、revision、requestId、所有者が変化しないこと。
+- 結果不明後も自動再送せず、明示resolveで同じ要求を使うこと。`no-record`と削除済みreceiptを区別すること。
+- 送信前transport停止がC01で通信不明へ変換されても、`wasSent() === false`ならC04が`stopped`へ戻すこと。
+- `no-record`後は同じpendingを再診断でき、saved履歴・削除済みreceipt後の二重resolveを拒否すること。
+- save/load/resolveの送信中はdisposeを`busy`で拒否すること。未確定pendingがあれば`pending`で拒否し、確定照合後だけ`applied`で終端化すること。
+- 処理中の二重操作を拒否し、Bearer値や送信例外の本文が公開結果へ混入しないこと。
