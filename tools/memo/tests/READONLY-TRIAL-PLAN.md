@@ -74,7 +74,7 @@ Gitには手順とサニタイズ済み結果だけを置く。記録項目は�
 
 `src/readonly-trial.ts` を追加し、既存C04 controllerを再利用した読み取り専用ゲート、RPC名・回数のサニタイズ済み観測、Auth通信がこの境界では未観測であることの明示を実装した。`createBrowserReadonlyTrial` がBrowser Auth→Auth session→controller→senderを結ぶcomposition rootとなる。`readonly-trial.test.ts` と既存の境界テストで通信なしに検証する。
 
-`tests/readonly-trial-browser/preview.html` と `build:readonly-trial-browser` を追加し、Auth開始・読み取り開始を明示操作に分離した合成ブラウザ入口を用意した。ページ表示では初期化・通信を行わず、表示はサニタイズ済み観測値だけである。専用Persistence Permitをテストrunnerから注入する前提で、既存Browser Auth→composition root→readonly trial経路を確認できる。
+`tests/readonly-trial-browser/preview.html` と `build:readonly-trial-browser` を追加し、Auth開始・読み取り開始を明示操作に分離した合成ブラウザ入口を用意した。`src/readonly-trial-runner.ts` はProject Ref/originの事前検査、Auth/RPC回数観測、STOP/disposeを注入値で制御する。ページ表示では初期化・通信を行わず、表示はサニタイズ済み観測値だけである。専用Persistence Permitをテストrunnerから注入する前提で、既存Browser Auth→composition root→readonly trial経路を確認できる。
 
 現時点で人間による実Supabase実地試験は **NO**。今回の入口は合成transport専用であり、実Auth/RPC senderへ向ける環境値注入・専用origin・所有プロファイル・Project Ref確認runnerは未承認・未結線である。実環境値の入力と通信観測runnerを別承認で追加した後に、実地試験を開始する。
 

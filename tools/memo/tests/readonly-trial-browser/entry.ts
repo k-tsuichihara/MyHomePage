@@ -1,4 +1,5 @@
 import { createBrowserReadonlyTrial } from '../../src/readonly-trial';
+import { MEMO_RPC_ORIGIN } from '../../src/cloud-rpc-sender';
 import type { PersistencePermit } from '../../src/browser-local-adapter';
 
 declare global { interface Window { __readonlyTrial?: { startAuth(): Promise<void>; load(): Promise<void>; observation(): unknown } } }
@@ -24,7 +25,7 @@ window.__readonlyTrial = {
     app = createBrowserReadonlyTrial({ origin: location.origin, secure: isSecureContext, topLevel: window.top === window,
       getStorage: () => window.localStorage }, permit,
       { url: 'https://memo-browser.invalid', publicKey: 'sb_publishable_synthetic_only' }, syntheticAuth,
-      { origin: 'https://memo-browser.invalid', publishableKey: 'sb_publishable_synthetic_only' }, syntheticRpc);
+      { origin: MEMO_RPC_ORIGIN, publishableKey: 'sb_publishable_synthetic_only' }, syntheticRpc);
     await app.session.login('synthetic@example.invalid', 'synthetic-password'); render();
   },
   async load() {
