@@ -1,4 +1,5 @@
 import { uuid, uuidKey } from './read-primitives';
+import type { CloudTransport, CloudTransportResponse, RpcName, CloudCall } from './cloud-rpc-types';
 
 /** SDKの秘密値を状態へ持ち出さないための最小注入境界。 */
 export interface MemoAuthApi {
@@ -23,6 +24,18 @@ export interface MemoAuthState {
 export interface AuthContext { readonly userId: string; readonly generation: number }
 export type AuthStateListener = (state: MemoAuthState) => void;
 export type AuthOperationResult = 'applied' | 'blocked' | 'busy' | 'stale';
+export type AuthenticatedRpcSender = (
+  accessToken: string,
+  rpc: RpcName,
+  args: CloudCall['args'],
+) => Promise<CloudTransportResponse>;
+export type AuthRpcPreparation = {
+  readonly kind: 'ready';
+  readonly ownerId: string;
+  readonly transport: CloudTransport;
+  readonly wasSent: () => boolean;
+}
+  | { readonly kind: 'stopped'; readonly reason: 'not-current' | 'unavailable' | 'owner-mismatch' };
 
 function sessionIdentity(raw: unknown): { userId: string; expiresAt: number; accessToken: string } {
   const value = raw as { user?: { id?: unknown }; expires_at?: unknown; access_token?: unknown } | null;
@@ -34,7 +47,11 @@ function sessionIdentity(raw: unknown): { userId: string; expiresAt: number; acc
 }
 
 /** 画面や保存先を変更せず、認証世代に結び付けた利用許可だけを返す。 */
-export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Date.now) {
+export function createMemoAuthSession(
+  auth: MemoAuthApi,
+  now: () => number = Date.now,
+  rpcSender?: AuthenticatedRpcSender,
+) {
   let state: MemoAuthState = Object.freeze({ phase: 'signed-out', generation: 0, userId: null,
     reauthenticateUserId: null, expiresAt: null, reason: 'none' });
   let serial = 0;
@@ -80,6 +97,17 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
   function getState(): MemoAuthState {
     if (state.phase === 'authenticated' && state.expiresAt! * 1000 <= now()) block('expired');
     return state;
+  }
+  function isCurrent(context: AuthContext): boolean {
+    const current = getState();
+    return contexts.has(context) && current.phase === 'authenticated'
+      && current.generation === context.generation && current.userId === context.userId;
+  }
+  function requireReauthentication(context: AuthContext): boolean {
+    const current = getState();
+    if (!contexts.has(context) || current.phase !== 'authenticated'
+      || context.generation !== current.generation || context.userId !== current.userId) return false;
+    block('expired'); return true;
   }
   async function verify(raw: unknown, attempt: number): Promise<AuthOperationResult | { userId: string; expiresAt: number }> {
     if (disposed || attempt !== serial) return 'stale';
@@ -224,16 +252,49 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
       contexts.add(context); return context;
     },
     isCurrent(context: AuthContext): boolean {
-      const current = getState();
-      return contexts.has(context) && current.phase === 'authenticated'
-        && current.generation === context.generation && current.userId === context.userId;
+      return isCurrent(context);
+    },
+    /**
+     * UIへ資格情報を渡さず、現在の認証世代に限定した1回のRPC transportを準備する。
+     * 準備時にセッションを再取得し、1回限りの送信直前までcontextと所有者を照合する。
+     */
+    async prepareRpc(context: AuthContext): Promise<AuthRpcPreparation> {
+      if (!rpcSender) return { kind: 'stopped', reason: 'unavailable' };
+      if (!contexts.has(context) || !isCurrent(context)) {
+        return { kind: 'stopped', reason: 'not-current' };
+      }
+      let raw: unknown;
+      try {
+        const response = await auth.getSession();
+        if (response.error) return { kind: 'stopped', reason: 'unavailable' };
+        raw = response.data.session;
+      } catch {
+        return { kind: 'stopped', reason: 'unavailable' };
+      }
+      if (!isCurrent(context)) return { kind: 'stopped', reason: 'not-current' };
+      let identity: ReturnType<typeof sessionIdentity>;
+      try { identity = sessionIdentity(raw); }
+      catch { return { kind: 'stopped', reason: 'unavailable' }; }
+      if (uuidKey(identity.userId) !== uuidKey(context.userId)) {
+        return { kind: 'stopped', reason: 'owner-mismatch' };
+      }
+      if (identity.expiresAt * 1000 <= now()) {
+        requireReauthentication(context);
+        return { kind: 'stopped', reason: 'not-current' };
+      }
+      let consumed = false;
+      let sent = false;
+      const transport: CloudTransport = async (rpc, args) => {
+        if (consumed || !isCurrent(context) || identity.expiresAt * 1000 <= now()) throw new Error('auth-context-stale');
+        consumed = true;
+        sent = true;
+        return rpcSender(identity.accessToken, rpc, args);
+      };
+      return Object.freeze({ kind: 'ready', ownerId: identity.userId, transport, wasSent: () => sent });
     },
     /** C04が現在の要求に対する認証失効を確認した時だけ通知する。古い要求では新セッションを止めない。 */
     requireReauthentication(context: AuthContext): boolean {
-      const current = getState();
-      if (!contexts.has(context) || current.phase !== 'authenticated'
-        || context.generation !== current.generation || context.userId !== current.userId) return false;
-      block('expired'); return true;
+      return requireReauthentication(context);
     },
     dispose() {
       if (disposed) return;

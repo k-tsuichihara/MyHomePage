@@ -7,9 +7,9 @@
 ## 現在位置と公開までの推奨順序
 
 - 現在：**STEP 02（認証・クラウド保存の統合）**。
-- 現在のレビュー対象：**C03（UI非依存の認証ライフサイクル・状態通知境界）**。PR #52の限定パッチ・隔離Storage接続はマージ済み。製品接続・本番Auth未検証のため進行中を維持する。
-- C03の後は**C04（クラウド制御層・実HTTP経路と要求照合のUI接続）**、続いてC05。今回は着手しない。
-- R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、推奨順序の反映もPR #48でマージ済み。D05確定はPR #49、通信なしAuth境界はPR #50、SDK境界はPR #51でマージ済み。今回は実SDKとメモ専用実Storage・合成fetchを隔離環境で接続した。通常ログアウトはlocalを明示。製品入口は未結線、本番Authは未検証。C04・C05は未着手。
+- 現在のレビュー対象：**C04（認証世代に結び付けたRPC実行境界とload/save/resolveの通信なし制御）**。C03は製品接続・本番Auth未検証のため進行中を維持する。
+- C04の今回単位では実HTTP・製品UI・状態変更／削除／タグ操作へ進まず、C01/C03を接続する上位制御と結果不明後の明示照合を検証する。続く実装単位とC05は未着手。
+- R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、推奨順序の反映もPR #48でマージ済み。D05確定はPR #49、通信なしAuth境界はPR #50、SDK境界はPR #51、隔離Storage接続はPR #52、UI非依存の状態通知はPR #53でマージ済み。通常ログアウトはlocalを明示。製品入口・本番Authは未検証。C04は進行中、C05は未着手。
 - 未決事項：Q05の正式検証範囲、S04のACL原本完全性・NOLOGIN候補の必要性/非波及、製品接続・公開前ゲート。仕様確定は、これらの解消やDB・本番操作の承認ではない。
 - 導入時のSDK 2.111.0/2.119.0とTypeScript 7のWebAuthn/DOM型宣言衝突は、停止・報告後、オーナー承認のskipLibCheckで回避した。全.d.tsの内部型検査が省略される影響・見直し条件はAuth契約に記録。既存strict等は維持し、SDK 2.119.0の公開API型対応と通信なし26件を確認した。バージョン変更・追加緩和・実操作は別承認。
 - PR #51マージ後、SDK import時のStorage probe/デバッグ参照を未許可起動ゲートが検出して停止した。PR #52では、supabase-js/auth-js各2.119.0固定・元SHA/パス/件数の検証付きでdebug初期化式だけをメモリ内置換。元SDK・ロック機構は不変。最終試験記録は全Vitest1,448件、パッチ23件、隔離Chromium11件PASS。import前のgetter取得と監視対象API呼出しを別々に0件確認し、旧成果物の検証失効も回帰試験済み。専用キー永続化、再読込/再起動、失効・複数タブ・実ロックを確認。過去の失敗profileは保全。詳細と未検証範囲はAuth契約を参照。
@@ -76,8 +76,8 @@
 |---|---|---|---|---|
 | C01 | 通信なし8RPCアダプター・厳格応答検証・エラー分類 | 完了 | [RPC契約](../tools/memo/tests/CLOUD-RPC.md)、src/cloud-rpc-adapter.ts、PR #27・#28 | P0002修正含む。single-rpcの実経路認定は未検証 |
 | C02 | 注入HTTP境界・段階ランナー・SQL/TSベクトルの通信なし基盤 | 完了 | [通信なし基盤](../tools/memo/tests/CLOUD-CONNECTION-FOUNDATION.md)、tests/cloud-live/、PR #29 | 偽fetch・offline専用。Auth/実transport接続の完成ではない |
-| C03 | Auth・セッション・ログイン/ログアウト接続 | 進行中 | 統合仕様§1.1、[Auth契約](../tools/memo/tests/AUTH-SESSION.md)、src/auth-session.ts・auth-client.ts・auth-sdk.ts・browser-auth.ts、PR #50〜#52・オーナー承認 | PR #52の最終記録はパッチ23件・隔離Chromium11件PASS。今回は表示専用subscribeを追加し、解除・非同期通知・期限検出・終端通知を整備。書込許可は引き続きgetContext/isCurrentで判定する。追加タイマー/ポーリングなし。製品入口未結線、本番Auth・実アカウント未検証のため進行中。C04/C05は未着手。型検査回避・専用ビルドの制約、アプリ単位のログアウト非保証と読書アプリ側の後日確認を維持 |
-| C04 | クラウド制御層・実HTTP経路と要求照合のUI接続 | 未着手 | RPC契約のcontroller責務・未検証事項、PR #27・#29、今回のオーナー合意 | v1.1.0で必要。クラウド保存を実装対象とし、古い応答・所有者・結果不明を安全に接続する |
+| C03 | Auth・セッション・ログイン/ログアウト接続 | 進行中 | 統合仕様§1.1、[Auth契約](../tools/memo/tests/AUTH-SESSION.md)、src/auth-session.ts・auth-client.ts・auth-sdk.ts・browser-auth.ts、PR #50〜#53・オーナー承認 | PR #52の最終記録はパッチ23件・隔離Chromium11件PASS。PR #53で表示専用subscribe、解除・非同期通知・期限検出・終端通知を整備。書込許可は引き続きgetContext/isCurrentで判定し、今回C04向けにBearerを公開しない用途限定RPC能力を接続する。追加タイマー/ポーリングなし。製品入口未結線、本番Auth・実アカウント未検証のため進行中。型検査回避・専用ビルドの制約、アプリ単位のログアウト非保証と読書アプリ側の後日確認を維持 |
+| C04 | クラウド制御層・実HTTP経路と要求照合のUI接続 | 進行中 | RPC契約のcontroller責務・未検証事項、PR #27・#29、[C04制御契約](../tools/memo/tests/CLOUD-CONTROLLER.md)、今回のオーナー合意 | 最初の実装単位としてC01/C03を再利用した認証世代付きload/save/resolve通信なし制御に着手。Bearer非公開、要求固定、古い応答の反映拒否、結果不明後の明示resolveを対象とする。実HTTP・製品UI・状態変更／削除／タグ操作は未結線 |
 | C05 | ローカル/Supabase保存先切替の製品接続 | 未着手 | 統合仕様§1.1、[編集契約](../tools/memo/tests/EDITOR-STATE.md)、2026-11-08オーナー判断 | ログイン成功後は既存離脱確認を経てクラウドへ自動切替。取消時は保存先・編集中画面を維持。セッション復元時はクラウド、明示ログアウト時はローカル。自動同期・自動転送・自動フォールバックは禁止 |
 
 ## 5. DB・権限・セキュリティ

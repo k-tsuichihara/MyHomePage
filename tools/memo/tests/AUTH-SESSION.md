@@ -1,5 +1,7 @@
 # C03：Auth・セッション接続契約と試験方針
 
+C04へはBearer値ではなく、現在の`AuthContext`に結び付いた1回限りのRPC transportを渡す。資格情報は内部で取得し、資格情報取得後と送信直前にも認証世代・所有者・期限を再確認する。状態通知はこの送信許可の代わりにはならない。詳細は[CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md)を参照する。
+
 ## UI非依存の状態購読・ライフサイクル
 
 `createMemoAuthSession`へ`subscribe(listener): () => void`だけを追加する。登録後に最新状態をmicrotaskで通知し、以降も確定した`MemoAuthState`を非同期通知する。同期処理中の中間状態はまとめ、同じ購読へ同世代を二重通知しない。全遷移の監査ログではなく画面表示用であり、通知の`authenticated`を操作許可として保持しない。操作開始時・応答反映前は引き続き`getContext()/isCurrent()`を使う。
