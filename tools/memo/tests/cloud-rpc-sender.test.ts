@@ -26,6 +26,16 @@ describe('通信なし製品RPC sender境界', () => {
     expect(fetchPort.mock.calls[0]?.[1]).toMatchObject({ method: 'POST', redirect: 'error' });
   });
 
+  it('statusや本文が成功・拒否に見えてもsingle-rpcへ昇格しない', async () => {
+    const cases = [[200, { ok: true }], [204, undefined], [409, { code: 'PT409' }], [500, { code: 'P0002' }]] as const;
+    for (const [status, body] of cases) {
+      const sender = factory(async requestUrl => response(requestUrl.split('/').pop() as RpcName, body, status));
+      const result = await sender(status === 204 ? 'memo_delete_tag' : 'memo_load_snapshot',
+        status === 204 ? args('memo_delete_tag') : {});
+      expect(result.provenance).toBe('unverified');
+    }
+  });
+
   it.each(['http://yohoppqflnhhvqypwhfv.supabase.co', `${MEMO_RPC_ORIGIN}/`, 'https://other.invalid'])(
     '固定origin以外を生成時に拒否する: %s', origin => {
       expect(() => createMemoRpcSender({ origin, publishableKey: KEY, accessToken: TOKEN }, async () => response('memo_load_snapshot')))

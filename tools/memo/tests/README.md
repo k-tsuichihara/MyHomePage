@@ -2,7 +2,7 @@
 
 C03のAuth・セッション境界と通信なし試験は [AUTH-SESSION.md](AUTH-SESSION.md) を参照。
 
-C04の認証世代に結び付けた8 RPC制御は [CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md) を参照。
+C04の認証世代に結び付けた8 RPC制御は [CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md) を参照。`single-rpc`認定前の条件は [SINGLE-RPC-ACCEPTANCE.md](SINGLE-RPC-ACCEPTANCE.md) を参照。
 
 実SDK接続も同契約に従い、`auth-sdk.test.ts`で合成保存先と模擬fetchだけを使って検証する。`npm run build:auth`の出力はGit除外済みの検証用資産であり、公開画面へ接続しない。
 
