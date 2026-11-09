@@ -45,6 +45,7 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
   const contexts = new WeakSet<object>();
   const listeners = new Map<object, { listener: AuthStateListener; generation: number }>();
   let notificationQueued = false;
+  let notifying = false;
   // 認証処理の途中へUIを同期再入させず、確定した最新状態だけを通知する。
   function queueNotification() {
     if (notificationQueued || listeners.size === 0) return;
@@ -52,6 +53,7 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
     queueMicrotask(() => {
       notificationQueued = false;
       const snapshot = getState();
+      notifying = true;
       for (const [key, observer] of [...listeners]) {
         if (state.generation !== snapshot.generation) { queueNotification(); break; }
         if (!listeners.has(key) || observer.generation === snapshot.generation) continue;
@@ -61,6 +63,7 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
           void Promise.resolve(observer.listener(snapshot)).catch(() => {});
         } catch { /* 表示先の例外で認証処理や他の購読を壊さない。 */ }
       }
+      notifying = false;
       if (snapshot.phase === 'disposed') listeners.clear();
     });
   }
@@ -206,8 +209,9 @@ export function createMemoAuthSession(auth: MemoAuthApi, now: () => number = Dat
     subscribe(listener: AuthStateListener): () => void {
       if (disposed) return () => {};
       const key = {};
-      listeners.set(key, { listener, generation: -1 });
-      queueNotification();
+      // 通知内の再購読から初回通知を連鎖させない。登録時世代は現在値で取得できる。
+      listeners.set(key, { listener, generation: notifying ? state.generation : -1 });
+      if (!notifying) queueNotification();
       return () => { listeners.delete(key); };
     },
     restore: () => run('restore'),

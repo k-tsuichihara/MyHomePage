@@ -80,10 +80,35 @@ it('解除は冪等で、待機中の初回通知と以降の通知を止める'
   const f = fixture(), { states, off } = collect(f.auth); off(); off(); await flush();
   await f.auth.restore(); await flush(); f.auth.dispose(); await flush(); expect(states).toEqual([]);
 });
-it('通知中の他購読解除と追加を扱い、新規購読には最新値を一度だけ渡す', async () => {
-  const f = fixture(), second = vi.fn(), third = vi.fn(); let stop = () => {};
-  f.auth.subscribe(() => { stop(); f.auth.subscribe(third); }); stop = f.auth.subscribe(second);
-  await flush(); expect(second).not.toHaveBeenCalled(); expect(third).toHaveBeenCalledTimes(1);
+it('初回通知のたびに新規購読を追加しても同世代のmicrotask連鎖を作らない', async () => {
+  const f = fixture(), calls: MemoAuthState[] = [], stops: (() => void)[] = [];
+  const listener = (state: MemoAuthState) => {
+    calls.push(state);
+    // 修正前でもテスト自体が飢餓状態にならないよう、再現操作は8回で打ち切る。
+    if (calls.length < 8) stops.push(f.auth.subscribe(listener));
+  };
+  stops.push(f.auth.subscribe(listener)); await flush();
+  expect(calls).toHaveLength(1);
+  expect(stops).toHaveLength(2);
+  stops.forEach(stop => stop()); f.auth.dispose();
+});
+it('表示通知内で自己解除・再購読しても、次の状態変更までは再通知しない', async () => {
+  const f = fixture(); let stop = () => {}, count = 0;
+  const listener = () => {
+    count++; stop();
+    if (count < 8) stop = f.auth.subscribe(listener);
+  };
+  stop = f.auth.subscribe(listener); await flush(); expect(count).toBe(1);
+  f.auth.getState(); await flush(); expect(count).toBe(1);
+  await f.auth.restore(); await flush(); expect(count).toBe(3);
+  stop(); f.auth.dispose();
+});
+it('通知中の他購読解除と追加を扱い、新規購読は次の世代から受け取る', async () => {
+  const f = fixture(), second = vi.fn(), third = vi.fn(); let stop = () => {}, stopFirst = () => {};
+  stopFirst = f.auth.subscribe(() => { stopFirst(); stop(); f.auth.subscribe(third); }); stop = f.auth.subscribe(second);
+  await flush(); expect(second).not.toHaveBeenCalled(); expect(third).not.toHaveBeenCalled();
+  await f.auth.restore(); await flush();
+  expect(third.mock.calls.map(call => call[0].phase)).toEqual(['checking', 'authenticated']);
   f.auth.dispose();
 });
 it('購読例外・非同期拒否を伝播/記録せず、他の購読と認証結果を保持する', async () => {
