@@ -31,7 +31,11 @@ window.__readonlyTrial = {
       getStorage: () => window.localStorage }, permit,
       { url: 'https://memo-browser.invalid', publicKey: 'sb_publishable_synthetic_only' }, syntheticAuth,
       { origin: MEMO_RPC_ORIGIN, publishableKey: 'sb_publishable_synthetic_only' }, syntheticRpc);
-    await app.session.login('synthetic@example.invalid', 'synthetic-password'); render();
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const passwordInput = document.getElementById('password') as HTMLInputElement;
+    try { await app.session.login(email || 'synthetic@example.invalid', passwordInput.value || 'synthetic-password'); }
+    finally { passwordInput.value = ''; (document.getElementById('email') as HTMLInputElement).value = ''; }
+    render();
   },
   async load() {
     if (!app) throw new Error('auth not started');

@@ -2,7 +2,9 @@ import { chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+// @ts-expect-error Node's strip-types runner resolves explicit .ts imports at runtime.
 import { createProfileOwner, prepareProfileBase } from '../persistence/profile-guard.ts';
+// @ts-expect-error Node's strip-types runner resolves explicit .ts imports at runtime.
 import { initializeContext, runOwnedCase } from '../persistence/lifecycle.ts';
 
 const root = fileURLToPath(new URL('../', import.meta.url));

@@ -78,6 +78,8 @@ Gitには手順とサニタイズ済み結果だけを置く。記録項目は�
 
 現時点で人間による実Supabase実地試験は **NO**。`startAuth(credentials)` は注入境界として資格情報を受け取れるが、Auth完了後にrunnerが資格情報参照を継続保持しないことだけを契約とし、JavaScriptメモリ消去を保証しない。専用loopbackのオフラインrunnerは`tests/readonly-trial-browser/run.ts`で合成transportを検証する。実Auth/RPC senderへ向ける環境値注入、実transport用CSP、Project Ref確認、実通信観測は別承認のHuman Gateに残る。
 
+`npm run human-gate:offline` は専用loopback・専用profile・Permit注入を使う合成回帰入口であり、実Auth/RPCへ接続しない。実通信Human Gate用のtransport切替はこのPRでは有効化しない。
+
 ## 9. 未確認事項
 
 実Authのrefresh回数、Hosted版SQL Editor/API設定、PostgRESTの実応答、プロキシ/CDNの再送・redirect、RLS/GRANTの実効動作、実ブラウザのStorageとTLSは未確認である。これらを確認するには、本書とは別にオーナーの実接続承認が必要である。
