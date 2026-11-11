@@ -71,7 +71,7 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
       state = 'authenticating';
       app = createBrowserReadonlyTrial(config.env, config.permit, config.authConfig, authTransport, config.rpcConfig, rpcFetch);
       const result = await app.session.login('synthetic@example.invalid', 'synthetic-password');
-      if ((state as TrialRunnerState) === 'disposed') { await app.dispose(); return; }
+      if ((state as TrialRunnerState) !== 'authenticating') { await app.dispose(); return; }
       if (result !== 'applied') stop(`auth-${result}`); else state = 'authenticated';
     },
     async load(): Promise<CloudLoadControlResult | null> {
