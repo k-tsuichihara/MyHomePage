@@ -12,8 +12,8 @@ function fixture(overrides: Partial<{ projectRef: string; origin: string }> = {}
   const authTransport = vi.fn(async (request: Request) => request.url.endsWith('/user')
     ? new Response(JSON.stringify({ id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' }))
     : new Response(JSON.stringify({ access_token: token, refresh_token: 'refresh', expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: 'bearer', user: { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' } })));
-  const rpcFetch = vi.fn(async () => new Response(JSON.stringify({ memos: [], tags: [], memoTags: [] })));
-  const runner = createReadonlyTrialRunner({ expectedProjectRef: 'expected', projectRef: overrides.projectRef ?? 'expected', expectedOrigin: MEMO_RPC_ORIGIN,
+  const rpcFetch = vi.fn(async (url: string) => { const response = new Response(JSON.stringify({ memos: [], tags: [], memoTags: [] })); Object.defineProperty(response, 'url', { value: url }); return response; });
+  const runner = createReadonlyTrialRunner({ expectedProjectRef: 'expected', projectRef: overrides.projectRef ?? 'expected', expectedOrigin: MEMO_RPC_ORIGIN, expectedAuthOrigin: origin,
     origin: overrides.origin ?? MEMO_RPC_ORIGIN, env: { origin: permit.origin, secure: true, topLevel: true, getStorage: () => storage as unknown as Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> }, permit,
     authConfig: { url: origin, publicKey: 'sb_publishable_synthetic_only' }, rpcConfig: { origin: MEMO_RPC_ORIGIN, publishableKey: 'sb_publishable_synthetic_only' }, authTransport: authTransport as unknown as typeof fetch,
     rpcFetch: rpcFetch as unknown as Parameters<typeof import('../src/cloud-rpc-sender').createMemoRpcSender>[1] });

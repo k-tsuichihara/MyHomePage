@@ -9,6 +9,7 @@ export interface ReadonlyTrialRunnerConfig {
   readonly expectedProjectRef: string;
   readonly projectRef: string;
   readonly expectedOrigin: string;
+  readonly expectedAuthOrigin: string;
   readonly origin: string;
   readonly env: BrowserAuthEnvironment;
   readonly permit: PersistencePermit | undefined;
@@ -18,7 +19,7 @@ export interface ReadonlyTrialRunnerConfig {
   readonly rpcFetch: Parameters<typeof createMemoRpcSender>[1];
 }
 
-export type TrialRunnerState = 'idle' | 'authenticated' | 'completed' | 'stopped' | 'unknown' | 'disposed';
+export type TrialRunnerState = 'idle' | 'authenticating' | 'authenticated' | 'completed' | 'stopped' | 'unknown' | 'disposed';
 export interface ReadonlyTrialRunnerObservation {
   readonly state: TrialRunnerState;
   readonly authCalls: number;
@@ -35,6 +36,8 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
   let state: TrialRunnerState = 'idle';
   let stopReason: string | null = null;
   let authCalls = 0;
+  let authTokenCalls = 0;
+  let loadConsumed = false;
   const rpcNames: string[] = [];
 
   function stop(reason: string) { state = 'stopped'; stopReason = reason; }
@@ -43,6 +46,10 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     const url = new URL(request.url);
     if (!allowedAuth.has(url.pathname) || url.origin !== config.authConfig.url) { stop('auth-boundary'); return Promise.reject(new Error('readonly-trial-auth-denied')); }
     authCalls++;
+    if (url.pathname === '/auth/v1/token') {
+      authTokenCalls++;
+      if (authTokenCalls > 1) { stop('auth-refresh'); return Promise.reject(new Error('readonly-trial-refresh-denied')); }
+    }
     return config.authTransport(request, { ...init, redirect: 'error' });
   }
   function rpcFetch(input: RequestInfo | URL, init?: RequestInit) {
@@ -53,20 +60,25 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     return config.rpcFetch(request.url, { ...init, redirect: 'error' });
   }
   function preflight() {
-    if (config.projectRef !== config.expectedProjectRef) { stop('project-ref-mismatch'); return false; }
-    if (config.origin !== config.expectedOrigin || !config.env.secure || !config.env.topLevel) { stop('origin-mismatch'); return false; }
+    if (config.projectRef !== config.expectedProjectRef || config.authConfig.url !== config.expectedAuthOrigin
+      || config.rpcConfig.origin !== config.expectedOrigin || config.origin !== config.expectedOrigin) { stop('project-ref-mismatch'); return false; }
+    if (!config.env.secure || !config.env.topLevel) { stop('origin-mismatch'); return false; }
     return true;
   }
   return Object.freeze({
     async startAuth(): Promise<void> {
       if (state !== 'idle' || !preflight()) return;
+      state = 'authenticating';
       app = createBrowserReadonlyTrial(config.env, config.permit, config.authConfig, authTransport, config.rpcConfig, rpcFetch);
       const result = await app.session.login('synthetic@example.invalid', 'synthetic-password');
+      if ((state as TrialRunnerState) === 'disposed') { await app.dispose(); return; }
       if (result !== 'applied') stop(`auth-${result}`); else state = 'authenticated';
     },
     async load(): Promise<CloudLoadControlResult | null> {
       if (state === 'disposed') return null;
       if (state !== 'authenticated' || !app) { stop('not-authenticated'); return null; }
+      if (loadConsumed) { stop('load-already-consumed'); return null; }
+      loadConsumed = true;
       const context: AuthContext | null = app.session.getContext();
       if (!context) { stop('auth-unavailable'); return null; }
       const result = await app.trial.load(context);
