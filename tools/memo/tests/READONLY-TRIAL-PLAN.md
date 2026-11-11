@@ -76,7 +76,7 @@ Gitには手順とサニタイズ済み結果だけを置く。記録項目は�
 
 `tests/readonly-trial-browser/preview.html` と `build:readonly-trial-browser` を追加し、Auth開始・読み取り開始を明示操作に分離した合成ブラウザ入口を用意した。`src/readonly-trial-runner.ts` はProject Ref/originの事前検査、Auth/RPC回数観測、STOP/disposeを注入値で制御する。ページ表示では初期化・通信を行わず、表示はサニタイズ済み観測値だけである。専用Persistence Permitをテストrunnerから注入する前提で、既存Browser Auth→composition root→readonly trial経路を確認できる。
 
-現時点で人間による実Supabase実地試験は **NO**。今回の入口は合成transport専用であり、実Auth/RPC senderへ向ける環境値注入・専用origin・所有プロファイル・Project Ref確認runnerは未承認・未結線である。実環境値の入力と通信観測runnerを別承認で追加した後に、実地試験を開始する。
+現時点で人間による実Supabase実地試験は **NO**。`startAuth(credentials)` は注入境界として資格情報を受け取れるが、Auth完了後にrunnerが資格情報参照を継続保持しないことだけを契約とし、JavaScriptメモリ消去を保証しない。専用loopbackのオフラインrunnerは`tests/readonly-trial-browser/run.ts`で合成transportを検証する。実Auth/RPC senderへ向ける環境値注入、実transport用CSP、Project Ref確認、実通信観測は別承認のHuman Gateに残る。
 
 ## 9. 未確認事項
 
