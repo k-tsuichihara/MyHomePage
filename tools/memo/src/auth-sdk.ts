@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { createMemoAuthClient, type AuthStorage } from './auth-client';
-import { createMemoAuthSession, type MemoAuthApi } from './auth-session';
+import { createMemoAuthSession, type AuthenticatedRpcSender, type MemoAuthApi } from './auth-session';
 
 const STORAGE_KEY = 'myhomepage.memo.auth.v1';
 // パスワード認証でもSDKのlogoutがPKCE一覧の空確認・除去を行うため固定補助キーを含める。
@@ -27,7 +27,7 @@ export function createMemoSessionStorage(backing: AuthStorage) {
 
 /** 通信先と保存先は必須注入。SDKのimportやこの関数の参照だけでは実設定を読まない。 */
 export function createMemoSdkAuth(config: { url: string; publicKey: string },
-  backing: AuthStorage, transport: typeof fetch) {
+  backing: AuthStorage, transport: typeof fetch, rpcSender?: AuthenticatedRpcSender) {
   const ownedStorage = createMemoSessionStorage(backing);
   let closed = false;
   // 未初期化の値を参照しないよう、SDK生成は既存設定検証のfactory内だけで行う。
@@ -93,7 +93,7 @@ export function createMemoSdkAuth(config: { url: string; publicKey: string },
     },
     onAuthStateChange: callback => client.auth.onAuthStateChange(callback),
   };
-  const session = createMemoAuthSession(auth);
+  const session = createMemoAuthSession(auth, Date.now, rpcSender);
   let disposal: Promise<void> | undefined;
   return Object.freeze({ session,
     dispose(): Promise<void> {
