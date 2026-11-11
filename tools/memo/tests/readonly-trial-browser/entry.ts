@@ -8,8 +8,9 @@ const permit = (window as Window & { __readonlyPermit?: PersistencePermit }).__r
 let app: ReturnType<typeof createBrowserReadonlyTrial> | undefined;
 let loadConsumed = false;
 let authStarted = false;
+let loadResult: unknown;
 const status = () => document.getElementById('status')!;
-const render = () => { status().textContent = JSON.stringify(app?.trial.observation() ?? { state: 'idle' }); };
+const render = () => { status().textContent = JSON.stringify({ observation: app?.trial.observation() ?? { state: 'idle' }, result: loadResult }); };
 const syntheticAuth = async (input: RequestInfo | URL) => {
   const url = new URL(input instanceof Request ? input.url : String(input));
   if (url.pathname.endsWith('/token')) { const response = new Response(JSON.stringify({ access_token: 'header.payload.signature', refresh_token: 'synthetic-refresh', expires_at: Math.floor(Date.now() / 1000) + 3600, expires_in: 3600, token_type: 'bearer', user: { id: OWNER } }), { status: 200 }); Object.defineProperty(response, 'url', { value: url.toString() }); return response; }
@@ -37,7 +38,12 @@ window.__readonlyTrial = {
     if (loadConsumed) throw new Error('readonly trial already consumed');
     loadConsumed = true;
     const context = app.session.getContext(); if (!context) throw new Error('auth unavailable');
-    await app.trial.load(context); render();
+    const result = await app.trial.load(context);
+    const inner = result.kind === 'completed' && result.result && typeof result.result === 'object'
+      ? (result.result as { readonly kind?: unknown; readonly reason?: unknown }) : undefined;
+    loadResult = { kind: result.kind, innerKind: typeof inner?.kind === 'string' ? inner.kind : null,
+      reason: typeof inner?.reason === 'string' ? inner.reason : null };
+    render();
   },
   async dispose() { await app?.dispose(); app = undefined; },
   observation: () => app?.trial.observation() ?? { state: 'idle' },

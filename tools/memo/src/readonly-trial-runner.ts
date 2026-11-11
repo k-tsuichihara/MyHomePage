@@ -44,6 +44,9 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
   function authTransport(input: RequestInfo | URL, init?: RequestInit) {
     const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
+    if (state === 'stopped' || state === 'unknown' || state === 'disposed' || state === 'completed') {
+      return Promise.reject(new Error('readonly-trial-auth-stopped'));
+    }
     if (!allowedAuth.has(url.pathname) || url.origin !== config.authConfig.url) { stop('auth-boundary'); return Promise.reject(new Error('readonly-trial-auth-denied')); }
     authCalls++;
     if (url.pathname === '/auth/v1/token') {
