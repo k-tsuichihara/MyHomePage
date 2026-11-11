@@ -22,4 +22,17 @@ describe('Auth failure observation', () => {
     expect(auth.getLastFailureReason()).toBe('none');
     expect(JSON.stringify(auth.getState())).not.toContain('synthetic');
   });
+  it('classifies only an allowlisted provider code', async () => {
+    const api = {
+      getSession: vi.fn(async () => ({ data: { session: null }, error: null })),
+      getUser: vi.fn(async () => ({ data: { user: null }, error: null })),
+      signInWithPassword: vi.fn(async () => ({ data: { session: null }, error: { code: 'invalid_credentials', message: 'private' } })),
+      signOut: vi.fn(async () => ({ error: null })),
+      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe() {} } } })),
+    };
+    const auth = createMemoAuthSession(api);
+    expect(await auth.login('synthetic@example.invalid', 'synthetic-password')).toBe('blocked');
+    expect(auth.getLastFailureReason()).toBe('credentials-rejected');
+    expect(JSON.stringify(auth.getState())).not.toContain('private');
+  });
 });

@@ -12,7 +12,7 @@ export interface MemoAuthApi {
   };
 }
 export type AuthPhase = 'signed-out' | 'checking' | 'authenticated' | 'blocked' | 'disposed';
-export type AuthReason = 'none' | 'unavailable' | 'invalid-session' | 'expired' | 'different-user';
+export type AuthReason = 'none' | 'unavailable' | 'invalid-session' | 'expired' | 'different-user' | 'credentials-rejected';
 export interface MemoAuthState {
   readonly phase: AuthPhase;
   readonly generation: number;
@@ -44,6 +44,13 @@ function sessionIdentity(raw: unknown): { userId: string; expiresAt: number; acc
     throw new Error('invalid-session');
   }
   return { userId: uuid(value.user?.id), expiresAt: value.expires_at, accessToken: value.access_token };
+}
+function authErrorReason(error: unknown): AuthReason {
+  if (!error || typeof error !== 'object') return 'unavailable';
+  const value = error as { code?: unknown; error_code?: unknown };
+  const code = value.code ?? value.error_code;
+  return code === 'invalid_credentials' || code === 'user_not_found' || code === 'user_banned'
+    ? 'credentials-rejected' : 'unavailable';
 }
 
 /** 画面や保存先を変更せず、認証世代に結び付けた利用許可だけを返す。 */
@@ -164,7 +171,7 @@ export function createMemoAuthSession(
       const response = kind === 'login'
         ? await auth.signInWithPassword(credentials!) : await auth.getSession();
       if (disposed || attempt !== serial) return 'stale';
-      if (response.error) { block('unavailable'); return 'blocked'; }
+      if (response.error) { block(kind === 'login' ? authErrorReason(response.error) : 'unavailable'); return 'blocked'; }
       if (kind === 'login' && response.data.session === null) { block('invalid-session'); return 'blocked'; }
       // await中のSDKオブジェクト変更を、検証済みセッションの変更と誤認しない。
       let candidate: ReturnType<typeof sessionIdentity> | null;
