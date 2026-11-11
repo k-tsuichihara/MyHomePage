@@ -27,7 +27,15 @@ export interface ReadonlyTrialRunnerObservation {
   readonly rpcNames: readonly string[];
   readonly otherRpcCalls: number;
   readonly stopReason: string | null;
+  readonly diagnostic: ReadonlyTrialDiagnostic;
 }
+export type ReadonlyTrialDiagnostic = Readonly<{
+  schema: 'memo-human-gate-diagnostic-v1'; stage: 'idle' | 'auth-start' | 'auth-transport' | 'auth-session' | 'terminal';
+  failureClass: 'none' | 'provider-http-4xx' | 'provider-http-5xx' | 'network' | 'timeout' | 'route-block' | 'sdk-error' | 'storage' | 'invalid-response' | 'unknown';
+  transportStarted: boolean; transportCompleted: boolean; sdkCallStarted: boolean; sdkCallCompleted: boolean;
+  responseReceived: boolean; httpStatus: number | null; targetMatched: boolean; method: 'POST' | 'GET' | null;
+  redirectPolicy: 'error'; retryCount: 0; credentialsReferenceCleared: boolean; secretsExposed: false;
+}>;
 
 const allowedAuth = new Set(['/auth/v1/token', '/auth/v1/user', '/auth/v1/logout']);
 
@@ -39,6 +47,12 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
   let authTokenCalls = 0;
   let loadConsumed = false;
   const rpcNames: string[] = [];
+  let diagnostic: ReadonlyTrialDiagnostic = { schema: 'memo-human-gate-diagnostic-v1', stage: 'idle', failureClass: 'none',
+    transportStarted: false, transportCompleted: false, sdkCallStarted: false, sdkCallCompleted: false,
+    responseReceived: false, httpStatus: null, targetMatched: false, method: null, redirectPolicy: 'error', retryCount: 0,
+    credentialsReferenceCleared: false, secretsExposed: false };
+  const patchDiagnostic = (patch: Partial<ReadonlyTrialDiagnostic>) => { diagnostic = Object.freeze({ ...diagnostic, ...patch }); };
+  const classifyError = (error: unknown) => error instanceof DOMException && error.name === 'AbortError' ? 'timeout' as const : 'network' as const;
 
   function stop(reason: string) { state = 'stopped'; stopReason = reason; }
   function authTransport(input: RequestInfo | URL, init?: RequestInit) {
@@ -47,13 +61,18 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     if (state === 'stopped' || state === 'unknown' || state === 'disposed' || state === 'completed') {
       return Promise.reject(new Error('readonly-trial-auth-stopped'));
     }
-    if (!allowedAuth.has(url.pathname) || url.origin !== config.authConfig.url) { stop('auth-boundary'); return Promise.reject(new Error('readonly-trial-auth-denied')); }
-    authCalls++;
+    if (!allowedAuth.has(url.pathname) || url.origin !== config.authConfig.url) { stop('auth-boundary'); patchDiagnostic({ stage: 'terminal', failureClass: 'route-block', targetMatched: false }); return Promise.reject(new Error('readonly-trial-auth-denied')); }
+    authCalls++; patchDiagnostic({ stage: 'auth-transport', transportStarted: true, targetMatched: true, method: request.method as 'GET' | 'POST' });
     if (url.pathname === '/auth/v1/token') {
       authTokenCalls++;
       if (authTokenCalls > 1) { stop('auth-refresh'); return Promise.reject(new Error('readonly-trial-refresh-denied')); }
     }
-    return config.authTransport(request, { ...init, redirect: 'error' });
+    return config.authTransport(request, { ...init, redirect: 'error' }).then(response => {
+      patchDiagnostic({ transportCompleted: true, responseReceived: true, httpStatus: response.status });
+      if (response.status >= 400 && response.status < 500) patchDiagnostic({ failureClass: 'provider-http-4xx' });
+      else if (response.status >= 500) patchDiagnostic({ failureClass: 'provider-http-5xx' });
+      return response;
+    }).catch(error => { patchDiagnostic({ failureClass: classifyError(error), transportCompleted: false }); throw error; });
   }
   function rpcFetch(input: RequestInfo | URL, init?: RequestInit) {
     const request = input instanceof Request ? input : new Request(input, init);
@@ -71,17 +90,18 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
   return Object.freeze({
     async startAuth(credentials: { readonly email: string; readonly password: string } = { email: 'synthetic@example.invalid', password: 'synthetic-password' }): Promise<void> {
       if (state !== 'idle' || !preflight()) return;
-      state = 'authenticating';
+      state = 'authenticating'; patchDiagnostic({ stage: 'auth-start', sdkCallStarted: true, failureClass: 'none', credentialsReferenceCleared: false });
       app = createBrowserReadonlyTrial(config.env, config.permit, config.authConfig, authTransport, config.rpcConfig, rpcFetch);
       const email = credentials.email, password = credentials.password;
       let result: Awaited<ReturnType<typeof app.session.login>>;
       try { result = await app.session.login(email, password); }
-      finally { credentials = { email: '', password: '' }; }
+      finally { credentials = { email: '', password: '' }; patchDiagnostic({ credentialsReferenceCleared: true, sdkCallCompleted: true }); }
       if ((state as TrialRunnerState) !== 'authenticating') { await app.dispose(); return; }
       if (result !== 'applied') {
         const reason = app.session.getLastFailureReason();
         stop(`auth-${reason === 'none' ? result : reason}`);
-      } else state = 'authenticated';
+        if (diagnostic.failureClass === 'none') patchDiagnostic({ stage: 'terminal', failureClass: reason === 'unavailable' ? 'sdk-error' : reason === 'invalid-session' ? 'invalid-response' : 'unknown' });
+      } else { state = 'authenticated'; patchDiagnostic({ stage: 'auth-session' }); }
     },
     async load(): Promise<CloudLoadControlResult | null> {
       if (state === 'disposed') return null;
@@ -103,12 +123,12 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     },
     dispose(): Promise<void> {
       if (state === 'disposed') return Promise.resolve();
-      state = 'disposed'; return app?.dispose() ?? Promise.resolve();
+      state = 'disposed'; patchDiagnostic({ stage: 'terminal' }); return app?.dispose() ?? Promise.resolve();
     },
     observation(): ReadonlyTrialRunnerObservation {
       const observation: ReadonlyTrialObservation | undefined = app?.trial.observation();
       return Object.freeze({ state, authCalls, rpcCalls: rpcNames.length, rpcNames: Object.freeze([...rpcNames]),
-        otherRpcCalls: observation?.nonLoadRpcCalls ?? 0, stopReason });
+        otherRpcCalls: observation?.nonLoadRpcCalls ?? 0, stopReason, diagnostic });
     },
   });
 }

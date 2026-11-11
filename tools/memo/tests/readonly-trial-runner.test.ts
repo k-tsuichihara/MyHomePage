@@ -46,4 +46,21 @@ describe('readonly trial runner', () => {
     expect(f.rpcFetch).not.toHaveBeenCalled();
     expect(JSON.stringify(f.runner.observation())).not.toContain('invalid credentials');
   });
+  it('records only structured transport diagnostics', async () => {
+    const f = fixture();
+    f.authTransport.mockImplementation(async () => new Response('private raw body', { status: 503 }));
+    await f.runner.startAuth({ email: 'private@example.invalid', password: 'private-password' });
+    const observation = f.runner.observation();
+    expect(observation.diagnostic).toMatchObject({ schema: 'memo-human-gate-diagnostic-v1', failureClass: 'provider-http-5xx', httpStatus: 503, responseReceived: true, retryCount: 0, secretsExposed: false });
+    expect(JSON.stringify(observation)).not.toMatch(/private|example|password|raw body/);
+    expect(f.rpcFetch).not.toHaveBeenCalled();
+  });
+  it('normalizes transport failure without exposing the exception', async () => {
+    const f = fixture();
+    f.authTransport.mockRejectedValue(new Error('private network detail'));
+    await f.runner.startAuth({ email: 'private@example.invalid', password: 'private-password' });
+    expect(f.runner.observation().diagnostic).toMatchObject({ failureClass: 'network', transportStarted: true, transportCompleted: false, secretsExposed: false });
+    expect(JSON.stringify(f.runner.observation())).not.toMatch(/private|network detail|example|password/);
+    expect(f.rpcFetch).not.toHaveBeenCalled();
+  });
 });

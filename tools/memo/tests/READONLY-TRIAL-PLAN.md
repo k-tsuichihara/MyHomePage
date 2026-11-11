@@ -82,6 +82,12 @@ Gitには手順とサニタイズ済み結果だけを置く。記録項目は�
 
 実Auth/RPCの成功結果、refresh挙動、応答出所、single-rpc認定は未検証として残る。停止後の自動再送は禁止し、再試験には別途人間承認を要する。
 
+2026-11-12にHuman Gate #3を1回実施した。開始前の`idle / authCalls: 0 / rpcCalls: 0 / writeRpcCalls: 0`、資格情報入力時の通信0件を確認後、Auth開始を1回だけ実行した。結果は`state: stopped / authCalls: 1 / rpcCalls: 0 / rpcNames: [] / otherRpcCalls: 0 / writeRpcCalls: 0 / loadResult: null / stopReason: auth-unavailable`。読み取り・再Auth・再試行は行わず終了した。#1/#2の記録は保持する。
+
+Human Gate #3の`auth-unavailable`は、現行コード上ではAuth APIの非成功応答、fetch例外・timeout、SDK例外、Storage障害などが安全側に集約され得る分類であり、資格情報不一致とは断定できない。既知providerコード以外の原因を実通信なしでさらに一意化する根拠はない。
+
+Human Gate画面には`memo-human-gate-diagnostic-v1`の構造化診断を表示する。表示値は失敗段階、固定failureClass、HTTP status、到達boolean、固定method、retryCount、資格情報参照終了boolean等に限定し、raw URL/body/header、provider本文、資格情報、token、UUID、stack traceは表示しない。診断はrunnerの単一Auth呼出しを観測するだけで、追加通信や再試行を発生させない。
+
 Auth失敗時は、セッション層が保持する固定分類（`unavailable`、`invalid-session`、`expired`、`different-user`、`credentials-rejected`）をHuman Gateの`auth-*`停止理由へ反映する。生HTTP本文・providerメッセージ・資格情報は分類対象にも表示対象にも含めない。安全な既知コードに一致しない場合のみ`auth-unavailable`または`auth-blocked`へフォールバックする。
 
 `npm run human-gate:offline` はdead proxyと`connect-src: none`を使う合成回帰入口であり、実Auth/RPCへ接続しない。`npm run human-gate` はheaded専用profile、owner.runId由来のPermit、trusted origin限定CSP/route/transportを使う本番試験入口で、起動・表示・入力だけでは通信しない。Auth開始と読み取り開始は別の明示操作である。
