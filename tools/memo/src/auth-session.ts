@@ -54,6 +54,7 @@ export function createMemoAuthSession(
 ) {
   let state: MemoAuthState = Object.freeze({ phase: 'signed-out', generation: 0, userId: null,
     reauthenticateUserId: null, expiresAt: null, reason: 'none' });
+  let lastFailureReason: AuthReason = 'none';
   let serial = 0;
   let busy = false;
   let disposed = false;
@@ -90,6 +91,7 @@ export function createMemoAuthSession(
     queueNotification();
   }
   function block(reason: AuthReason) {
+    lastFailureReason = reason;
     const previous = state.userId ?? state.reauthenticateUserId;
     update('blocked', reason);
     state = Object.freeze({ ...state, reauthenticateUserId: previous });
@@ -233,6 +235,7 @@ export function createMemoAuthSession(
   } catch { block('unavailable'); }
   return Object.freeze({
     getState,
+    getLastFailureReason: () => lastFailureReason,
     /** 表示専用。初回も最新値を非同期で渡し、解除後と終端通知後は配信しない。 */
     subscribe(listener: AuthStateListener): () => void {
       if (disposed) return () => {};

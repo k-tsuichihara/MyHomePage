@@ -78,7 +78,10 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
       try { result = await app.session.login(email, password); }
       finally { credentials = { email: '', password: '' }; }
       if ((state as TrialRunnerState) !== 'authenticating') { await app.dispose(); return; }
-      if (result !== 'applied') stop(`auth-${result}`); else state = 'authenticated';
+      if (result !== 'applied') {
+        const reason = app.session.getLastFailureReason();
+        stop(`auth-${reason === 'none' ? result : reason}`);
+      } else state = 'authenticated';
     },
     async load(): Promise<CloudLoadControlResult | null> {
       if (state === 'disposed') return null;
