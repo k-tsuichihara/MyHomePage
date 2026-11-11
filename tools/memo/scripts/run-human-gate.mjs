@@ -1,7 +1,6 @@
 import { chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import { createProfileOwner, prepareProfileBase } from '../tests/persistence/profile-guard.ts';
 import { initializeContext } from '../tests/persistence/lifecycle.ts';
 import { MEMO_RPC_ORIGIN } from '../src/cloud-rpc-sender.ts';
@@ -25,9 +24,9 @@ await new Promise((resolve, reject) => { server.once('error', reject); server.li
 const address = server.address(); if (!address || typeof address === 'string') throw new Error('loopback unavailable');
 origin = `http://127.0.0.1:${address.port}`;
 await initializeContext(() => chromium.launchPersistentContext(profile, { headless: false, serviceWorkers: 'block', acceptDownloads: false,
-  proxy: { server: 'http://127.0.0.1:9', bypass: '127.0.0.1' }, args: ['--disable-background-networking', '--disable-sync', '--no-first-run'] }), async context => {
+  args: ['--disable-background-networking', '--disable-sync', '--no-first-run'] }), async context => {
   await context.route('**/*', route => { const url = new URL(route.request().url()); return url.origin === origin || url.origin === MEMO_RPC_ORIGIN ? route.continue() : route.abort(); });
-  await context.addInitScript(({ origin, runId, projectRef, authOrigin, publishableKey }) => Object.defineProperty(window, '__humanGateConfig', { value: Object.freeze({ projectRef, authOrigin, publishableKey, permit: Object.freeze({ origin, runId }) }) }), { origin, runId: randomUUID(), projectRef, authOrigin: MEMO_RPC_ORIGIN, publishableKey });
+  await context.addInitScript(({ origin, runId, projectRef, authOrigin, publishableKey }) => Object.defineProperty(window, '__humanGateConfig', { value: Object.freeze({ projectRef, authOrigin, publishableKey, permit: Object.freeze({ origin, runId }) }) }), { origin, runId: owner.runId, projectRef, authOrigin: MEMO_RPC_ORIGIN, publishableKey });
   const page = await context.newPage(); await page.goto(`${origin}/human-gate.html`);
   console.log(`Human Gate: ${origin}/human-gate.html`); console.log('通信開始はAuth開始ボタン押下後のみです。終了はブラウザを閉じてください。');
   await new Promise(resolve => context.on('close', resolve));
