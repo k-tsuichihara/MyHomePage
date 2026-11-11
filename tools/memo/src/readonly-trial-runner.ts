@@ -69,11 +69,14 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     return true;
   }
   return Object.freeze({
-    async startAuth(): Promise<void> {
+    async startAuth(credentials: { readonly email: string; readonly password: string } = { email: 'synthetic@example.invalid', password: 'synthetic-password' }): Promise<void> {
       if (state !== 'idle' || !preflight()) return;
       state = 'authenticating';
       app = createBrowserReadonlyTrial(config.env, config.permit, config.authConfig, authTransport, config.rpcConfig, rpcFetch);
-      const result = await app.session.login('synthetic@example.invalid', 'synthetic-password');
+      const email = credentials.email, password = credentials.password;
+      let result: Awaited<ReturnType<typeof app.session.login>>;
+      try { result = await app.session.login(email, password); }
+      finally { credentials = { email: '', password: '' }; }
       if ((state as TrialRunnerState) !== 'authenticating') { await app.dispose(); return; }
       if (result !== 'applied') stop(`auth-${result}`); else state = 'authenticated';
     },
