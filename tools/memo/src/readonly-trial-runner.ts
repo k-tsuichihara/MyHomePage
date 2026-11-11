@@ -31,7 +31,7 @@ export interface ReadonlyTrialRunnerObservation {
 }
 export type ReadonlyTrialDiagnostic = Readonly<{
   schema: 'memo-human-gate-diagnostic-v1'; stage: 'idle' | 'auth-start' | 'auth-transport' | 'auth-session' | 'terminal';
-  failureClass: 'none' | 'provider-http-4xx' | 'provider-http-5xx' | 'network' | 'timeout' | 'route-block' | 'sdk-error' | 'storage' | 'invalid-response' | 'unknown';
+  failureClass: 'none' | 'provider-http-4xx' | 'provider-http-5xx' | 'unexpected-http-status' | 'network' | 'timeout' | 'route-block' | 'sdk-error' | 'storage' | 'invalid-response' | 'unknown';
   transportStarted: boolean; transportCompleted: boolean; sdkCallStarted: boolean; sdkCallCompleted: boolean;
   responseReceived: boolean; httpStatus: number | null; targetMatched: boolean; method: 'POST' | 'GET' | null;
   redirectPolicy: 'error'; retryCount: 0; credentialsReferenceCleared: boolean; secretsExposed: false;
@@ -70,7 +70,8 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     return config.authTransport(request, { ...init, redirect: 'error' }).then(response => {
       patchDiagnostic({ transportCompleted: true, responseReceived: true, httpStatus: response.status });
       if (response.status >= 400 && response.status < 500) patchDiagnostic({ failureClass: 'provider-http-4xx' });
-      else if (response.status >= 500) patchDiagnostic({ failureClass: 'provider-http-5xx' });
+      else if (response.status >= 500 && response.status <= 599) patchDiagnostic({ failureClass: 'provider-http-5xx' });
+      else if (response.status < 200 || response.status >= 300) patchDiagnostic({ failureClass: 'unexpected-http-status' });
       return response;
     }).catch(error => { patchDiagnostic({ failureClass: classifyError(error), transportCompleted: false }); throw error; });
   }

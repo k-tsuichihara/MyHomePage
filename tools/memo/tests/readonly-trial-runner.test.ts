@@ -55,6 +55,19 @@ describe('readonly trial runner', () => {
     expect(JSON.stringify(observation)).not.toMatch(/private|example|password|raw body/);
     expect(f.rpcFetch).not.toHaveBeenCalled();
   });
+  it.each([302, 399])('classifies non-2xx status %s as unexpected-http-status', async status => {
+    const f = fixture();
+    f.authTransport.mockImplementation(async () => new Response(null, { status }));
+    await f.runner.startAuth({ email: 'private@example.invalid', password: 'private-password' });
+    expect(f.runner.observation().diagnostic).toMatchObject({ failureClass: 'unexpected-http-status', httpStatus: status, responseReceived: true });
+    expect(f.rpcFetch).not.toHaveBeenCalled();
+  });
+  it('classifies an HTTP 4xx response', async () => {
+    const f = fixture();
+    f.authTransport.mockImplementation(async () => new Response('{}', { status: 401 }));
+    await f.runner.startAuth({ email: 'private@example.invalid', password: 'private-password' });
+    expect(f.runner.observation().diagnostic).toMatchObject({ failureClass: 'provider-http-4xx', httpStatus: 401 });
+  });
   it('normalizes transport failure without exposing the exception', async () => {
     const f = fixture();
     f.authTransport.mockRejectedValue(new Error('private network detail'));
