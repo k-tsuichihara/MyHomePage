@@ -32,7 +32,13 @@ await runOwnedCase(owner, profile, async () => {
     await context.addInitScript(({ origin, runId }) => Object.defineProperty(window, '__readonlyPermit', { value: Object.freeze({ origin, runId }) }), { origin, runId: owner.runId });
     const page = await context.newPage(); await page.goto(origin); await page.waitForFunction(() => !!window.__readonlyTrial);
     const initial = await page.locator('#status').textContent(); if (!initial?.includes('idle')) throw new Error('unexpected initial state');
-    await page.locator('#auth').click(); await page.locator('#load').click();
+    await page.evaluate(async () => { await window.__readonlyTrial!.startAuth(); });
+    const authenticated = await page.evaluate(() => window.__readonlyTrialPhase);
+    if (authenticated !== 'authenticated') throw new Error('offline auth did not complete');
+    await page.evaluate(async () => { await window.__readonlyTrial!.load(); });
+    const loaded = await page.evaluate(() => window.__readonlyTrialPhase);
+    if (loaded !== 'loaded') throw new Error('offline read did not complete');
+    await page.evaluate(async () => { await window.__readonlyTrial!.dispose(); });
     await context.close();
   });
 }, value => process.stderr.write(`${JSON.stringify(value)}\n`));

@@ -1,11 +1,12 @@
 import { chromium } from '@playwright/test';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { createProfileOwner, prepareProfileBase } from '../tests/persistence/profile-guard.ts';
 import { initializeContext } from '../tests/persistence/lifecycle.ts';
 import { MEMO_RPC_ORIGIN } from '../src/cloud-rpc-sender.ts';
 
-const root = new URL('../', import.meta.url);
+const root = fileURLToPath(new URL('../', import.meta.url));
 const projectRef = 'yohoppqflnhhvqypwhfv';
 const publishableKey = process.env.MEMO_PUBLISHABLE_KEY;
 if (!publishableKey || !/^sb_publishable_[A-Za-z0-9_-]+$/.test(publishableKey)) throw new Error('MEMO_PUBLISHABLE_KEY is required');

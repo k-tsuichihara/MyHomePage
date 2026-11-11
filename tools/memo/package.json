@@ -22,7 +22,8 @@
     "build:readonly-trial-browser": "node scripts/build-readonly-trial-browser.mjs",
     "test:readonly-trial-browser": "npm run build:readonly-trial-browser && node --experimental-strip-types tests/readonly-trial-browser/run.ts",
     "human-gate:offline": "npm run test:readonly-trial-browser",
-    "human-gate": "npm run build:readonly-trial-browser && node --experimental-strip-types scripts/run-human-gate.mjs",
+    "build:human-gate": "node scripts/build-human-gate-runner.mjs",
+    "human-gate": "npm run build:readonly-trial-browser && npm run build:human-gate && node .human-gate/run.mjs",
     "test:auth-browser": "npm run build:auth-browser && node .auth-browser/run.mjs",
     "test:cloud-offline": "npm run build:cloud-offline && node .cloud-live/offline.mjs"
   },
