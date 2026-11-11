@@ -175,6 +175,7 @@ export function createMemoAuthSession(
         if (disposed || attempt !== serial) return 'stale';
         confirmedSession = candidate;
         verifiedSession = result;
+        lastFailureReason = 'none';
         // 不一致イベントで停止しても、確認できたユーザーとドラフトの対応は保持する。
         state = Object.freeze({ ...state, reauthenticateUserId: state.reauthenticateUserId ?? result.userId });
         return 'applied';
