@@ -76,7 +76,9 @@ Gitには手順とサニタイズ済み結果だけを置く。記録項目は�
 
 `tests/readonly-trial-browser/preview.html` と `build:readonly-trial-browser` を追加し、Auth開始・読み取り開始を明示操作に分離した合成ブラウザ入口を用意した。`src/readonly-trial-runner.ts` はProject Ref/originの事前検査、Auth/RPC回数観測、STOP/disposeを注入値で制御する。ページ表示では初期化・通信を行わず、表示はサニタイズ済み観測値だけである。専用Persistence Permitをテストrunnerから注入する前提で、既存Browser Auth→composition root→readonly trial経路を確認できる。
 
-現時点で人間による実Supabase実地試験は **NO**。今回の入口は合成transport専用であり、実Auth/RPC senderへ向ける環境値注入・専用origin・所有プロファイル・Project Ref確認runnerは未承認・未結線である。実環境値の入力と通信観測runnerを別承認で追加した後に、実地試験を開始する。
+現時点で人間による実Supabase実地試験は **未実施**。`startAuth(credentials)` は注入境界として資格情報を受け取れるが、Auth完了後にrunnerが資格情報参照を継続保持しないことだけを契約とし、JavaScriptメモリ消去を保証しない。専用loopbackのオフラインrunnerは`tests/readonly-trial-browser/run.ts`で合成transportを検証し、Human Gate本番runnerは`scripts/run-human-gate.mjs`で既存sender/fetchへ接続する。実Auth/RPCの結果、refresh挙動、応答出所、single-rpc認定は未検証として残る。
+
+`npm run human-gate:offline` はdead proxyと`connect-src: none`を使う合成回帰入口であり、実Auth/RPCへ接続しない。`npm run human-gate` はheaded専用profile、owner.runId由来のPermit、trusted origin限定CSP/route/transportを使う本番試験入口で、起動・表示・入力だけでは通信しない。Auth開始と読み取り開始は別の明示操作である。
 
 ## 9. 未確認事項
 

@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><title>Memo Human Gate</title>
+<h1>Memo Human Gate</h1>
+<p>入力・表示だけでは通信しません。Auth開始後にのみ通信します。</p>
+<label>Email <input id="email" type="email" autocomplete="off"></label>
+<label>Password <input id="password" type="password" autocomplete="off"></label>
+<button id="auth">Auth開始</button><button id="load" disabled>読み取り開始</button><button id="dispose">終了</button>
+<pre id="status">{"state":"idle","authCalls":0,"rpcCalls":0,"writeRpcCalls":0}</pre>
+<script type="module" src="/human-gate.js"></script>

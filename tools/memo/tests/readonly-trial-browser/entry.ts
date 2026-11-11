@@ -2,7 +2,7 @@ import { createBrowserReadonlyTrial } from '../../src/readonly-trial';
 import { MEMO_RPC_ORIGIN } from '../../src/cloud-rpc-sender';
 import type { PersistencePermit } from '../../src/browser-local-adapter';
 
-declare global { interface Window { __readonlyTrial?: { startAuth(): Promise<void>; load(): Promise<void>; dispose(): Promise<void>; observation(): unknown } } }
+declare global { interface Window { __readonlyTrial?: { startAuth(): Promise<void>; load(): Promise<void>; dispose(): Promise<void>; observation(): unknown }; __readonlyTrialPhase?: string } }
 const OWNER = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const permit = (window as Window & { __readonlyPermit?: PersistencePermit }).__readonlyPermit;
 let app: ReturnType<typeof createBrowserReadonlyTrial> | undefined;
@@ -31,7 +31,12 @@ window.__readonlyTrial = {
       getStorage: () => window.localStorage }, permit,
       { url: 'https://memo-browser.invalid', publicKey: 'sb_publishable_synthetic_only' }, syntheticAuth,
       { origin: MEMO_RPC_ORIGIN, publishableKey: 'sb_publishable_synthetic_only' }, syntheticRpc);
-    await app.session.login('synthetic@example.invalid', 'synthetic-password'); render();
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const passwordInput = document.getElementById('password') as HTMLInputElement;
+    try { await app.session.login(email || 'synthetic@example.invalid', passwordInput.value || 'synthetic-password'); }
+    finally { passwordInput.value = ''; (document.getElementById('email') as HTMLInputElement).value = ''; }
+    window.__readonlyTrialPhase = 'authenticated';
+    render();
   },
   async load() {
     if (!app) throw new Error('auth not started');
@@ -43,6 +48,7 @@ window.__readonlyTrial = {
       ? (result.result as { readonly kind?: unknown; readonly reason?: unknown }) : undefined;
     loadResult = { kind: result.kind, innerKind: typeof inner?.kind === 'string' ? inner.kind : null,
       reason: typeof inner?.reason === 'string' ? inner.reason : null };
+    window.__readonlyTrialPhase = 'loaded';
     render();
   },
   async dispose() { await app?.dispose(); app = undefined; },
