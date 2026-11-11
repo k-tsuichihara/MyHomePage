@@ -2,11 +2,12 @@ import { createBrowserReadonlyTrial } from '../../src/readonly-trial';
 import { MEMO_RPC_ORIGIN } from '../../src/cloud-rpc-sender';
 import type { PersistencePermit } from '../../src/browser-local-adapter';
 
-declare global { interface Window { __readonlyTrial?: { startAuth(): Promise<void>; load(): Promise<void>; observation(): unknown } } }
+declare global { interface Window { __readonlyTrial?: { startAuth(): Promise<void>; load(): Promise<void>; dispose(): Promise<void>; observation(): unknown } } }
 const OWNER = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const permit = (window as Window & { __readonlyPermit?: PersistencePermit }).__readonlyPermit;
 let app: ReturnType<typeof createBrowserReadonlyTrial> | undefined;
 let loadConsumed = false;
+let authStarted = false;
 const status = () => document.getElementById('status')!;
 const render = () => { status().textContent = JSON.stringify(app?.trial.observation() ?? { state: 'idle' }); };
 const syntheticAuth = async (input: RequestInfo | URL) => {
@@ -22,6 +23,8 @@ const syntheticRpc = async (input: RequestInfo | URL) => {
 };
 window.__readonlyTrial = {
   async startAuth() {
+    if (authStarted) throw new Error('readonly trial auth already started');
+    authStarted = true;
     if (!permit) throw new Error('readonly trial permit missing');
     app = createBrowserReadonlyTrial({ origin: location.origin, secure: isSecureContext, topLevel: window.top === window,
       getStorage: () => window.localStorage }, permit,
@@ -36,6 +39,7 @@ window.__readonlyTrial = {
     const context = app.session.getContext(); if (!context) throw new Error('auth unavailable');
     await app.trial.load(context); render();
   },
+  async dispose() { await app?.dispose(); app = undefined; },
   observation: () => app?.trial.observation() ?? { state: 'idle' },
 };
 document.getElementById('auth')!.addEventListener('click', () => void window.__readonlyTrial!.startAuth().catch(error => { status().textContent = `STOP: ${error instanceof Error ? error.message : 'unknown'}`; }));

@@ -19,7 +19,7 @@ export interface ReadonlyTrialRunnerConfig {
   readonly rpcFetch: Parameters<typeof createMemoRpcSender>[1];
 }
 
-export type TrialRunnerState = 'idle' | 'authenticating' | 'authenticated' | 'completed' | 'stopped' | 'unknown' | 'disposed';
+export type TrialRunnerState = 'idle' | 'authenticating' | 'authenticated' | 'loading' | 'completed' | 'stopped' | 'unknown' | 'disposed';
 export interface ReadonlyTrialRunnerObservation {
   readonly state: TrialRunnerState;
   readonly authCalls: number;
@@ -55,7 +55,7 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
   function rpcFetch(input: RequestInfo | URL, init?: RequestInit) {
     const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
-    if (url.origin !== config.rpcConfig.origin || !url.pathname.endsWith('/memo_load_snapshot')) { stop('rpc-boundary'); return Promise.reject(new Error('readonly-trial-rpc-denied')); }
+    if (state !== 'loading' || url.origin !== config.rpcConfig.origin || !url.pathname.endsWith('/memo_load_snapshot')) { stop('rpc-boundary'); return Promise.reject(new Error('readonly-trial-rpc-denied')); }
     rpcNames.push('memo_load_snapshot');
     return config.rpcFetch(request.url, { ...init, redirect: 'error' });
   }
@@ -76,14 +76,20 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     },
     async load(): Promise<CloudLoadControlResult | null> {
       if (state === 'disposed') return null;
-      if (state !== 'authenticated' || !app) { stop('not-authenticated'); return null; }
+      if (state !== 'authenticated' || !app) { stop(state === 'loading' ? 'load-in-progress' : 'not-authenticated'); return null; }
       if (loadConsumed) { stop('load-already-consumed'); return null; }
       loadConsumed = true;
+      state = 'loading';
       const context: AuthContext | null = app.session.getContext();
       if (!context) { stop('auth-unavailable'); return null; }
       const result = await app.trial.load(context);
-      if (result.kind === 'stale-response') state = 'stopped';
-      else if (result.kind === 'completed') state = 'completed';
+      if (state !== 'loading') return result;
+      if (result.kind === 'stale-response' || result.kind === 'stopped') state = 'stopped';
+      else if (result.kind === 'completed') {
+        const inner = (result.result as { readonly kind?: string }).kind;
+        if (inner === 'unknown' || inner === 'failed') { state = 'unknown'; stopReason = `load-${inner}`; }
+        else state = 'completed';
+      }
       return result;
     },
     dispose(): Promise<void> {

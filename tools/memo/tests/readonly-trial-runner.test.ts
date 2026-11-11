@@ -24,7 +24,7 @@ describe('readonly trial runner', () => {
   it('起動のみでは通信0、明示操作でAuth→load 1回になる', async () => {
     const f = fixture(); expect(f.runner.observation()).toMatchObject({ state: 'idle', authCalls: 0, rpcCalls: 0 });
     await f.runner.startAuth(); expect(f.runner.observation().authCalls).toBeGreaterThan(0);
-    await f.runner.load(); expect(f.runner.observation()).toMatchObject({ state: 'completed', rpcCalls: 1, rpcNames: ['memo_load_snapshot'], otherRpcCalls: 0 });
+    await f.runner.load(); expect(f.runner.observation()).toMatchObject({ state: 'unknown', stopReason: 'load-failed', rpcCalls: 1, rpcNames: ['memo_load_snapshot'], otherRpcCalls: 0 });
     expect(f.rpcFetch).toHaveBeenCalledOnce();
   });
   it('Project Ref/origin不一致は通信前にSTOPする', async () => {
