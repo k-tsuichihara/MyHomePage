@@ -82,7 +82,7 @@ Gitには手順とサニタイズ済み結果だけを置く。記録項目は�
 
 実Auth/RPCの成功結果、refresh挙動、応答出所、single-rpc認定は未検証として残る。停止後の自動再送は禁止し、再試験には別途人間承認を要する。
 
-Auth失敗時は、セッション層が保持する固定分類（`unavailable`、`invalid-session`、`expired`、`different-user`）をHuman Gateの`auth-*`停止理由へ反映する。生HTTP本文・providerメッセージ・資格情報は分類対象にも表示対象にも含めない。分類できない場合のみ`auth-blocked`へフォールバックする。
+Auth失敗時は、セッション層が保持する固定分類（`unavailable`、`invalid-session`、`expired`、`different-user`、`credentials-rejected`）をHuman Gateの`auth-*`停止理由へ反映する。生HTTP本文・providerメッセージ・資格情報は分類対象にも表示対象にも含めない。安全な既知コードに一致しない場合のみ`auth-unavailable`または`auth-blocked`へフォールバックする。
 
 `npm run human-gate:offline` はdead proxyと`connect-src: none`を使う合成回帰入口であり、実Auth/RPCへ接続しない。`npm run human-gate` はheaded専用profile、owner.runId由来のPermit、trusted origin限定CSP/route/transportを使う本番試験入口で、起動・表示・入力だけでは通信しない。Auth開始と読み取り開始は別の明示操作である。
 
