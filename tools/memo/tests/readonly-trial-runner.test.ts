@@ -38,4 +38,12 @@ describe('readonly trial runner', () => {
     await f.runner.load(); await f.runner.dispose(); await f.runner.load();
     expect(f.rpcFetch).toHaveBeenCalledTimes(count); expect(f.runner.observation().state).toBe('disposed');
   });
+  it('Auth blocked is classified safely without RPC', async () => {
+    const f = fixture();
+    f.authTransport.mockImplementation(async () => new Response(JSON.stringify({ error: 'invalid credentials' }), { status: 401 }));
+    await f.runner.startAuth({ email: 'synthetic@example.invalid', password: 'synthetic-password' });
+    expect(f.runner.observation()).toMatchObject({ state: 'stopped', stopReason: 'auth-unavailable', rpcCalls: 0, otherRpcCalls: 0 });
+    expect(f.rpcFetch).not.toHaveBeenCalled();
+    expect(JSON.stringify(f.runner.observation())).not.toContain('invalid credentials');
+  });
 });

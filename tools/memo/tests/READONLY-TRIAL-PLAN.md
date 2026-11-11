@@ -76,7 +76,13 @@ Gitには手順とサニタイズ済み結果だけを置く。記録項目は�
 
 `tests/readonly-trial-browser/preview.html` と `build:readonly-trial-browser` を追加し、Auth開始・読み取り開始を明示操作に分離した合成ブラウザ入口を用意した。`src/readonly-trial-runner.ts` はProject Ref/originの事前検査、Auth/RPC回数観測、STOP/disposeを注入値で制御する。ページ表示では初期化・通信を行わず、表示はサニタイズ済み観測値だけである。専用Persistence Permitをテストrunnerから注入する前提で、既存Browser Auth→composition root→readonly trial経路を確認できる。
 
-現時点で人間による実Supabase実地試験は **未実施**。`startAuth(credentials)` は注入境界として資格情報を受け取れるが、Auth完了後にrunnerが資格情報参照を継続保持しないことだけを契約とし、JavaScriptメモリ消去を保証しない。専用loopbackのオフラインrunnerは`tests/readonly-trial-browser/run.ts`で合成transportを検証し、Human Gate本番runnerは`scripts/run-human-gate.mjs`で既存sender/fetchへ接続する。実Auth/RPCの結果、refresh挙動、応答出所、single-rpc認定は未検証として残る。
+`startAuth(credentials)` は注入境界として資格情報を受け取れるが、Auth完了後にrunnerが資格情報参照を継続保持しないことだけを契約とし、JavaScriptメモリ消去を保証しない。専用loopbackのオフラインrunnerは`tests/readonly-trial-browser/run.ts`で合成transportを検証し、Human Gate本番runnerは`scripts/run-human-gate.mjs`で既存sender/fetchへ接続する。
+
+2026-11-11に初回Human Gate実地試験を1回実施した。開始前は`idle / authCalls: 0 / rpcCalls: 0 / writeRpcCalls: 0`、資格情報入力後も通信0件だった。Auth開始は1回のみで、サニタイズ済み観測は`state: stopped / authCalls: 1 / rpcCalls: 0 / rpcNames: [] / otherRpcCalls: 0 / writeRpcCalls: 0 / stopReason: auth-blocked`。読み取り開始・再Auth・再試行は行わず、入力欄はクリア後に終了した。この記録は実通信の結果であり、Auth提供側の応答本文や資格情報は保存しない。`auth-blocked` の詳細原因はサニタイズ境界の外にあるため、追加通信なしでは特定不能であり、失敗として扱う。
+
+実Auth/RPCの成功結果、refresh挙動、応答出所、single-rpc認定は未検証として残る。停止後の自動再送は禁止し、再試験には別途人間承認を要する。
+
+Auth失敗時は、セッション層が保持する固定分類（`unavailable`、`invalid-session`、`expired`、`different-user`）をHuman Gateの`auth-*`停止理由へ反映する。生HTTP本文・providerメッセージ・資格情報は分類対象にも表示対象にも含めない。分類できない場合のみ`auth-blocked`へフォールバックする。
 
 `npm run human-gate:offline` はdead proxyと`connect-src: none`を使う合成回帰入口であり、実Auth/RPCへ接続しない。`npm run human-gate` はheaded専用profile、owner.runId由来のPermit、trusted origin限定CSP/route/transportを使う本番試験入口で、起動・表示・入力だけでは通信しない。Auth開始と読み取り開始は別の明示操作である。
 
