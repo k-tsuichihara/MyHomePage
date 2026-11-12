@@ -29,7 +29,7 @@ const defaultViews: ProductLocalViews = {
  */
 export function createProductLocalApp(doc: Document, deps: ProductLocalDependencies,
   views: ProductLocalViews = defaultViews) {
-  const store = createLocalMemoStore({ storage: deps.storage, locks: deps.locks, now: deps.now });
+  const store = createLocalMemoStore({ storage: deps.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
   const controller = createLocalMemoController({ store, createId: deps.createId });
   const migration = createLocalMigrationController({ ...deps, acceptExistingV3: true });
   let disposeMemo = () => {};

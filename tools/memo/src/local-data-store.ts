@@ -23,7 +23,12 @@ export type LocalLoadResult = { kind: 'empty' } | { kind: 'loaded'; value: Ready
 export class LocalDataError extends Error {
   constructor(readonly reason: LocalFailureReason) { super(`Local memo operation rejected: ${reason}`); }
 }
-export interface LocalDataDependencies { storage: MigrationStorage; locks: LocalLockManager | undefined }
+export interface LocalDataDependencies {
+  storage: MigrationStorage;
+  locks: LocalLockManager | undefined;
+  /** 製品の新規利用だけが選択する。既存形式は自動更新しない。 */
+  initialVersion?: 3;
+}
 type Written = { kind: 'written'; value: ReadyLocalData };
 type Unchanged = { kind: 'not-needed'; count: 0 };
 export interface RestoreBase { raw: string; legacyRaw: string | null; value: ReadyLocalData }
@@ -45,7 +50,7 @@ function classify(error: unknown, fallback: LocalFailureReason): LocalFailureRea
  */
 export function createLocalDataStore(deps: LocalDataDependencies) {
   // ストア寿命中の保存先を固定し、確認後の依存オブジェクト差替えで別領域へ書かない。
-  deps = { storage: deps.storage, locks: deps.locks };
+  deps = { storage: deps.storage, locks: deps.locks, ...(deps.initialVersion === 3 ? { initialVersion: 3 as const } : {}) };
   function read() {
     const legacyRaw = deps.storage.getItem(OLD_STORAGE_KEY);
     const raw = deps.storage.getItem(NEW_STORAGE_KEY);
@@ -72,7 +77,9 @@ export function createLocalDataStore(deps: LocalDataDependencies) {
         fallback = 'storage-failure';
         const state = read();
         if (restore && (state.raw !== restore.raw || state.legacyRaw !== restore.legacyRaw)) throw new LocalDataError('snapshot-changed');
-        const base: ReadyLocalData = state.value ?? { version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] };
+        const base: ReadyLocalData = state.value ?? (deps.initialVersion === 3
+          ? { version: 3, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [], deletedMemoIds: [] }
+          : { version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] });
         const metadata = JSON.stringify(base.migration), version = base.version;
         const expected = base.version === 3 ? [...base.deletedMemoIds] : null;
         if (deletion && expected) {
