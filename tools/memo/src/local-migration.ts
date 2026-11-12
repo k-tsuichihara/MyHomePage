@@ -1,5 +1,7 @@
 import { parseLegacyJson } from './legacy-validation';
 import { parseLocalV2Json } from './local-validation';
+import { parseLocalFormatJson } from './local-format';
+import type { LocalFormatResult } from './local-format';
 import { LocalLocksUnavailableError, withLocalDataLock } from './local-lock';
 import type { LocalLockManager } from './local-lock';
 import { completeMigration, createPendingMigration, validatePendingMigration } from './migration';
@@ -15,6 +17,7 @@ export interface MigrationStorage {
   setItem(key: string, value: string): void;
 }
 export interface MigrationDependencies {
+  readonly acceptExistingV3?: boolean;
   storage: MigrationStorage;
   locks: LocalLockManager | undefined;
   createId: () => string;
@@ -26,7 +29,7 @@ export interface RemainingState {
   legacy: 'absent' | 'present' | 'unreadable';
   v2: 'absent' | 'pending' | 'complete' | 'not-required' | 'invalid' | 'unreadable';
 }
-type Existing = Exclude<LocalV2ValidationResult, { kind: 'validated-pending' }>;
+type Existing = Exclude<LocalFormatResult, { kind: 'validated-pending' }>;
 export type MigrationResult =
   | { kind: 'empty' }
   | { kind: 'existing'; data: Existing }
@@ -71,8 +74,10 @@ async function run(deps: MigrationDependencies, action: Action): Promise<Migrati
       let pending: PendingMigration;
       if (current !== null) {
         fallback = 'invalid-data';
-        const checked = parseLocalV2Json(current);
+        const checked = parseLocalFormatJson(current);
+        if (checked.value.version === 3 && !deps.acceptExistingV3) throw new MigrationStopped('invalid-data');
         if (checked.kind !== 'validated-pending') return { kind: 'existing', data: checked };
+        if (checked.value.version === 3) throw new MigrationStopped('invalid-data');
         if (legacy === null) throw new MigrationStopped('invalid-data');
         pending = validatePendingMigration(current, legacy);
         if (action.kind === 'inspect') return { kind: 'recovery-ready', legacySnapshot: legacy, pendingSnapshot: current };

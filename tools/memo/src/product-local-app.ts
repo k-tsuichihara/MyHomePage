@@ -27,7 +27,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   views: ProductLocalViews = defaultViews) {
   const store = createLocalMemoStore({ storage: deps.storage, locks: deps.locks, now: deps.now });
   const controller = createLocalMemoController({ store, createId: deps.createId });
-  const migration = createLocalMigrationController(deps);
+  const migration = createLocalMigrationController({ ...deps, acceptExistingV3: true });
   let disposeMemo = () => {};
   let disposed = false;
 
@@ -36,11 +36,20 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     await controller.dispatch({ kind: 'load' });
     if (disposed || controller.getState().read.kind !== 'ready') return false;
     disposeMemo();
-    disposeMemo = views.mountMemo(doc, controller);
+    disposeMemo = views.mountMemo(doc, {
+      getState: controller.getState,
+      async dispatch(command) { return disposed ? { kind: 'blocked', reason: 'disposed' } : controller.dispatch(command); },
+    });
     return true;
   };
 
-  views.mountMigration(doc, migration, enter);
+  const migrationPort: typeof migration = {
+    getState: migration.getState,
+    async inspect() { if (!disposed) await migration.inspect(); },
+    cancel(token) { if (!disposed) migration.cancel(token); },
+    async confirm(token) { if (!disposed) await migration.confirm(token); },
+  };
+  views.mountMigration(doc, migrationPort, enter);
   return Object.freeze({
     controller,
     migration,

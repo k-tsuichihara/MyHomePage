@@ -1,8 +1,30 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createProductLocalApp } from '../src/product-local-app';
 import type { ProductLocalViews } from '../src/product-local-app';
+import { NEW_STORAGE_KEY } from '../src/local-migration';
 
 describe('product local composition', () => {
+  it('正常v3は入場でき、dispose後のUI操作は書き込まない', async () => {
+    const raw = JSON.stringify({ version: 3, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [], deletedMemoIds: [] });
+    const write = vi.fn();
+    let migration!: Parameters<ProductLocalViews['mountMigration']>[1];
+    let memo!: Parameters<ProductLocalViews['mountMemo']>[1];
+    let enter!: () => Promise<boolean>;
+    const app = createProductLocalApp({} as Document, {
+      storage: { getItem: key => key === NEW_STORAGE_KEY ? raw : null, setItem: write },
+      locks: { request: async (_name, _options, callback) => callback() },
+      createId: () => '00000000-0000-4000-8000-000000000001', now: () => '2026-11-12T00:00:00.000Z',
+    }, {
+      mountMigration: (_doc, port, next) => { migration = port; enter = next; },
+      mountMemo: (_doc, port) => { memo = port; return () => {}; },
+    });
+    await migration.inspect();
+    expect(await enter()).toBe(true);
+    app.dispose();
+    expect(await memo.dispatch({ kind: 'new' })).toEqual({ kind: 'blocked', reason: 'disposed' });
+    await migration.inspect(); await migration.confirm(0);
+    expect(write).not.toHaveBeenCalled();
+  });
   it('ready前の入場を拒否し、移行readyと通常load成功後だけメモUIを接続する', async () => {
     const values = new Map<string, string>();
     let enter!: () => Promise<boolean>;
