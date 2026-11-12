@@ -65,7 +65,12 @@ export function createStorageTargetController() {
     return { kind: 'changed', state };
   };
 
-  const logout = (): StorageTargetState => { state = snapshot('local', state.dirty, null); return state; };
+  const logout = (): StorageTargetDecision => {
+    if (state.dirty) return { kind: 'confirmation-required', from: state.target, to: 'local',
+      expectedGeneration: null, expectedRevision: revision, state };
+    state = snapshot('local', false, null);
+    return { kind: 'changed', state };
+  };
   const acceptAuthenticatedGeneration = (auth: StorageTargetAuth): StorageTargetState => {
     if (state.target === 'cloud' && auth.authenticated && Number.isInteger(auth.generation) && auth.generation >= 0) {
       state = snapshot('cloud', state.dirty, auth.generation);

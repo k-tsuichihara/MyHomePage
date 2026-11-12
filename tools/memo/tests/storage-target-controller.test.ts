@@ -43,7 +43,34 @@ describe('storage target controller', () => {
     const c = createStorageTargetController(); c.request('cloud', auth); c.setDirty(true);
     expect(c.acceptAuthenticatedGeneration({ authenticated: false, generation: 8 })).toEqual({ target: 'cloud', dirty: true, generation: 7 });
     expect(c.acceptAuthenticatedGeneration({ authenticated: true, generation: 8 })).toEqual({ target: 'cloud', dirty: true, generation: 8 });
-    expect(c.logout()).toEqual({ target: 'local', dirty: true, generation: null });
+    const pending = c.logout();
+    expect(pending.kind).toBe('confirmation-required');
+    if (pending.kind !== 'confirmation-required') throw new Error('expected logout confirmation');
+    expect(c.confirm(pending, true, null)).toEqual({ kind: 'changed', state: { target: 'local', dirty: false, generation: null } });
+  });
+
+  it('logs out clean cloud state immediately', () => {
+    const c = createStorageTargetController(); c.request('cloud', auth);
+    expect(c.logout()).toEqual({ kind: 'changed', state: { target: 'local', dirty: false, generation: null } });
+  });
+
+  it('cancelling dirty logout preserves cloud and dirty state', () => {
+    const c = createStorageTargetController(); c.request('cloud', auth); c.setDirty(true);
+    const pending = c.logout();
+    expect(pending.kind).toBe('confirmation-required');
+    if (pending.kind !== 'confirmation-required') throw new Error('expected logout confirmation');
+    expect(c.confirm(pending, false, null)).toEqual({ kind: 'cancelled', state: { target: 'cloud', dirty: true, generation: 7 } });
+    expect(c.current()).toEqual({ target: 'cloud', dirty: true, generation: 7 });
+  });
+
+  it('rejects an old dirty logout confirmation after editing changes', () => {
+    const c = createStorageTargetController(); c.request('cloud', auth); c.setDirty(true);
+    const pending = c.logout();
+    if (pending.kind !== 'confirmation-required') throw new Error('expected logout confirmation');
+    c.setDirty(false); c.setDirty(true);
+    expect(c.confirm(pending, true, null)).toEqual({
+      kind: 'rejected', reason: 'stale-confirmation', state: { target: 'cloud', dirty: true, generation: 7 },
+    });
   });
 
   it('rejects a confirmation when the dirty/edit revision changes', () => {
