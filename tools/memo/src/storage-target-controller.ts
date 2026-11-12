@@ -8,9 +8,9 @@ export type StorageTargetState = Readonly<{
 
 export type StorageTargetDecision =
   | { kind: 'changed'; state: StorageTargetState }
-  | { kind: 'confirmation-required'; from: StorageTarget; to: StorageTarget; expectedGeneration: number | null; state: StorageTargetState }
+  | { kind: 'confirmation-required'; from: StorageTarget; to: StorageTarget; expectedGeneration: number | null; expectedRevision: number; state: StorageTargetState }
   | { kind: 'cancelled'; state: StorageTargetState }
-  | { kind: 'rejected'; reason: 'not-authenticated' | 'stale-generation' | 'invalid-target'; state: StorageTargetState };
+  | { kind: 'rejected'; reason: 'not-authenticated' | 'stale-generation' | 'stale-confirmation' | 'invalid-target'; state: StorageTargetState };
 
 export type StorageTargetAuth = Readonly<{
   authenticated: boolean;
@@ -25,11 +25,13 @@ function snapshot(target: StorageTarget, dirty: boolean, generation: number | nu
  * UI・同期・RPCから独立した保存先状態の制御層。
  * 切替は状態だけを変更し、upload/download/syncは一切開始しない。
  */
-export function createStorageTargetController(initial: StorageTarget = 'local') {
-  let state: StorageTargetState = snapshot(initial, false, null);
+export function createStorageTargetController() {
+  let state: StorageTargetState = snapshot('local', false, null);
+  let revision = 0;
 
   const current = () => state;
   const setDirty = (dirty: boolean): StorageTargetState => {
+    revision += 1;
     state = snapshot(state.target, dirty, state.generation);
     return state;
   };
@@ -44,7 +46,7 @@ export function createStorageTargetController(initial: StorageTarget = 'local') 
     }
     if (state.target === target && (target !== 'cloud' || state.generation === auth?.generation)) return { kind: 'changed', state };
     if (state.dirty) return { kind: 'confirmation-required', from: state.target, to: target,
-      expectedGeneration: target === 'cloud' ? auth!.generation : null, state };
+      expectedGeneration: target === 'cloud' ? auth!.generation : null, expectedRevision: revision, state };
     state = snapshot(target, false, target === 'cloud' ? auth!.generation : null);
     return { kind: 'changed', state };
   };
@@ -52,8 +54,11 @@ export function createStorageTargetController(initial: StorageTarget = 'local') 
   const confirm = (decision: Extract<StorageTargetDecision, { kind: 'confirmation-required' }>, proceed: boolean,
     auth: StorageTargetAuth | null): StorageTargetDecision => {
     if (!proceed) return { kind: 'cancelled', state };
-    if (state.target !== decision.from || !state.dirty || (decision.to === 'cloud'
-      && (!auth?.authenticated || auth.generation !== decision.expectedGeneration))) {
+    if (state.target !== decision.from || !state.dirty || revision !== decision.expectedRevision) {
+      return { kind: 'rejected', reason: 'stale-confirmation', state };
+    }
+    if (decision.to === 'cloud'
+      && (!auth?.authenticated || auth.generation !== decision.expectedGeneration)) {
       return { kind: 'rejected', reason: 'stale-generation', state };
     }
     state = snapshot(decision.to, false, decision.to === 'cloud' ? auth!.generation : null);
@@ -61,10 +66,12 @@ export function createStorageTargetController(initial: StorageTarget = 'local') 
   };
 
   const logout = (): StorageTargetState => { state = snapshot('local', state.dirty, null); return state; };
-  const authExpired = (generation: number): StorageTargetState => {
-    if (state.target === 'cloud' && state.generation === generation) state = snapshot('local', state.dirty, null);
+  const acceptAuthenticatedGeneration = (auth: StorageTargetAuth): StorageTargetState => {
+    if (state.target === 'cloud' && auth.authenticated && Number.isInteger(auth.generation) && auth.generation >= 0) {
+      state = snapshot('cloud', state.dirty, auth.generation);
+    }
     return state;
   };
 
-  return Object.freeze({ current, setDirty, request, confirm, logout, authExpired });
+  return Object.freeze({ current, setDirty, request, confirm, logout, acceptAuthenticatedGeneration });
 }

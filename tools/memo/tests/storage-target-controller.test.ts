@@ -39,12 +39,21 @@ describe('storage target controller', () => {
     expect(c.current()).toEqual({ target: 'local', dirty: true, generation: null });
   });
 
-  it('returns to local on logout or matching auth expiry without copying data', () => {
+  it('keeps cloud selection across auth invalidation and returns local only on logout', () => {
     const c = createStorageTargetController(); c.request('cloud', auth); c.setDirty(true);
-    expect(c.authExpired(6).target).toBe('cloud');
-    expect(c.authExpired(7)).toEqual({ target: 'local', dirty: true, generation: null });
-    expect(c.request('cloud', auth).kind).toBe('confirmation-required');
+    expect(c.acceptAuthenticatedGeneration({ authenticated: false, generation: 8 })).toEqual({ target: 'cloud', dirty: true, generation: 7 });
+    expect(c.acceptAuthenticatedGeneration({ authenticated: true, generation: 8 })).toEqual({ target: 'cloud', dirty: true, generation: 8 });
     expect(c.logout()).toEqual({ target: 'local', dirty: true, generation: null });
+  });
+
+  it('rejects a confirmation when the dirty/edit revision changes', () => {
+    const c = createStorageTargetController(); c.setDirty(true);
+    const pending = c.request('cloud', auth);
+    if (pending.kind !== 'confirmation-required') throw new Error('expected confirmation');
+    c.setDirty(false); c.setDirty(true);
+    expect(c.confirm(pending, true, auth)).toEqual({
+      kind: 'rejected', reason: 'stale-confirmation', state: { target: 'local', dirty: true, generation: null },
+    });
   });
 
   it('never creates an RPC, write, retry, or sync side effect', () => {
