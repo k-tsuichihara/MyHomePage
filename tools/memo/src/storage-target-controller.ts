@@ -62,8 +62,7 @@ export function createStorageTargetController() {
     auth: StorageTargetAuth | null, leave: StorageLeaveDecision): StorageTargetDecision => {
     if (!proceed) return { kind: 'cancelled', state };
     if (leave.kind === 'blocked') return { kind: 'rejected', reason: 'stale-confirmation', state };
-    if (leave.kind === 'confirmation-required' && leave.reason !== 'unsaved') return { kind: 'rejected', reason: 'stale-confirmation', state };
-    if (state.target !== decision.from || !state.dirty || revision !== decision.expectedRevision) {
+    if (state.target !== decision.from || revision !== decision.expectedRevision) {
       return { kind: 'rejected', reason: 'stale-confirmation', state };
     }
     if (decision.to === 'cloud'

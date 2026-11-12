@@ -103,6 +103,17 @@ describe('storage target controller', () => {
     expect(c.logout(unresolved).kind).toBe('confirmation-required');
   });
 
+  it('allows an approved confirmation to leave clean rejected/unresolved states', () => {
+    const c = createStorageTargetController(); c.request('cloud', auth, safe);
+    const switchPending = c.request('local', auth, rejected);
+    if (switchPending.kind !== 'confirmation-required') throw new Error('expected confirmation');
+    expect(c.confirm(switchPending, true, auth, safe)).toEqual({ kind: 'changed', state: { target: 'local', dirty: false, generation: null } });
+    c.request('cloud', auth, safe);
+    const logoutPending = c.logout(unresolved);
+    if (logoutPending.kind !== 'confirmation-required') throw new Error('expected logout confirmation');
+    expect(c.confirm(logoutPending, true, auth, safe)).toEqual({ kind: 'changed', state: { target: 'local', dirty: false, generation: null } });
+  });
+
   it('rechecks saving after a confirmation was issued', () => {
     const c = createStorageTargetController(); c.setDirty(true);
     const pending = c.request('cloud', auth, unsaved);
