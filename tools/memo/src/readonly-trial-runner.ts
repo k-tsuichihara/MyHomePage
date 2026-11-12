@@ -75,12 +75,12 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
       if (authTokenCalls > 1) { stop('auth-refresh'); return Promise.reject(new Error('readonly-trial-refresh-denied')); }
     }
     return config.authTransport(request, { ...init, redirect: 'error' }).then(response => {
-      patchDiagnostic({ transportCompleted: true, responseReceived: true, httpStatus: response.status });
+      patchDiagnostic({ transportCompleted: true, responseReceived: true, httpStatus: response.status, abortSignalAborted: Boolean(init?.signal?.aborted) });
       if (response.status >= 400 && response.status < 500) patchDiagnostic({ failureClass: 'provider-http-4xx' });
       else if (response.status >= 500 && response.status <= 599) patchDiagnostic({ failureClass: 'provider-http-5xx' });
       else if (response.status < 200 || response.status >= 300) patchDiagnostic({ failureClass: 'unexpected-http-status' });
       return response;
-    }).catch(error => { patchDiagnostic({ failureClass: classifyError(error), transportCompleted: false }); throw error; });
+    }).catch(error => { patchDiagnostic({ failureClass: classifyError(error), transportCompleted: false, abortSignalAborted: Boolean(init?.signal?.aborted) }); throw error; });
   }
   function rpcFetch(input: RequestInfo | URL, init?: RequestInit) {
     const request = input instanceof Request ? input : new Request(input, init);
