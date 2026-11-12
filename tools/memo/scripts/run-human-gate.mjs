@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createProfileOwner, prepareProfileBase } from '../tests/persistence/profile-guard.ts';
 import { initializeContext } from '../tests/persistence/lifecycle.ts';
 import { MEMO_RPC_ORIGIN } from '../src/cloud-rpc-sender.ts';
+import { createRouteSummary, observeRoute } from './human-gate-route-summary.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const projectRef = 'yohoppqflnhhvqypwhfv';
@@ -27,20 +28,23 @@ origin = `http://127.0.0.1:${address.port}`;
 await initializeContext(() => chromium.launchPersistentContext(profile, { headless: false, serviceWorkers: 'block', acceptDownloads: false,
   args: ['--disable-background-networking', '--disable-sync', '--no-first-run'] }), async context => {
   let page;
+  const routeSummary = createRouteSummary();
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
     const loopback = url.origin === origin;
     const targetMatched = url.origin === MEMO_RPC_ORIGIN && ['/auth/v1/token', '/auth/v1/user', '/auth/v1/logout'].includes(url.pathname);
     const allowed = loopback || url.origin === MEMO_RPC_ORIGIN;
-    if (!loopback && page) await page.evaluate(value => { window.__humanGateRouteDiagnostic = value; }, {
-      observed: true, allowed, method: request.method() === 'POST' ? 'POST' : request.method() === 'GET' ? 'GET' : 'other',
-      targetClass: targetMatched ? 'expected-auth-path' : url.origin === MEMO_RPC_ORIGIN ? 'unexpected-path' : 'unexpected-origin', cspConfiguredForAuthOrigin: true,
-    });
+    if (!loopback) {
+      const method = request.method() === 'POST' ? 'POST' : request.method() === 'GET' ? 'GET' : 'other';
+      const targetClass = targetMatched ? 'expected-auth-path' : url.origin === MEMO_RPC_ORIGIN ? 'unexpected-path' : 'unexpected-origin';
+      observeRoute(routeSummary, { allowed, targetMatched, method });
+      if (page) await page.evaluate(value => { window.__humanGateRouteDiagnostic = value; }, { ...routeSummary });
+    }
     return allowed ? route.continue() : route.abort();
   });
   await context.addInitScript(({ origin, runId, projectRef, authOrigin, publishableKey }) => {
     Object.defineProperty(window, '__humanGateConfig', { value: Object.freeze({ projectRef, authOrigin, publishableKey, permit: Object.freeze({ origin, runId }) }) });
-    Object.defineProperty(window, '__humanGateRouteDiagnostic', { writable: true, value: { observed: false, allowed: false, cspConfiguredForAuthOrigin: true } });
+    Object.defineProperty(window, '__humanGateRouteDiagnostic', { writable: true, value: { observed: false, allowed: false, expectedAuthObserved: false, expectedAuthAllowed: false, unexpectedObserved: false, unexpectedBlocked: false, lastMethod: 'none', lastTargetClass: 'none', cspConfiguredForAuthOrigin: true } });
   }, { origin, runId: owner.runId, projectRef, authOrigin: MEMO_RPC_ORIGIN, publishableKey });
   page = await context.newPage(); await page.goto(`${origin}/human-gate.html`);
   console.log(`Human Gate: ${origin}/human-gate.html`); console.log('通信開始はAuth開始ボタン押下後のみです。終了はブラウザを閉じてください。');
