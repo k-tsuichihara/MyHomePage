@@ -10,6 +10,8 @@ describe('product local composition', () => {
     let migration!: Parameters<ProductLocalViews['mountMigration']>[1];
     let memo!: Parameters<ProductLocalViews['mountMemo']>[1];
     let enter!: () => Promise<boolean>;
+    let backup!: Parameters<NonNullable<ProductLocalViews['mountBackup']>>[1];
+    const backupDispose = vi.fn();
     const app = createProductLocalApp({} as Document, {
       storage: { getItem: key => key === NEW_STORAGE_KEY ? raw : null, setItem: write },
       locks: { request: async (_name, _options, callback) => callback() },
@@ -17,10 +19,14 @@ describe('product local composition', () => {
     }, {
       mountMigration: (_doc, port, next) => { migration = port; enter = next; },
       mountMemo: (_doc, port) => { memo = port; return () => {}; },
+      mountBackup: (_doc, prepare) => { backup = prepare; return backupDispose; },
     });
     await migration.inspect();
     expect(await enter()).toBe(true);
+    expect((await backup()).kind).toBe('prepared');
     app.dispose();
+    expect(backupDispose).toHaveBeenCalledTimes(1);
+    expect(await backup()).toEqual({ kind: 'failed', reason: 'read-failure' });
     expect(await memo.dispatch({ kind: 'new' })).toEqual({ kind: 'blocked', reason: 'disposed' });
     await migration.inspect(); await migration.confirm(0);
     expect(write).not.toHaveBeenCalled();

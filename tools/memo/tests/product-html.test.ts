@@ -28,10 +28,11 @@ it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の
   const bundle = await readFile(new URL('.product/memo-app.js', root), 'utf8');
   const browser = await chromium.launch({ headless: true });
   try {
-    const context = await browser.newContext({ serviceWorkers: 'block' });
+    const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
     await context.addInitScript(() => {
       Object.defineProperty(window, '__storageReads', { value: { count: 0 } });
       const values = new Map<string, string>();
+      values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 3, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [], deletedMemoIds: [] }));
       Object.defineProperty(window, 'localStorage', { value: {
         getItem: (key: string) => { (window as unknown as { __storageReads: { count: number } }).__storageReads.count++; return values.get(key) ?? null; },
         setItem: (key: string, value: string) => { values.set(key, value); },
@@ -63,6 +64,16 @@ it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の
     await page.locator('#save').click();
     await page.locator('#detail-view').waitFor({ state: 'visible' });
     expect(await page.locator('#detail-title').textContent()).toBe('合成製品メモ');
+    const beforeBackup = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    await page.getByRole('button', { name: 'JSONバックアップを作成' }).click();
+    const downloadEvent = page.waitForEvent('download');
+    await page.getByRole('link', { name: '準備済みJSONをダウンロード' }).click();
+    const download = await downloadEvent;
+    const backup = JSON.parse(await readFile((await download.path())!, 'utf8'));
+    expect(backup.format).toBe('myhomepage.memo.local-backup');
+    expect(backup.data.memos[0].title).toBe('合成製品メモ');
+    expect(backup).not.toHaveProperty('migration');
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeBackup);
     await context.close();
   } finally { await browser.close(); }
 }, 20000);
