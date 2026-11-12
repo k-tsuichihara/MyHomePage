@@ -16,6 +16,10 @@ export type StorageTargetAuth = Readonly<{
   authenticated: boolean;
   generation: number;
 }>;
+export type StorageLeaveDecision =
+  | { kind: 'allowed' }
+  | { kind: 'confirmation-required'; reason: 'unsaved' | 'unknown' | 'rejected' }
+  | { kind: 'blocked'; reason: 'saving' | 'stale-confirmation' };
 
 function snapshot(target: StorageTarget, dirty: boolean, generation: number | null): StorageTargetState {
   return Object.freeze({ target, dirty, generation });
@@ -36,7 +40,7 @@ export function createStorageTargetController() {
     return state;
   };
 
-  const request = (target: StorageTarget, auth: StorageTargetAuth | null): StorageTargetDecision => {
+  const request = (target: StorageTarget, auth: StorageTargetAuth | null, leave: StorageLeaveDecision): StorageTargetDecision => {
     if (target !== 'local' && target !== 'cloud') return { kind: 'rejected', reason: 'invalid-target', state };
     if (target === 'cloud' && (!auth?.authenticated || !Number.isInteger(auth.generation) || auth.generation < 0)) {
       return { kind: 'rejected', reason: 'not-authenticated', state };
@@ -45,6 +49,9 @@ export function createStorageTargetController() {
       return { kind: 'rejected', reason: 'stale-generation', state };
     }
     if (state.target === target && (target !== 'cloud' || state.generation === auth?.generation)) return { kind: 'changed', state };
+    if (leave.kind === 'blocked') return { kind: 'rejected', reason: leave.reason === 'saving' ? 'stale-confirmation' : 'stale-confirmation', state };
+    if (leave.kind === 'confirmation-required') return { kind: 'confirmation-required', from: state.target, to: target,
+      expectedGeneration: target === 'cloud' ? auth!.generation : null, expectedRevision: revision, state };
     if (state.dirty) return { kind: 'confirmation-required', from: state.target, to: target,
       expectedGeneration: target === 'cloud' ? auth!.generation : null, expectedRevision: revision, state };
     state = snapshot(target, false, target === 'cloud' ? auth!.generation : null);
@@ -52,8 +59,10 @@ export function createStorageTargetController() {
   };
 
   const confirm = (decision: Extract<StorageTargetDecision, { kind: 'confirmation-required' }>, proceed: boolean,
-    auth: StorageTargetAuth | null): StorageTargetDecision => {
+    auth: StorageTargetAuth | null, leave: StorageLeaveDecision): StorageTargetDecision => {
     if (!proceed) return { kind: 'cancelled', state };
+    if (leave.kind === 'blocked') return { kind: 'rejected', reason: 'stale-confirmation', state };
+    if (leave.kind === 'confirmation-required' && leave.reason !== 'unsaved') return { kind: 'rejected', reason: 'stale-confirmation', state };
     if (state.target !== decision.from || !state.dirty || revision !== decision.expectedRevision) {
       return { kind: 'rejected', reason: 'stale-confirmation', state };
     }
@@ -65,8 +74,9 @@ export function createStorageTargetController() {
     return { kind: 'changed', state };
   };
 
-  const logout = (): StorageTargetDecision => {
-    if (state.dirty) return { kind: 'confirmation-required', from: state.target, to: 'local',
+  const logout = (leave: StorageLeaveDecision): StorageTargetDecision => {
+    if (leave.kind === 'blocked') return { kind: 'rejected', reason: 'stale-confirmation', state };
+    if (leave.kind === 'confirmation-required' || state.dirty) return { kind: 'confirmation-required', from: state.target, to: 'local',
       expectedGeneration: null, expectedRevision: revision, state };
     state = snapshot('local', false, null);
     return { kind: 'changed', state };
