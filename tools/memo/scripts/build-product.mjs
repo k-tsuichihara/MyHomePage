@@ -1,7 +1,8 @@
 import { build } from 'esbuild';
-import { mkdir, writeFile, readFile, copyFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { productHtml } from './product-html.mjs';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const root = new URL('../', import.meta.url);
 const out = new URL('.product/memo-app.js', root);
@@ -19,13 +20,20 @@ if (forbidden.length || result.outputFiles.length !== 1) {
 }
 await mkdir(new URL('.product/', root), { recursive: true });
 await writeFile(out, result.outputFiles[0].contents);
-const html = productHtml(await readFile(new URL('memo.html', root), 'utf8'),
+let html = productHtml(await readFile(new URL('memo.html', root), 'utf8'),
   await readFile(new URL('tests/browser/preview.html', root), 'utf8'));
 const candidate = new URL('.product/site/tools/memo/', root);
 await mkdir(new URL('js/', candidate), { recursive: true });
 await mkdir(new URL('css/', candidate), { recursive: true });
-await writeFile(new URL('memo.html', candidate), html);
-await writeFile(new URL('js/memo-app.js', candidate), result.outputFiles[0].contents);
-for (const name of ['memo.css', 'memo-product.css']) {
-  await copyFile(new URL(`css/${name}`, root), new URL(`css/${name}`, candidate));
+const assets = [
+  ['js/memo-app.js', result.outputFiles[0].contents],
+  ...await Promise.all(['memo.css', 'memo-product.css'].map(async name =>
+    [`css/${name}`, await readFile(new URL(`css/${name}`, root))])),
+];
+for (const [name, bytes] of assets) {
+  const digest = createHash('sha256').update(bytes).digest();
+  const hashed = name.replace(/\.(js|css)$/, `.${digest.toString('hex')}.$1`);
+  await writeFile(new URL(hashed, candidate), bytes);
+  html = html.replace(`="${name}"`, `="${hashed}" integrity="sha256-${digest.toString('base64')}" crossorigin="anonymous"`);
 }
+await writeFile(new URL('memo.html', candidate), html);

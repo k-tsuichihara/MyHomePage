@@ -11,7 +11,7 @@ it('製品候補は公開外枠と相対URLを保持し、旧JSを実行しな�
   const html = await readFile(new URL('.product/site/tools/memo/memo.html', root), 'utf8');
   expect(html.match(/<header>[\s\S]*?<\/header>/)?.[0]).toBe(shell.match(/<header>[\s\S]*?<\/header>/)?.[0]);
   expect(html.match(/<footer>[\s\S]*?<\/footer>/)?.[0]).toBe(shell.match(/<footer>[\s\S]*?<\/footer>/)?.[0]);
-  expect(html).toContain('src="js/memo-app.js"');
+  expect(html).toMatch(/src="js\/memo-app\.[a-f0-9]{64}\.js" integrity="sha256-/);
   expect(html).not.toContain('src="js/memo.js"');
   expect(html).toContain('href="../../css/style.css"');
   expect(html).toContain('id="migration-view"');
@@ -21,7 +21,7 @@ it('製品候補は公開外枠と相対URLを保持し、旧JSを実行しな�
   expect(await readFile(new URL('memo.html', root), 'utf8')).toBe(shell);
 });
 
-it('生成HTMLと製品entryは合成Storageで一覧・新規保存へ接続する', async () => {
+it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の整合性とStorage接続：%s', async mode => {
   const root = new URL('../', import.meta.url);
   execFileSync(process.execPath, ['scripts/build-product.mjs'], { cwd: fileURLToPath(root) });
   const html = await readFile(new URL('.product/site/tools/memo/memo.html', root), 'utf8');
@@ -30,23 +30,33 @@ it('生成HTMLと製品entryは合成Storageで一覧・新規保存へ接続す
   try {
     const context = await browser.newContext({ serviceWorkers: 'block' });
     await context.addInitScript(() => {
+      Object.defineProperty(window, '__storageReads', { value: { count: 0 } });
       const values = new Map<string, string>();
       Object.defineProperty(window, 'localStorage', { value: {
-        getItem: (key: string) => values.get(key) ?? null,
+        getItem: (key: string) => { (window as unknown as { __storageReads: { count: number } }).__storageReads.count++; return values.get(key) ?? null; },
         setItem: (key: string, value: string) => { values.set(key, value); },
       } });
       Object.defineProperty(navigator, 'locks', { value: {
         request: async (_name: string, _options: unknown, callback: () => Promise<unknown>) => callback(),
       } });
     });
-    await context.route('**/*', route => {
+    await context.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.origin !== 'https://product.test') return route.abort();
-      return route.fulfill({ contentType: url.pathname.endsWith('.html') ? 'text/html' : 'text/javascript',
-        body: url.pathname.endsWith('.html') ? html : url.pathname.endsWith('/memo-app.js') ? bundle : '' });
+      const css = /\/css\/memo(?:-product)?\.[a-f0-9]+\.css$/.test(url.pathname);
+      if (css && mode === 'missing-css') return route.fulfill({ status: 404, body: '' });
+      const js = /\/memo-app\.[a-f0-9]+\.js$/.test(url.pathname);
+      const body = url.pathname.endsWith('.html') ? html : js ? bundle + (mode === 'corrupt-js' ? '\n// changed' : '')
+        : css ? await readFile(new URL(`.product/site${url.pathname}`, root), 'utf8') + (mode === 'corrupt-css' ? '\n/* changed */' : '') : '';
+      return route.fulfill({ contentType: url.pathname.endsWith('.html') ? 'text/html' : css || url.pathname.endsWith('.css') ? 'text/css' : 'text/javascript', body });
     });
     const page = await context.newPage();
     await page.goto('https://product.test/tools/memo/memo.html');
+    if (mode !== 'normal') {
+      expect(await page.evaluate(() => (window as unknown as { __storageReads: { count: number } }).__storageReads.count)).toBe(0);
+      expect(await page.locator('#product-status').textContent()).toContain(mode === 'corrupt-js' ? '起動前' : '安全条件');
+      await context.close(); return;
+    }
     await page.locator('#new').click();
     await page.locator('#memo-title').fill('合成製品メモ');
     await page.locator('#memo-body').fill('合成本文');
