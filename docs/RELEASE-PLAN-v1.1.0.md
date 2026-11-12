@@ -6,10 +6,10 @@
 
 ## 現在位置と公開までの推奨順序
 
-- 現在：**STEP 02（認証・クラウド保存の統合）**。
-- 現在のレビュー対象：**C04（認証世代に結び付けた8 RPCの通信なし制御）**。C03は製品接続・本番Auth未検証のため進行中を維持する。
-- C04ではload/save/resolveに加え、状態変更・完全削除・ゴミ箱一括削除・タグ保存・タグ削除をUI非依存の制御層へ接続した。正式な照合手段がない操作にはresolveを追加せず、結果不明の追跡と結果を断定しない明示確認を分離する。実HTTP・製品UIとC05は未着手。
-- R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、推奨順序の反映もPR #48でマージ済み。D05確定はPR #49、通信なしAuth境界はPR #50、SDK境界はPR #51、隔離Storage接続はPR #52、UI非依存の状態通知はPR #53でマージ済み。通常ログアウトはlocalを明示。製品入口・本番Authは未検証。C04は進行中、C05は未着手。
+- 現在：**STEP 03（TypeScript版の公開UI統合）**。
+- 現在のレビュー対象：**R02（製品用local composition・browser境界・配信buildの最初の統合単位）**。公開HTMLの切替、実データ移行、Auth/cloud製品接続はまだ行わない。
+- C03〜C05のUI非依存層は実装済みだが、実Auth・実HTTP・single-rpc認定・製品UI結線は未検証。C05では明示logoutとAuth失効を区別し、離脱可否は既存navigation契約を正本とする。
+- R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、D05確定はPR #49、C03〜C05の通信なし境界はPR #50〜#68で段階的に整備した。今回R02へ着手したが、公開HTML・本番Auth・実ユーザーデータ・Pages公開には接続していない。
 - 未決事項：Q05の正式検証範囲、S04のACL原本完全性・NOLOGIN候補の必要性/非波及、製品接続・公開前ゲート。仕様確定は、これらの解消やDB・本番操作の承認ではない。
 - 導入時のSDK 2.111.0/2.119.0とTypeScript 7のWebAuthn/DOM型宣言衝突は、停止・報告後、オーナー承認のskipLibCheckで回避した。全.d.tsの内部型検査が省略される影響・見直し条件はAuth契約に記録。既存strict等は維持し、SDK 2.119.0の公開API型対応と通信なし26件を確認した。バージョン変更・追加緩和・実操作は別承認。
 - PR #51マージ後、SDK import時のStorage probe/デバッグ参照を未許可起動ゲートが検出して停止した。PR #52では、supabase-js/auth-js各2.119.0固定・元SHA/パス/件数の検証付きでdebug初期化式だけをメモリ内置換。元SDK・ロック機構は不変。最終試験記録は全Vitest1,448件、パッチ23件、隔離Chromium11件PASS。import前のgetter取得と監視対象API呼出しを別々に0件確認し、旧成果物の検証失効も回帰試験済み。専用キー永続化、再読込/再起動、失効・複数タブ・実ロックを確認。過去の失敗profileは保全。詳細と未検証範囲はAuth契約を参照。
@@ -78,7 +78,7 @@
 | C02 | 注入HTTP境界・段階ランナー・SQL/TSベクトルの通信なし基盤 | 完了 | [通信なし基盤](../tools/memo/tests/CLOUD-CONNECTION-FOUNDATION.md)、tests/cloud-live/、PR #29 | 偽fetch・offline専用。Auth/実transport接続の完成ではない |
 | C03 | Auth・セッション・ログイン/ログアウト接続 | 進行中 | 統合仕様§1.1、[Auth契約](../tools/memo/tests/AUTH-SESSION.md)、src/auth-session.ts・auth-client.ts・auth-sdk.ts・browser-auth.ts、PR #50〜#53・#60・オーナー承認 | PR #52の最終記録はパッチ23件・隔離Chromium11件PASS。PR #53で表示専用subscribe、解除・非同期通知・期限検出・終端通知を整備。書込許可は引き続きgetContext/isCurrentで判定する。C03の追加タイマー/ポーリングなし、型検査回避・専用ビルドの制約、アプリ単位のログアウト非保証と読書アプリ側の後日確認を維持。今回の通信なし境界テストではcreateMemoSdkAuth・製品RPC sender・製品入口は未結線であり、本番Auth・実アカウントも未検証のため進行中。 |
 | C04 | クラウド制御層・実HTTP経路と要求照合のUI接続 | 進行中 | RPC契約のcontroller責務・未検証事項、PR #27・#29・#54・#55・#56・#57・#58・#60・#61、[C04制御契約](../tools/memo/tests/CLOUD-CONTROLLER.md)、[通信なしsender境界](../tools/memo/tests/CLOUD-CONNECTION-FOUNDATION.md)、[single-rpc認定前ゲート](../tools/memo/tests/SINGLE-RPC-ACCEPTANCE.md)、[実接続前静的監査](../tools/memo/tests/PRELIVE-RPC-AUDIT.md)、[初回読み取り試験計画](../tools/memo/tests/READONLY-TRIAL-PLAN.md) | `readonly-trial.ts`・`readonly-trial-runner.ts`と合成ブラウザ入口でBrowser Auth→controller→senderのload限定、回数観測、Project Ref/origin事前検査、STOP/disposeを通信なし検証。ページ表示では通信しない。実環境値注入runner・実Auth/実HTTP・single-rpc認定は未実装。実地試験はNO |
-| C05 | ローカル/Supabase保存先切替の製品接続 | 進行中 | 統合仕様§1.1、[編集契約](../tools/memo/tests/EDITOR-STATE.md)、src/storage-target-controller.ts、2026-11-08オーナー判断 | UI非依存のlocal/cloud状態・dirty確認・切替確認/取消・logout/認証失効時のlocal復帰を通信なしで実装。切替は状態変更のみで、upload/download/merge/conflict/sync・RPC/write/retryは行わない。製品UI統合と実クラウド接続は未着手 |
+| C05 | ローカル/Supabase保存先切替の製品接続 | 進行中 | 統合仕様§1.1、[編集契約](../tools/memo/tests/EDITOR-STATE.md)、src/storage-target-controller.ts、PR #68、2026-11-08オーナー判断 | UI非依存のlocal/cloud選択と認証世代追跡を通信なしで実装。明示logoutは既存navigation契約の離脱判定後にlocalへ遷移し、Auth失効時はcloud選択とdirtyを維持して再認証を待つ。saving/rejected/unresolved/dirtyの判定はnavigation契約を正本とする。upload/download/merge/conflict/sync・RPC/write/retryは行わず、製品UI統合と実クラウド接続は未着手 |
 
 ## 5. DB・権限・セキュリティ
 
@@ -105,7 +105,7 @@
 | タスクID | 作業内容 | ステータス | 根拠となるファイル・PR | 備考 |
 |---|---|---|---|---|
 | R01 | 全体進捗表の初期作成と人間レビュー | 完了 | 本ファイル、[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)、今回のオーナー合意 | 必要。PR #47マージにより初期作成・レビューの範囲は完了。今回の方針反映はレビュー待ち。以後も運用ルールに従い更新する |
-| R02 | TS製品入口・ビルド配信・既存公開UI統合 | 未着手 | [公開HTML](../tools/memo/memo.html)、package.json、切替設計、今回のオーナー合意 | 必要。既存Pages版をv1.1.0へ置換する製品統合。現HTMLは旧JS参照であり、検証用ビルドと製品配信を区別。本表R02はタスクIDであり権限課題R02とは別 |
+| R02 | TS製品入口・ビルド配信・既存公開UI統合 | 進行中 | [公開HTML](../tools/memo/memo.html)、[製品UI統合契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)、package.json、切替設計、今回のオーナー合意 | 製品用local composition、HTTPS/top-level/固定path・旧新Storageキー制限、local専用bundle検査へ着手。公開HTMLは旧JS参照を維持し、実データ移行・旧タブ対策・音声未達・公開資産切替の解消/承認前には差し替えない。C03/C04/C05の実接続とsingle-rpcは未検証。本表R02はタスクIDであり権限課題R02とは別 |
 | R03 | 実ユーザーv2導入元確認・v3更新・旧タブ並行利用対策 | 要確認 | v3契約、切替設計、今回のオーナー合意 | 必要。人間が実データ保護を確認し、移行実行は別承認。隔離許可を本番へ流用しない。旧JS書込・キー分岐・互換性の残課題を維持 |
 | R04 | Pages設定・公開資産・本番DB/権限・公開前ゲート確認 | 要確認 | 切替設計、AGENTS.md§14・15、DB監査記録、今回のオーナー合意 | 必要。AIは検証準備、人間は本番設定確認・公開承認。Pages公開元/配信方式は未確認でmain/(root)と断定しない。開発監査成功は本番適用承認ではない |
 | R05 | 承認済み公開切替・停止保守版・復旧手順の製品化/適用 | 未着手 | 切替設計、v3契約、今回のオーナー合意 | 必要。公開切替・公開後確認を含む。v3対応の書込停止保守版とコードrollback/データ復旧の分離が必要。AIは準備を担当し、公開・移行・権限変更の実行は人間の別承認後に限る |
