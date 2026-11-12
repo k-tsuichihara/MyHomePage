@@ -35,6 +35,8 @@ export type ReadonlyTrialDiagnostic = Readonly<{
   transportStarted: boolean; transportCompleted: boolean; sdkCallStarted: boolean; sdkCallCompleted: boolean;
   responseReceived: boolean; httpStatus: number | null; targetMatched: boolean; method: 'POST' | 'GET' | null;
   redirectPolicy: 'error'; retryCount: 0; credentialsReferenceCleared: boolean; secretsExposed: false;
+  abortSignalPresent: boolean; abortSignalAborted: boolean; requestBodyPresent: boolean;
+  authorizationHeaderPresent: boolean; apiKeyHeaderPresent: boolean; contentTypeClass: 'json' | 'none' | 'other';
 }>;
 
 const allowedAuth = new Set(['/auth/v1/token', '/auth/v1/user', '/auth/v1/logout']);
@@ -50,7 +52,8 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
   let diagnostic: ReadonlyTrialDiagnostic = { schema: 'memo-human-gate-diagnostic-v1', stage: 'idle', failureClass: 'none',
     transportStarted: false, transportCompleted: false, sdkCallStarted: false, sdkCallCompleted: false,
     responseReceived: false, httpStatus: null, targetMatched: false, method: null, redirectPolicy: 'error', retryCount: 0,
-    credentialsReferenceCleared: false, secretsExposed: false };
+    credentialsReferenceCleared: false, secretsExposed: false, abortSignalPresent: false, abortSignalAborted: false,
+    requestBodyPresent: false, authorizationHeaderPresent: false, apiKeyHeaderPresent: false, contentTypeClass: 'none' };
   const patchDiagnostic = (patch: Partial<ReadonlyTrialDiagnostic>) => { diagnostic = Object.freeze({ ...diagnostic, ...patch }); };
   const classifyError = (error: unknown) => error instanceof DOMException && error.name === 'AbortError' ? 'timeout' as const : 'network' as const;
 
@@ -62,7 +65,11 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
       return Promise.reject(new Error('readonly-trial-auth-stopped'));
     }
     if (!allowedAuth.has(url.pathname) || url.origin !== config.authConfig.url) { stop('auth-boundary'); patchDiagnostic({ stage: 'terminal', failureClass: 'route-block', targetMatched: false }); return Promise.reject(new Error('readonly-trial-auth-denied')); }
-    authCalls++; patchDiagnostic({ stage: 'auth-transport', transportStarted: true, targetMatched: true, method: request.method as 'GET' | 'POST' });
+    const contentType = request.headers.get('content-type');
+    authCalls++; patchDiagnostic({ stage: 'auth-transport', transportStarted: true, targetMatched: true, method: request.method as 'GET' | 'POST',
+      abortSignalPresent: Boolean(init?.signal), abortSignalAborted: Boolean(init?.signal?.aborted), requestBodyPresent: request.body !== null,
+      authorizationHeaderPresent: request.headers.has('authorization'), apiKeyHeaderPresent: request.headers.has('apikey') || request.headers.has('x-client-info'),
+      contentTypeClass: contentType === null ? 'none' : contentType.includes('json') ? 'json' : 'other' });
     if (url.pathname === '/auth/v1/token') {
       authTokenCalls++;
       if (authTokenCalls > 1) { stop('auth-refresh'); return Promise.reject(new Error('readonly-trial-refresh-denied')); }

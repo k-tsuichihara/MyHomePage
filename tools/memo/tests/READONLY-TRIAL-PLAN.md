@@ -88,6 +88,8 @@ Human Gate #3の`auth-unavailable`は、現行コード上ではAuth APIの非�
 
 Human Gate画面には`memo-human-gate-diagnostic-v1`の構造化診断を表示する。表示値は失敗段階、固定failureClass（HTTP 4xx/5xx、想定外statusを含む）、HTTP status、到達boolean、固定method、retryCount、資格情報参照終了boolean等に限定し、raw URL/body/header、provider本文、資格情報、token、UUID、stack traceは表示しない。診断はrunnerの単一Auth呼出しを観測するだけで、追加通信や再試行を発生させない。
 
+2026-11-12にHuman Gate #4を1回実施した。観測は`state: stopped / authCalls: 1 / rpcCalls: 0 / writeRpcCalls: 0 / stopReason: auth-unavailable`、diagnosticは`stage: auth-transport / failureClass: network / transportStarted: true / transportCompleted: false / sdkCallStarted: true / sdkCallCompleted: true / responseReceived: false / httpStatus: null / targetMatched: true / method: POST / redirectPolicy: error / retryCount: 0 / credentialsReferenceCleared: true / secretsExposed: false`だった。providerからHTTP応答を受信したことは確認できず、Human Gate #4のみでは原因を一意に確定しない。
+
 Auth失敗時は、セッション層が保持する固定分類（`unavailable`、`invalid-session`、`expired`、`different-user`、`credentials-rejected`）をHuman Gateの`auth-*`停止理由へ反映する。生HTTP本文・providerメッセージ・資格情報は分類対象にも表示対象にも含めない。安全な既知コードに一致しない場合のみ`auth-unavailable`または`auth-blocked`へフォールバックする。
 
 `npm run human-gate:offline` はdead proxyと`connect-src: none`を使う合成回帰入口であり、実Auth/RPCへ接続しない。`npm run human-gate` はheaded専用profile、owner.runId由来のPermit、trusted origin限定CSP/route/transportを使う本番試験入口で、起動・表示・入力だけでは通信しない。Auth開始と読み取り開始は別の明示操作である。

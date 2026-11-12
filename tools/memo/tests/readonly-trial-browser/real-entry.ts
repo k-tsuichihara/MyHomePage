@@ -2,12 +2,12 @@ import { createReadonlyTrialRunner } from '../../src/readonly-trial-runner';
 import { MEMO_RPC_ORIGIN } from '../../src/cloud-rpc-sender';
 import type { PersistencePermit } from '../../src/browser-local-adapter';
 
-declare global { interface Window { __humanGateConfig?: { projectRef: string; authOrigin: string; publishableKey: string; permit: PersistencePermit } } }
+declare global { interface Window { __humanGateConfig?: { projectRef: string; authOrigin: string; publishableKey: string; permit: PersistencePermit }; __humanGateRouteDiagnostic?: unknown } }
 const cfg = window.__humanGateConfig;
 let runner: ReturnType<typeof createReadonlyTrialRunner> | undefined;
 let loadResult: { kind: string; innerKind: string | null; reason: string | null } | null = null;
 const status = () => document.getElementById('status')!;
-const render = () => { const observation = runner?.observation() ?? { state: 'idle', authCalls: 0, rpcCalls: 0, rpcNames: [], otherRpcCalls: 0, stopReason: null }; status().textContent = JSON.stringify({ ...observation, writeRpcCalls: 0, loadResult }); };
+const render = () => { const observation = runner?.observation() ?? { state: 'idle', authCalls: 0, rpcCalls: 0, rpcNames: [], otherRpcCalls: 0, stopReason: null }; status().textContent = JSON.stringify({ ...observation, route: window.__humanGateRouteDiagnostic ?? { observed: false }, writeRpcCalls: 0, loadResult }); };
 const fail = (prefix: string) => { const observation = runner?.observation(); status().textContent = JSON.stringify({ state: observation?.state ?? 'unknown', authCalls: observation?.authCalls ?? 0, rpcCalls: observation?.rpcCalls ?? 0, rpcNames: observation?.rpcNames ?? [], otherRpcCalls: observation?.otherRpcCalls ?? 0, writeRpcCalls: 0, loadResult, result: prefix }); };
 if (!cfg) fail('STOP');
 else {
@@ -33,6 +33,7 @@ else {
     render();
   } catch { fail('UNKNOWN'); } });
   document.getElementById('dispose')!.addEventListener('click', async () => { await runner!.dispose(); render(); });
+  document.getElementById('copy')!.addEventListener('click', async () => { await navigator.clipboard.writeText(status().textContent ?? ''); });
   const renderTimer = window.setInterval(render, 50);
   window.addEventListener('pagehide', () => window.clearInterval(renderTimer), { once: true });
 }
