@@ -1,7 +1,7 @@
 import type { BackupResult } from '../local-backup';
 
 /** 隔離UIから読取専用サービスを呼ぶ。保存完了ではなくダウンロード開始だけを通知する。 */
-export function mountBackupPreview(doc: Document, prepare: () => Promise<BackupResult>): void {
+export function mountBackupPreview(doc: Document, prepare: () => Promise<BackupResult>): () => void {
   const section = doc.createElement('section'); section.setAttribute('aria-label', 'JSONバックアップ');
   const notice = doc.createElement('p');
   notice.textContent = '通常メモ・ゴミ箱・全タグ・関連・削除済みIDを平文JSONで出力します。旧キー・migration/legacySnapshot・未保存ドラフトは含みません。個人情報を含むため保存先・共有に注意してください。上限10 MiB。ディスクへの保存完了は確認できません。';
@@ -10,7 +10,7 @@ export function mountBackupPreview(doc: Document, prepare: () => Promise<BackupR
   const win = doc.defaultView!;
   const link = doc.createElement('a'); link.textContent = '準備済みJSONをダウンロード'; link.hidden = true;
   const discard = doc.createElement('button'); discard.type = 'button'; discard.textContent = '準備済みファイルを破棄'; discard.hidden = true;
-  let busy = false, generation = 0, currentUrl: string | null = null;
+  let busy = false, generation = 0, currentUrl: string | null = null, disposed = false;
   function release() {
     generation++;
     if (currentUrl) win.URL.revokeObjectURL(currentUrl);
@@ -22,10 +22,11 @@ export function mountBackupPreview(doc: Document, prepare: () => Promise<BackupR
   });
   discard.addEventListener('click', () => { release(); status.textContent = '準備済みファイルを破棄しました。保存領域は変更していません。'; });
   // 保存開始直後の固定時間では解放しない。明示破棄・再作成・ページ終了まで保持する。
-  win.addEventListener('pagehide', () => { release(); status.textContent = '再度バックアップを準備してください。'; });
+  const pagehide = () => { release(); status.textContent = '再度バックアップを準備してください。'; };
+  win.addEventListener('pagehide', pagehide);
   button.addEventListener('click', () => { void run(); });
   async function run() {
-    if (busy) return;
+    if (busy || disposed) return;
     release(); const ticket = generation;
     busy = true; button.disabled = true; status.textContent = 'バックアップを準備しています…';
     let url: string | undefined;
@@ -48,8 +49,13 @@ export function mountBackupPreview(doc: Document, prepare: () => Promise<BackupR
       if (ticket === generation) status.textContent = 'ファイル準備に失敗しました。保存領域は変更していません。';
     } finally {
       if (url) doc.defaultView!.URL.revokeObjectURL(url);
-      busy = false; button.disabled = false;
+      busy = false; button.disabled = disposed;
     }
   }
   section.append(notice, button, link, discard, status); doc.getElementById('memo-app')!.append(section);
+  return () => {
+    if (disposed) return;
+    disposed = true; release(); button.disabled = true;
+    win.removeEventListener('pagehide', pagehide); section.remove();
+  };
 }
