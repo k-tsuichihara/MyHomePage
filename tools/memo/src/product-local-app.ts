@@ -32,7 +32,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let disposed = false;
 
   const enter = async (): Promise<boolean> => {
-    if (disposed) return false;
+    if (disposed || migration.getState().kind !== 'ready') return false;
     await controller.dispatch({ kind: 'load' });
     if (disposed || controller.getState().read.kind !== 'ready') return false;
     disposeMemo();
