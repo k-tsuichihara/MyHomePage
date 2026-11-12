@@ -36,7 +36,7 @@ export type ReadonlyTrialDiagnostic = Readonly<{
   responseReceived: boolean; httpStatus: number | null; targetMatched: boolean; method: 'POST' | 'GET' | null;
   redirectPolicy: 'error'; retryCount: 0; credentialsReferenceCleared: boolean; secretsExposed: false;
   abortSignalPresent: boolean; abortSignalAborted: boolean; requestBodyPresent: boolean;
-  authorizationHeaderPresent: boolean; apiKeyHeaderPresent: boolean; contentTypeClass: 'json' | 'none' | 'other';
+  authorizationHeaderPresent: boolean; apiKeyHeaderPresent: boolean; clientInfoHeaderPresent: boolean; contentTypeClass: 'json' | 'none' | 'other';
 }>;
 
 const allowedAuth = new Set(['/auth/v1/token', '/auth/v1/user', '/auth/v1/logout']);
@@ -53,7 +53,7 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     transportStarted: false, transportCompleted: false, sdkCallStarted: false, sdkCallCompleted: false,
     responseReceived: false, httpStatus: null, targetMatched: false, method: null, redirectPolicy: 'error', retryCount: 0,
     credentialsReferenceCleared: false, secretsExposed: false, abortSignalPresent: false, abortSignalAborted: false,
-    requestBodyPresent: false, authorizationHeaderPresent: false, apiKeyHeaderPresent: false, contentTypeClass: 'none' };
+    requestBodyPresent: false, authorizationHeaderPresent: false, apiKeyHeaderPresent: false, clientInfoHeaderPresent: false, contentTypeClass: 'none' };
   const patchDiagnostic = (patch: Partial<ReadonlyTrialDiagnostic>) => { diagnostic = Object.freeze({ ...diagnostic, ...patch }); };
   const classifyError = (error: unknown) => error instanceof DOMException && error.name === 'AbortError' ? 'timeout' as const : 'network' as const;
 
@@ -68,7 +68,7 @@ export function createReadonlyTrialRunner(config: ReadonlyTrialRunnerConfig) {
     const contentType = request.headers.get('content-type');
     authCalls++; patchDiagnostic({ stage: 'auth-transport', transportStarted: true, targetMatched: true, method: request.method as 'GET' | 'POST',
       abortSignalPresent: Boolean(init?.signal), abortSignalAborted: Boolean(init?.signal?.aborted), requestBodyPresent: request.body !== null,
-      authorizationHeaderPresent: request.headers.has('authorization'), apiKeyHeaderPresent: request.headers.has('apikey') || request.headers.has('x-client-info'),
+      authorizationHeaderPresent: request.headers.has('authorization'), apiKeyHeaderPresent: request.headers.has('apikey'), clientInfoHeaderPresent: request.headers.has('x-client-info'),
       contentTypeClass: contentType === null ? 'none' : contentType.includes('json') ? 'json' : 'other' });
     if (url.pathname === '/auth/v1/token') {
       authTokenCalls++;
