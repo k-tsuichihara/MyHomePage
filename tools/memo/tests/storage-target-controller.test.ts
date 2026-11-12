@@ -121,4 +121,15 @@ describe('storage target controller', () => {
     expect(c.confirm(pending, true, auth, saving)).toMatchObject({ kind: 'rejected' });
     expect(c.current()).toEqual({ target: 'local', dirty: true, generation: null });
   });
+
+  it('invalidates confirmations when the storage target changes and returns', () => {
+    const c = createStorageTargetController(); c.request('cloud', auth, safe);
+    const oldLogout = c.logout(unresolved);
+    if (oldLogout.kind !== 'confirmation-required') throw new Error('expected logout confirmation');
+    expect(c.confirm(oldLogout, true, auth, safe)).toEqual({ kind: 'changed', state: { target: 'local', dirty: false, generation: null } });
+    expect(c.request('cloud', auth, safe)).toEqual({ kind: 'changed', state: { target: 'cloud', dirty: false, generation: 7 } });
+    expect(c.confirm(oldLogout, true, auth, safe)).toEqual({
+      kind: 'rejected', reason: 'stale-confirmation', state: { target: 'cloud', dirty: false, generation: 7 },
+    });
+  });
 });

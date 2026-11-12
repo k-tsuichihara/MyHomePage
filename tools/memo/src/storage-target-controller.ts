@@ -54,6 +54,7 @@ export function createStorageTargetController() {
       expectedGeneration: target === 'cloud' ? auth!.generation : null, expectedRevision: revision, state };
     if (state.dirty) return { kind: 'confirmation-required', from: state.target, to: target,
       expectedGeneration: target === 'cloud' ? auth!.generation : null, expectedRevision: revision, state };
+    revision += 1;
     state = snapshot(target, false, target === 'cloud' ? auth!.generation : null);
     return { kind: 'changed', state };
   };
@@ -69,6 +70,7 @@ export function createStorageTargetController() {
       && (!auth?.authenticated || auth.generation !== decision.expectedGeneration)) {
       return { kind: 'rejected', reason: 'stale-generation', state };
     }
+    revision += 1;
     state = snapshot(decision.to, false, decision.to === 'cloud' ? auth!.generation : null);
     return { kind: 'changed', state };
   };
@@ -77,11 +79,13 @@ export function createStorageTargetController() {
     if (leave.kind === 'blocked') return { kind: 'rejected', reason: 'stale-confirmation', state };
     if (leave.kind === 'confirmation-required' || state.dirty) return { kind: 'confirmation-required', from: state.target, to: 'local',
       expectedGeneration: null, expectedRevision: revision, state };
+    revision += 1;
     state = snapshot('local', false, null);
     return { kind: 'changed', state };
   };
   const acceptAuthenticatedGeneration = (auth: StorageTargetAuth): StorageTargetState => {
     if (state.target === 'cloud' && auth.authenticated && Number.isInteger(auth.generation) && auth.generation >= 0) {
+      revision += 1;
       state = snapshot('cloud', state.dirty, auth.generation);
     }
     return state;
