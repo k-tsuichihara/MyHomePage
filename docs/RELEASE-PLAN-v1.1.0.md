@@ -7,7 +7,7 @@
 ## 現在位置と公開までの推奨順序
 
 - 現在：**STEP 03（TypeScript版の公開UI統合）**。
-- 現在のレビュー対象：**R02（製品用local composition・browser境界・配信buildの最初の統合単位）**。公開HTMLの切替、実データ移行、Auth/cloud製品接続はまだ行わない。
+- 現在のレビュー対象：**R02（既存公開ページ外枠を保持する未公開の製品HTML候補生成と合成ブラウザ統合）**。PR #69のlocal composition・browser境界・buildを再利用し、公開HTMLの切替、実データ移行、Auth/cloud製品接続はまだ行わない。
 - C03〜C05のUI非依存層は実装済みだが、実Auth・実HTTP・single-rpc認定・製品UI結線は未検証。C05では明示logoutとAuth失効を区別し、離脱可否は既存navigation契約を正本とする。
 - R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、D05確定はPR #49、C03〜C05の通信なし境界はPR #50〜#68で段階的に整備した。今回R02へ着手したが、公開HTML・本番Auth・実ユーザーデータ・Pages公開には接続していない。
 - 未決事項：Q05の正式検証範囲、S04のACL原本完全性・NOLOGIN候補の必要性/非波及、製品接続・公開前ゲート。仕様確定は、これらの解消やDB・本番操作の承認ではない。

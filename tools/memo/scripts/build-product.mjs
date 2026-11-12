@@ -1,5 +1,6 @@
 import { build } from 'esbuild';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, copyFile } from 'node:fs/promises';
+import { productHtml } from './product-html.mjs';
 import { fileURLToPath } from 'node:url';
 
 const root = new URL('../', import.meta.url);
@@ -18,3 +19,13 @@ if (forbidden.length || result.outputFiles.length !== 1) {
 }
 await mkdir(new URL('.product/', root), { recursive: true });
 await writeFile(out, result.outputFiles[0].contents);
+const html = productHtml(await readFile(new URL('memo.html', root), 'utf8'),
+  await readFile(new URL('tests/browser/preview.html', root), 'utf8'));
+const candidate = new URL('.product/site/tools/memo/', root);
+await mkdir(new URL('js/', candidate), { recursive: true });
+await mkdir(new URL('css/', candidate), { recursive: true });
+await writeFile(new URL('memo.html', candidate), html);
+await writeFile(new URL('js/memo-app.js', candidate), result.outputFiles[0].contents);
+for (const name of ['memo.css', 'memo-product.css']) {
+  await copyFile(new URL(`css/${name}`, root), new URL(`css/${name}`, candidate));
+}

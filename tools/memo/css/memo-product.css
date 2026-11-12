@@ -1,0 +1,12 @@
+/* 新製品候補のメモ領域だけに適用し、共通ヘッダー・フッターを変更しない。 */
+.memo-product [hidden] { display: none !important; }
+.memo-product label { display: block; margin: 10px 0; }
+.memo-product input, .memo-product textarea, .memo-product select { max-width: 100%; padding: 8px; }
+.memo-product textarea { width: 100%; }
+.memo-product button { margin: 4px; padding: 8px 12px; }
+.memo-product #cards { list-style: none; padding: 0; max-height: 55vh; overflow: auto; }
+.memo-product #cards li { border: 1px solid #ddd; border-radius: 10px; padding: 12px; margin: 10px 0; overflow-wrap: anywhere; }
+.memo-product pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.memo-product #confirmation { border: 2px solid #8d6100; padding: 12px; }
+.memo-product #error { color: #a01624; }
+.memo-product :focus-visible { outline: 3px solid #2780c2; }
