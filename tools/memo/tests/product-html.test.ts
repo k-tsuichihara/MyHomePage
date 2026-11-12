@@ -32,7 +32,6 @@ it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の
     await context.addInitScript(() => {
       Object.defineProperty(window, '__storageReads', { value: { count: 0 } });
       const values = new Map<string, string>();
-      values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 3, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [], deletedMemoIds: [] }));
       Object.defineProperty(window, 'localStorage', { value: {
         getItem: (key: string) => { (window as unknown as { __storageReads: { count: number } }).__storageReads.count++; return values.get(key) ?? null; },
         setItem: (key: string, value: string) => { values.set(key, value); },
@@ -58,6 +57,7 @@ it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の
       expect(await page.locator('#product-status').textContent()).toContain(mode === 'corrupt-js' ? '起動前' : '安全条件');
       await context.close(); return;
     }
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBeNull();
     await page.locator('#new').click();
     await page.locator('#memo-title').fill('合成製品メモ');
     await page.locator('#memo-body').fill('合成本文');
@@ -65,6 +65,8 @@ it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の
     await page.locator('#detail-view').waitFor({ state: 'visible' });
     expect(await page.locator('#detail-title').textContent()).toBe('合成製品メモ');
     const beforeBackup = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    expect(JSON.parse(beforeBackup!).version).toBe(3);
+    expect(JSON.parse(beforeBackup!).deletedMemoIds).toEqual([]);
     await page.getByRole('button', { name: 'JSONバックアップを作成' }).click();
     const downloadEvent = page.waitForEvent('download');
     await page.getByRole('link', { name: '準備済みJSONをダウンロード' }).click();
