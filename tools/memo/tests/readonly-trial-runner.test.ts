@@ -76,4 +76,11 @@ describe('readonly trial runner', () => {
     expect(JSON.stringify(f.runner.observation())).not.toMatch(/private|network detail|example|password/);
     expect(f.rpcFetch).not.toHaveBeenCalled();
   });
+  it('does not treat x-client-info as an API key', async () => {
+    const f = fixture();
+    f.authTransport.mockImplementation(async request => { request.headers.set('x-client-info', 'synthetic-client'); return new Response('{}', { status: 503 }); });
+    await f.runner.startAuth({ email: 'private@example.invalid', password: 'private-password' });
+    expect(f.runner.observation().diagnostic).toMatchObject({ apiKeyHeaderPresent: true, clientInfoHeaderPresent: true });
+    expect(JSON.stringify(f.runner.observation())).not.toContain('synthetic-client');
+  });
 });
