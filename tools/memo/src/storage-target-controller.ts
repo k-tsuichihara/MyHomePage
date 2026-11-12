@@ -8,7 +8,7 @@ export type StorageTargetState = Readonly<{
 
 export type StorageTargetDecision =
   | { kind: 'changed'; state: StorageTargetState }
-  | { kind: 'confirmation-required'; from: StorageTarget; to: StorageTarget; state: StorageTargetState }
+  | { kind: 'confirmation-required'; from: StorageTarget; to: StorageTarget; expectedGeneration: number | null; state: StorageTargetState }
   | { kind: 'cancelled'; state: StorageTargetState }
   | { kind: 'rejected'; reason: 'not-authenticated' | 'stale-generation' | 'invalid-target'; state: StorageTargetState };
 
@@ -43,7 +43,8 @@ export function createStorageTargetController(initial: StorageTarget = 'local') 
       return { kind: 'rejected', reason: 'stale-generation', state };
     }
     if (state.target === target && (target !== 'cloud' || state.generation === auth?.generation)) return { kind: 'changed', state };
-    if (state.dirty) return { kind: 'confirmation-required', from: state.target, to: target, state };
+    if (state.dirty) return { kind: 'confirmation-required', from: state.target, to: target,
+      expectedGeneration: target === 'cloud' ? auth!.generation : null, state };
     state = snapshot(target, false, target === 'cloud' ? auth!.generation : null);
     return { kind: 'changed', state };
   };
@@ -51,7 +52,8 @@ export function createStorageTargetController(initial: StorageTarget = 'local') 
   const confirm = (decision: Extract<StorageTargetDecision, { kind: 'confirmation-required' }>, proceed: boolean,
     auth: StorageTargetAuth | null): StorageTargetDecision => {
     if (!proceed) return { kind: 'cancelled', state };
-    if (state.target !== decision.from || !state.dirty || (decision.to === 'cloud' && !auth?.authenticated)) {
+    if (state.target !== decision.from || !state.dirty || (decision.to === 'cloud'
+      && (!auth?.authenticated || auth.generation !== decision.expectedGeneration))) {
       return { kind: 'rejected', reason: 'stale-generation', state };
     }
     state = snapshot(decision.to, false, decision.to === 'cloud' ? auth!.generation : null);

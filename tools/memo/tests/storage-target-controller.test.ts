@@ -28,6 +28,17 @@ describe('storage target controller', () => {
     expect(c.current().target).toBe('cloud');
   });
 
+  it('rejects confirmation after the auth generation changes and preserves local dirty state', () => {
+    const c = createStorageTargetController(); c.setDirty(true);
+    const pending = c.request('cloud', auth);
+    expect(pending.kind).toBe('confirmation-required');
+    if (pending.kind !== 'confirmation-required') throw new Error('expected confirmation');
+    expect(c.confirm(pending, true, { authenticated: true, generation: 8 })).toEqual({
+      kind: 'rejected', reason: 'stale-generation', state: { target: 'local', dirty: true, generation: null },
+    });
+    expect(c.current()).toEqual({ target: 'local', dirty: true, generation: null });
+  });
+
   it('returns to local on logout or matching auth expiry without copying data', () => {
     const c = createStorageTargetController(); c.request('cloud', auth); c.setDirty(true);
     expect(c.authExpired(6).target).toBe('cloud');
