@@ -37,7 +37,7 @@ await initializeContext(() => chromium.launchPersistentContext(profile, { headle
     if (!loopback) {
       const method = request.method() === 'POST' ? 'POST' : request.method() === 'GET' ? 'GET' : 'other';
       const targetClass = targetMatched ? 'expected-auth-path' : url.origin === MEMO_RPC_ORIGIN ? 'unexpected-path' : 'unexpected-origin';
-      observeRoute(routeSummary, { allowed, targetMatched, method });
+      observeRoute(routeSummary, { allowed, targetMatched, method, targetClass });
       if (page) await page.evaluate(value => { window.__humanGateRouteDiagnostic = value; }, { ...routeSummary });
     }
     return allowed ? route.continue() : route.abort();
