@@ -53,3 +53,29 @@ it('非対応では画面遷移せず手入力を維持する', async () => {
   await voice.start(); expect(f.statuses.at(-1)).toBe('unsupported');
   expect(f.controller.getState()).toBe(before);
 });
+
+it('追記待ちの再開始を抑止し、明示停止後の古い完了通知を捨てる', async () => {
+  const f = await fixture();
+  let complete!: (applied: boolean) => void;
+  const voice = createVoiceInput(f.controller, f.factory, status => f.statuses.push(status), undefined,
+    () => new Promise<boolean>(resolve => { complete = resolve; }));
+  await voice.start(); f.result('保留結果');
+  await voice.start(); expect(f.factory).toHaveBeenCalledTimes(1);
+  voice.stop(); await voice.start();
+  expect(f.factory).toHaveBeenCalledTimes(2);
+  expect(f.statuses.at(-1)).toBe('listening');
+  complete(true); await Promise.resolve();
+  expect(f.statuses.at(-1)).toBe('listening');
+  voice.dispose();
+});
+
+it('追記完了まで待ち、完了後にだけ再開始できる', async () => {
+  const f = await fixture(); let complete!: (applied: boolean) => void;
+  const voice = createVoiceInput(f.controller, f.factory, status => f.statuses.push(status), undefined,
+    () => new Promise<boolean>(resolve => { complete = resolve; }));
+  await voice.start(); f.result('保留');
+  await voice.start(); expect(f.factory).toHaveBeenCalledTimes(1);
+  complete(true); await Promise.resolve(); expect(f.statuses.at(-1)).toBe('idle');
+  await voice.start(); expect(f.factory).toHaveBeenCalledTimes(2);
+  voice.dispose();
+});

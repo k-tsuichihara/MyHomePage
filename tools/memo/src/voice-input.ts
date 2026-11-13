@@ -16,10 +16,10 @@ export type VoiceStatus = 'idle' | 'listening' | 'unsupported' | 'failed' | 'inv
 export function createVoiceInput(controller: Controller, factory: (() => VoiceRecognition) | undefined,
   notify: (status: VoiceStatus) => void, now: () => Date = () => new Date(),
   append?: (session: string, text: string) => Promise<boolean>) {
-  let recognition: VoiceRecognition | null = null, disposed = false, starting = false;
+  let recognition: VoiceRecognition | null = null, disposed = false, starting = false, appending = false;
   let epoch = 0;
   const stop = () => {
-    ++epoch; const current = recognition; recognition = null;
+    ++epoch; appending = false; const current = recognition; recognition = null;
     if (current) {
       current.onresult = null; current.onerror = null; current.onend = null;
       try { current.abort(); } catch { /* 元例外や音声を公開しない */ }
@@ -27,7 +27,7 @@ export function createVoiceInput(controller: Controller, factory: (() => VoiceRe
   };
   return {
     async start() {
-      if (disposed || recognition || starting) return;
+      if (disposed || recognition || starting || appending) return;
       if (!factory) { notify('unsupported'); return; }
       const state = controller.getState();
       if (state.read.kind !== 'ready' || state.write.kind === 'writing' || state.confirmation) return;
@@ -58,7 +58,12 @@ export function createVoiceInput(controller: Controller, factory: (() => VoiceRe
           if (!transcript) return;
           if (append) {
             stop();
-            void append(session, transcript).then(applied => { if (!disposed) notify(applied ? 'idle' : 'invalid-input'); });
+            const completionEpoch = epoch; appending = true;
+            void append(session, transcript).then(applied => {
+              if (!disposed && epoch === completionEpoch) { appending = false; notify(applied ? 'idle' : 'invalid-input'); }
+            }, () => {
+              if (!disposed && epoch === completionEpoch) { appending = false; notify('failed'); }
+            });
             return;
           }
           const draft = latest.editor.draft;
