@@ -5,11 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 
 const root = new URL('../', import.meta.url);
-const out = new URL('.product/memo-app.js', root);
+for (const maintenance of [false, true]) {
+const out = new URL(maintenance ? '.product/maintenance-app.js' : '.product/memo-app.js', root);
 const result = await build({
   entryPoints: [fileURLToPath(new URL('src/product-entry.ts', root))],
   outfile: fileURLToPath(out), bundle: true, platform: 'browser', format: 'esm', target: 'es2022',
   sourcemap: false, metafile: true, write: false,
+  define: { __MEMO_MAINTENANCE__: String(maintenance) },
 });
 const forbidden = Object.keys(result.metafile.inputs).filter(path => {
   const normalized = path.replaceAll('\\', '/');
@@ -22,7 +24,8 @@ await mkdir(new URL('.product/', root), { recursive: true });
 await writeFile(out, result.outputFiles[0].contents);
 let html = productHtml(await readFile(new URL('memo.html', root), 'utf8'),
   await readFile(new URL('tests/browser/preview.html', root), 'utf8'));
-const candidate = new URL('.product/site/tools/memo/', root);
+if (maintenance) html = html.replace(/<main>[\s\S]*?<\/main>/, '<main><section class="memo-page"><div class="memo-shell"><h1>メモツール保守版</h1><p id="product-status" role="status">未起動・書込停止</p></div></section></main>');
+const candidate = new URL(maintenance ? '.product/maintenance/tools/memo/' : '.product/site/tools/memo/', root);
 await mkdir(new URL('js/', candidate), { recursive: true });
 await mkdir(new URL('css/', candidate), { recursive: true });
 const assets = [
@@ -37,3 +40,4 @@ for (const [name, bytes] of assets) {
   html = html.replace(`="${name}"`, `="${hashed}" integrity="sha256-${digest.toString('base64')}" crossorigin="anonymous"`);
 }
 await writeFile(new URL('memo.html', candidate), html);
+}

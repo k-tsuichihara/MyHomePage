@@ -15,6 +15,8 @@ import { createLocalRestoreController } from './local-restore-controller';
 import { createDeletedRecoveryController } from './deleted-recovery-controller';
 import { mountRestorePreview } from './ui/restore-preview';
 import { mountDeletedRecoveryPreview } from './ui/deleted-recovery-preview';
+import { createInitialRestoreController } from './initial-restore-controller';
+import { mountInitialRestorePreview } from './ui/initial-restore-preview';
 
 export interface ProductLocalDependencies extends MigrationDependencies {
   readonly now: () => string;
@@ -27,6 +29,7 @@ export interface ProductLocalViews {
   readonly mountUpgrade?: typeof mountV3Upgrade;
   readonly mountRestore?: typeof mountRestorePreview;
   readonly mountRecovery?: typeof mountDeletedRecoveryPreview;
+  readonly mountInitial?: typeof mountInitialRestorePreview;
 }
 
 const defaultViews: ProductLocalViews = {
@@ -41,6 +44,7 @@ const defaultViews: ProductLocalViews = {
   mountUpgrade: mountV3Upgrade,
   mountRestore: mountRestorePreview,
   mountRecovery: mountDeletedRecoveryPreview,
+  mountInitial: mountInitialRestorePreview,
 };
 
 /**
@@ -60,6 +64,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let disposeUpgrade: (() => void) | undefined;
   let backupOriginal = false;
   let disposeRestore: (() => void) | undefined, disposeRecovery: (() => void) | undefined;
+  let disposeInitial: (() => void) | undefined;
   const normalReady = () => {
     const state = controller.getState();
     return !disposed && !upgradeBusy && state.route.kind !== 'edit' && state.read.kind === 'ready'
@@ -69,8 +74,15 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   };
   const restoreBusy = () => ['reading', 'writing', 'confirmation'].includes(restore.getState().phase);
   const recoveryBusy = () => ['reading', 'writing', 'diagnosing', 'opening', 'preview', 'unknown'].includes(recovery.getState().phase);
-  const restore = createLocalRestoreController({ store, createId: deps.createId, canStart: () => normalReady() && !recoveryBusy() });
-  const recovery = createDeletedRecoveryController({ store, createId: deps.createId, canStart: () => normalReady() && !restoreBusy(),
+  const initialBusy = () => ['reading', 'writing', 'confirmation', 'unknown'].includes(initial.getState().phase);
+  const initial = createInitialRestoreController({ store, createId: deps.createId, canStart: () => normalReady() && !restoreBusy() && !recoveryBusy(),
+    openNormal: async () => {
+      if (disposed) return false;
+      await controller.dispatch({ kind: 'load' }); syncBackup();
+      return !disposed && controller.getState().read.kind === 'ready';
+    } });
+  const restore = createLocalRestoreController({ store, createId: deps.createId, canStart: () => normalReady() && !recoveryBusy() && !initialBusy() });
+  const recovery = createDeletedRecoveryController({ store, createId: deps.createId, canStart: () => normalReady() && !restoreBusy() && !initialBusy(),
     openCreated: async id => {
       if (disposed) return false;
       await controller.dispatch({ kind: 'load' });
@@ -112,7 +124,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       getState: controller.getState,
       async dispatch(command) {
         if (disposed) return { kind: 'blocked', reason: 'disposed' };
-        if ((upgradeBusy || restoreBusy() || recoveryBusy()) && command.kind !== 'draft') return { kind: 'blocked', reason: 'writing' };
+        if ((upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()) && command.kind !== 'draft') return { kind: 'blocked', reason: 'writing' };
         const result = await controller.dispatch(command);
         syncBackup();
         if (upgrade.getState() === 'legacy-changed') {
@@ -123,6 +135,10 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       },
     });
     mountRecoveryViews();
+    if (!disposeInitial && controller.getState().storageVersion === null && views.mountInitial) disposeInitial = views.mountInitial(doc, {
+      getState: initial.getState,
+      async dispatch(command) { if (!disposed) await initial.dispatch(command); },
+    });
     if (!disposeBackup && views.mountBackup) {
       const original = controller.getState().storageVersion === 2;
       backupOriginal = original;
@@ -159,6 +175,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       disposeBackup?.();
       disposeUpgrade?.(); upgrade.dispose();
       disposeRestore?.(); disposeRecovery?.();
+      disposeInitial?.(); store.invalidateInitial();
     },
   });
 }
