@@ -1,11 +1,14 @@
 import type { BackupResult } from '../local-backup';
 
 /** 隔離UIから読取専用サービスを呼ぶ。保存完了ではなくダウンロード開始だけを通知する。 */
-export function mountBackupPreview(doc: Document, prepare: () => Promise<BackupResult>): () => void {
-  const section = doc.createElement('section'); section.setAttribute('aria-label', 'JSONバックアップ');
+export function mountBackupPreview(doc: Document, prepare: () => Promise<BackupResult>, mode: 'backup' | 'v2-original' = 'backup'): () => void {
+  const original = mode === 'v2-original';
+  const section = doc.createElement('section'); section.setAttribute('aria-label', original ? 'v2移行前の原値退避' : 'JSONバックアップ');
   const notice = doc.createElement('p');
   notice.textContent = '通常メモ・ゴミ箱・全タグ・関連・削除済みIDを平文JSONで出力します。旧キー・migration/legacySnapshot・未保存ドラフトは含みません。個人情報を含むため保存先・共有に注意してください。上限10 MiB。ディスクへの保存完了は確認できません。';
+  if (original) notice.textContent = 'v3更新前に旧タブを閉じてください。新旧キーの原文字列（旧キー不在はnull）を平文JSONへ退避します。旧データ・移行情報・個人情報を含みます。安全な場所へ保管し共有しないでください。上限10 MiB。通常のバックアップ復元へは取り込めません。保存領域は変更しません。ファイルの保存完了は確認できず、準備やクリックだけで保全完了とは判定しません。';
   const button = doc.createElement('button'); button.type = 'button'; button.textContent = 'JSONバックアップを作成';
+  if (original) button.textContent = 'v2移行前の原値ファイルを準備';
   const status = doc.createElement('p'); status.setAttribute('role', 'status');
   const win = doc.defaultView!;
   const link = doc.createElement('a'); link.textContent = '準備済みJSONをダウンロード'; link.hidden = true;
