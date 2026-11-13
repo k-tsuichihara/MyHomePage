@@ -5,7 +5,8 @@ import { MAX_IMPORT_BYTES } from '../backup-json';
 import { renderMemoDetail } from './memo-detail-content';
 
 /** 単件回復は専用controllerだけへ接続する。実ストレージやStep 3の保存経路を参照しない。 */
-export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnType<typeof createDeletedRecoveryController>, detailId: () => string | null): void {
+export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnType<typeof createDeletedRecoveryController>, detailId: () => string | null): () => void {
+  let disposed = false, frame = 0;
   const section = doc.createElement('section'); section.setAttribute('aria-label', '完全削除後の回復');
   const notice = doc.createElement('p'); notice.textContent = '現在の削除履歴にある正常メモを1件ずつ新しいメモとして復元します。元ID・削除履歴は保持し、同IDの現在タグだけを使用します。';
   const file = doc.createElement('input'); file.type = 'file'; file.accept = '.json'; file.setAttribute('aria-label', '単件回復のバックアップJSON');
@@ -14,7 +15,7 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
   let reading = false, last: unknown = null, lastDetail: string | null = null, error = '', sourceEnded = false, sawDetail = false;
   const held = new Map<HTMLElement, boolean>();
   const button = (label: string, command: RecoveryCommand) => { const node = doc.createElement('button'); node.type = 'button'; node.textContent = label; node.onclick = () => { void send(command); }; return node; };
-  const send = async (command: RecoveryCommand) => { const pending = controller.dispatch(command); render(); await pending; render(); };
+  const send = async (command: RecoveryCommand) => { if (disposed) return; const pending = controller.dispatch(command); render(); await pending; render(); };
   file.onchange = () => { void (async () => {
     if (reading) return; const selected = file.files?.[0]; if (!selected) return;
     file.value = ''; reading = true; error = ''; render();
@@ -23,6 +24,7 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
     finally { reading = false; render(); }
   })(); };
   function render() {
+    if (disposed) return;
     const s = controller.getState(), busy = reading || ['reading', 'writing', 'diagnosing', 'opening'].includes(s.phase);
     const modal = s.phase === 'preview' || s.phase === 'unknown';
     for (const child of Array.from(doc.getElementById('memo-app')!.children)) {
@@ -78,6 +80,7 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
     if (s.phase === 'failed') content.append(button('単件回復の一覧へ戻る', { kind: 'back' }));
   }
   section.append(notice, file, status, content); doc.getElementById('memo-app')!.append(section); render();
-  const observe = () => { const s = controller.getState(), detail = detailId(); if (s !== last || detail !== lastDetail) { last = s; lastDetail = detail; render(); } doc.defaultView!.requestAnimationFrame(observe); };
-  doc.defaultView!.requestAnimationFrame(observe);
+  const observe = () => { if (disposed) return; const s = controller.getState(), detail = detailId(); if (s !== last || detail !== lastDetail) { last = s; lastDetail = detail; render(); } frame = doc.defaultView!.requestAnimationFrame(observe); };
+  frame = doc.defaultView!.requestAnimationFrame(observe);
+  return () => { disposed = true; doc.defaultView!.cancelAnimationFrame(frame); for (const [node, previous] of held) node.inert = previous; held.clear(); section.remove(); };
 }
