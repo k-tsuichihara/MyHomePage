@@ -131,6 +131,12 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
     expect(backup.data.memos[0].title).toBe('合成製品メモ');
     expect(backup).not.toHaveProperty('migration');
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeBackup);
+    await page.locator('#back').click();
+    await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = false; });
+    await page.getByRole('button', { name: '新規音声メモ', exact: true }).click();
+    await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '合成音声追記');
+    expect(await page.locator('#memo-title').inputValue()).toMatch(/^音声メモ-\d{8}-\d{4}$/);
+    expect(await page.locator('#memo-body').inputValue()).toBe('合成音声追記');
     await context.close();
   } finally { await browser.close(); }
 }, 20000);

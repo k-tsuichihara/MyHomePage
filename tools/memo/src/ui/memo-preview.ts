@@ -53,6 +53,13 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
   if (voice) voice.append = (session, transcript) => new Promise(resolve => {
     const apply = () => {
       if (stopped || controller.getState().editor?.sessionId !== session || controller.getState().route.kind !== 'edit') { resolve(false); return; }
+      if (lastSession !== session) {
+        // controllerから直接開かれた新セッションは、次の描画フレームより先に結果が届く。
+        // 前セッションのフォーカス中DOMを再利用せず、編集基準を一度描画してから追記する。
+        const editor = controller.getState().editor!;
+        title.value = editor.draft.title; body.value = editor.draft.body;
+        render();
+      }
       const next = body.value + transcript;
       try { normalizeMemoInput(title.value, next); } catch { resolve(false); return; }
       const start = body.selectionStart, end = body.selectionEnd, direction = body.selectionDirection;
