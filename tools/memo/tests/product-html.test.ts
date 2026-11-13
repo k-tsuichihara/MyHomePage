@@ -30,13 +30,14 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
   try {
     const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
     await context.addInitScript(mode => {
-      const speech = { calls: 0 };
+      let emit: (() => void) | undefined;
+      const speech = { calls: 0, defer: false, emit: () => emit?.() };
       Object.defineProperty(window, '__speechProbe', { value: speech });
       Object.defineProperty(window, 'SpeechRecognition', { value: class {
         lang = ''; continuous = false; interimResults = false;
         onresult: ((event: unknown) => void) | null = null;
         onerror = null; onend = null;
-        start() { speech.calls++; queueMicrotask(() => this.onresult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: '合成音声追記' } }] })); }
+        start() { speech.calls++; emit = () => this.onresult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: '合成音声追記' } }] }); if (!speech.defer) queueMicrotask(emit); }
         abort() {}
       } });
       Object.defineProperty(window, '__storageReads', { value: { count: 0 } });
@@ -101,6 +102,23 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
     await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '合成本文合成音声追記');
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeVoice);
     await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
+    await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = true; });
+    await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    const editorBody = page.locator('#memo-body');
+    await editorBody.fill('手入力'); await editorBody.focus();
+    await editorBody.evaluate(node => {
+      const input = node as HTMLTextAreaElement;
+      input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+      input.value = '手入力変換中'; input.setSelectionRange(2, 2);
+      (window as unknown as { __speechProbe: { emit(): void } }).__speechProbe.emit();
+    });
+    expect(await editorBody.inputValue()).toBe('手入力変換中');
+    await editorBody.dispatchEvent('compositionend');
+    await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '手入力変換中合成音声追記');
+    expect(await editorBody.evaluate(node => (node as HTMLTextAreaElement).selectionStart)).toBe(2);
+    await editorBody.press('End'); await editorBody.pressSequentially('さらに入力');
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
+    expect(await page.locator('#detail-body').textContent()).toBe('手入力変換中合成音声追記さらに入力');
     const beforeBackup = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     expect(JSON.parse(beforeBackup!).version).toBe(3);
     expect(JSON.parse(beforeBackup!).deletedMemoIds).toEqual([]);

@@ -1,9 +1,10 @@
 import { createVoiceInput } from '../voice-input';
 import type { VoiceRecognition, VoiceStatus } from '../voice-input';
 import type { createLocalMemoController } from '../local-memo-controller';
+import type { VoiceEditBridge } from './memo-preview';
 
 /** 製品候補だけの音声操作。起動時は認識器を生成せず、権限要求もしない。 */
-export function mountVoiceInput(doc: Document, controller: ReturnType<typeof createLocalMemoController>) {
+export function mountVoiceInput(doc: Document, controller: ReturnType<typeof createLocalMemoController>, bridge: VoiceEditBridge) {
   const win = doc.defaultView! as Window & { SpeechRecognition?: new () => VoiceRecognition; webkitSpeechRecognition?: new () => VoiceRecognition };
   const Native = win.SpeechRecognition ?? win.webkitSpeechRecognition;
   const section = doc.createElement('section'), status = doc.createElement('p'); status.setAttribute('role', 'status');
@@ -13,7 +14,8 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
     'invalid-input': '認識結果が上限または入力条件を超えたため追記しません。手入力を続けてください。', stopped: '音声入力を停止しました。入力は保持しています。',
   };
   const stop = doc.createElement('button'); stop.type = 'button'; stop.textContent = '音声入力を停止';
-  const voice = createVoiceInput(controller, Native ? () => new Native() : undefined, value => { status.textContent = messages[value]; stop.disabled = value !== 'listening'; });
+  const voice = createVoiceInput(controller, Native ? () => new Native() : undefined, value => { status.textContent = messages[value]; stop.disabled = value !== 'listening'; }, undefined,
+    (session, text) => bridge.append?.(session, text) ?? Promise.resolve(false));
   stop.disabled = true; stop.onclick = () => voice.stop();
   const buttons: HTMLButtonElement[] = [];
   for (const [id, label] of [['list-view', '新規音声メモ'], ['detail-view', '音声で本文へ追記'], ['editor-view', '音声で本文へ追記']]) {

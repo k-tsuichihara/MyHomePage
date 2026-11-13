@@ -14,7 +14,8 @@ export type VoiceStatus = 'idle' | 'listening' | 'unsupported' | 'failed' | 'inv
 
 /** 認識は明示開始だけ。結果は現在の編集セッションへ追記し、保存は呼び出さない。 */
 export function createVoiceInput(controller: Controller, factory: (() => VoiceRecognition) | undefined,
-  notify: (status: VoiceStatus) => void, now: () => Date = () => new Date()) {
+  notify: (status: VoiceStatus) => void, now: () => Date = () => new Date(),
+  append?: (session: string, text: string) => Promise<boolean>) {
   let recognition: VoiceRecognition | null = null, disposed = false, starting = false;
   let epoch = 0;
   const stop = () => {
@@ -55,6 +56,11 @@ export function createVoiceInput(controller: Controller, factory: (() => VoiceRe
             const result = event.results[index]; if (result?.isFinal) transcript += result[0].transcript;
           }
           if (!transcript) return;
+          if (append) {
+            stop();
+            void append(session, transcript).then(applied => { if (!disposed) notify(applied ? 'idle' : 'invalid-input'); });
+            return;
+          }
           const draft = latest.editor.draft;
           const body = draft.body + transcript;
           try { normalizeMemoInput(draft.title, body); }
