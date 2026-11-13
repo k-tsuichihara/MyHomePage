@@ -6,6 +6,7 @@ import { mountMemoPreview } from './ui/memo-preview';
 import { mountMigrationPreview } from './ui/migration-preview';
 import { createLocalBackup } from './local-backup';
 import { mountBackupPreview } from './ui/backup-preview';
+import { createV2OriginalExport } from './v2-original-export';
 
 export interface ProductLocalDependencies extends MigrationDependencies {
   readonly now: () => string;
@@ -36,6 +37,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let disposed = false;
   let disposeBackup: (() => void) | undefined;
   const prepareBackup = createLocalBackup({ storage: deps.storage, locks: deps.locks, now: deps.now });
+  const prepareOriginal = createV2OriginalExport({ storage: deps.storage, locks: deps.locks, now: deps.now });
 
   const enter = async (): Promise<boolean> => {
     if (disposed || migration.getState().kind !== 'ready') return false;
@@ -46,8 +48,11 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       getState: controller.getState,
       async dispatch(command) { return disposed ? { kind: 'blocked', reason: 'disposed' } : controller.dispatch(command); },
     });
-    if (!disposeBackup && views.mountBackup) disposeBackup = views.mountBackup(doc, async () =>
-      disposed ? { kind: 'failed', reason: 'read-failure' } : prepareBackup());
+    if (!disposeBackup && views.mountBackup) {
+      const original = controller.getState().storageVersion === 2;
+      disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' }
+        : original ? prepareOriginal() : prepareBackup(), original ? 'v2-original' : 'backup');
+    }
     return true;
   };
 

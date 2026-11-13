@@ -21,7 +21,7 @@ it('製品候補は公開外枠と相対URLを保持し、旧JSを実行しな�
   expect(await readFile(new URL('memo.html', root), 'utf8')).toBe(shell);
 });
 
-it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の整合性とStorage接続：%s', async mode => {
+it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の整合性とStorage接続：%s', async mode => {
   const root = new URL('../', import.meta.url);
   execFileSync(process.execPath, ['scripts/build-product.mjs'], { cwd: fileURLToPath(root) });
   const html = await readFile(new URL('.product/site/tools/memo/memo.html', root), 'utf8');
@@ -29,9 +29,10 @@ it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
-    await context.addInitScript(() => {
+    await context.addInitScript(mode => {
       Object.defineProperty(window, '__storageReads', { value: { count: 0 } });
       const values = new Map<string, string>();
+      if (mode === 'v2-original') values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] }));
       Object.defineProperty(window, 'localStorage', { value: {
         getItem: (key: string) => { (window as unknown as { __storageReads: { count: number } }).__storageReads.count++; return values.get(key) ?? null; },
         setItem: (key: string, value: string) => { values.set(key, value); },
@@ -39,7 +40,7 @@ it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の
       Object.defineProperty(navigator, 'locks', { value: {
         request: async (_name: string, _options: unknown, callback: () => Promise<unknown>) => callback(),
       } });
-    });
+    }, mode);
     await context.route('**/*', async route => {
       const url = new URL(route.request().url());
       if (url.origin !== 'https://product.test') return route.abort();
@@ -52,9 +53,21 @@ it.each(['normal', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の
     });
     const page = await context.newPage();
     await page.goto('https://product.test/tools/memo/memo.html');
-    if (mode !== 'normal') {
+    if (mode !== 'normal' && mode !== 'v2-original') {
       expect(await page.evaluate(() => (window as unknown as { __storageReads: { count: number } }).__storageReads.count)).toBe(0);
       expect(await page.locator('#product-status').textContent()).toContain(mode === 'corrupt-js' ? '起動前' : '安全条件');
+      await context.close(); return;
+    }
+    if (mode === 'v2-original') {
+      const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+      await page.getByRole('button', { name: 'v2移行前の原値ファイルを準備' }).click();
+      const event = page.waitForEvent('download');
+      await page.getByRole('link', { name: '準備済みJSONをダウンロード' }).click();
+      const file = await event;
+      const exported = JSON.parse(await readFile((await file.path())!, 'utf8'));
+      expect(exported.format).toBe('myhomepage.memo.v2-original');
+      expect(exported.values['myhomepage.memo.data.v2']).toBe(raw);
+      expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(raw);
       await context.close(); return;
     }
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBeNull();
