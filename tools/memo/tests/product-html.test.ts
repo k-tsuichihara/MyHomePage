@@ -30,6 +30,16 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
   try {
     const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
     await context.addInitScript(mode => {
+      let emit: (() => void) | undefined;
+      const speech = { calls: 0, defer: false, emit: () => emit?.() };
+      Object.defineProperty(window, '__speechProbe', { value: speech });
+      Object.defineProperty(window, 'SpeechRecognition', { value: class {
+        lang = ''; continuous = false; interimResults = false;
+        onresult: ((event: unknown) => void) | null = null;
+        onerror = null; onend = null;
+        start() { speech.calls++; emit = () => this.onresult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: '合成音声追記' } }] }); if (!speech.defer) queueMicrotask(emit); }
+        abort() {}
+      } });
       Object.defineProperty(window, '__storageReads', { value: { count: 0 } });
       const values = new Map<string, string>();
       if (mode === 'v2-original') values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] }));
@@ -86,6 +96,39 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
     await page.locator('#save').click();
     await page.locator('#detail-view').waitFor({ state: 'visible' });
     expect(await page.locator('#detail-title').textContent()).toBe('合成製品メモ');
+    expect(await page.evaluate(() => (window as unknown as { __speechProbe: { calls: number } }).__speechProbe.calls)).toBe(0);
+    const beforeVoice = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '合成本文合成音声追記');
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeVoice);
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
+    await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = true; });
+    await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    const editorBody = page.locator('#memo-body');
+    await editorBody.fill('手入力'); await editorBody.focus();
+    await editorBody.evaluate(node => {
+      const input = node as HTMLTextAreaElement;
+      input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+      input.value = '手入力変換中'; input.setSelectionRange(2, 2);
+      (window as unknown as { __speechProbe: { emit(): void } }).__speechProbe.emit();
+    });
+    expect(await editorBody.inputValue()).toBe('手入力変換中');
+    await editorBody.dispatchEvent('compositionend');
+    await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '手入力変換中合成音声追記');
+    expect(await editorBody.evaluate(node => (node as HTMLTextAreaElement).selectionStart)).toBe(2);
+    await editorBody.press('End'); await editorBody.pressSequentially('さらに入力');
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
+    expect(await page.locator('#detail-body').textContent()).toBe('手入力変換中合成音声追記さらに入力');
+    await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    await editorBody.focus();
+    await editorBody.dispatchEvent('compositionstart');
+    const beforeStoppedVoice = await editorBody.inputValue();
+    await page.evaluate(() => { (window as unknown as { __speechProbe: { emit(): void } }).__speechProbe.emit(); });
+    await page.getByRole('button', { name: '音声入力を停止', exact: true }).click();
+    await editorBody.dispatchEvent('compositionend');
+    expect(await editorBody.inputValue()).toBe(beforeStoppedVoice);
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
+    expect(await page.locator('#detail-body').textContent()).toBe(beforeStoppedVoice);
     const beforeBackup = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     expect(JSON.parse(beforeBackup!).version).toBe(3);
     expect(JSON.parse(beforeBackup!).deletedMemoIds).toEqual([]);
@@ -98,6 +141,12 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
     expect(backup.data.memos[0].title).toBe('合成製品メモ');
     expect(backup).not.toHaveProperty('migration');
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeBackup);
+    await page.locator('#back').click();
+    await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = false; });
+    await page.getByRole('button', { name: '新規音声メモ', exact: true }).click();
+    await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '合成音声追記');
+    expect(await page.locator('#memo-title').inputValue()).toMatch(/^音声メモ-\d{8}-\d{4}$/);
+    expect(await page.locator('#memo-body').inputValue()).toBe('合成音声追記');
     await context.close();
   } finally { await browser.close(); }
 }, 20000);

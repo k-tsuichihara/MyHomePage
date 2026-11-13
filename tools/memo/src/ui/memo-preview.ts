@@ -2,6 +2,8 @@ import type { createLocalMemoController } from '../local-memo-controller';
 import type { ControllerCommand } from '../local-app-state';
 import { isDirty } from '../editor-state';
 import { renderMemoDetail } from './memo-detail-content';
+import { normalizeMemoInput } from '../input';
+export interface VoiceEditBridge { append?: (session: string, text: string, isCurrent: () => boolean) => Promise<boolean> }
 
 type Controller = ReturnType<typeof createLocalMemoController>;
 const messages: Record<string, string> = {
@@ -19,7 +21,7 @@ const messages: Record<string, string> = {
  * 検証用DOMと既存controllerだけを接続する。保存先や永続APIへはアクセスしない。
  * 入力欄は一度だけ作り、非同期結果の描画でもIME・選択範囲を壊さない。
  */
-export function mountMemoPreview(doc: Document, controller: Controller): () => void {
+export function mountMemoPreview(doc: Document, controller: Controller, voice?: VoiceEditBridge): () => void {
   const win = doc.defaultView!;
   const element = <T extends HTMLElement>(id: string) => doc.getElementById(id) as T;
   const title = element<HTMLInputElement>('memo-title'), body = element<HTMLTextAreaElement>('memo-body');
@@ -47,6 +49,25 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
   const query = (tagIds: readonly string[] = controller.getState().list?.result.query.selectedTagIds ?? []) => send({ kind: 'query', options: { ...controller.getState().list?.result.query,
     text: search.value, sort: sort.value, selectedTagIds: [...tagIds] }, scrollTop: cards.scrollTop });
   const updateDraft = () => send({ kind: 'draft', value: { title: title.value, body: body.value, tagIds: selected('editor-tags') } });
+  const pendingVoice: (() => void)[] = [];
+  if (voice) voice.append = (session, transcript, isCurrent) => new Promise(resolve => {
+    const apply = () => {
+      if (stopped || !isCurrent() || controller.getState().editor?.sessionId !== session || controller.getState().route.kind !== 'edit') { resolve(false); return; }
+      if (lastSession !== session) {
+        // controllerから直接開かれた新セッションは、次の描画フレームより先に結果が届く。
+        // 前セッションのフォーカス中DOMを再利用せず、編集基準を一度描画してから追記する。
+        const editor = controller.getState().editor!;
+        title.value = editor.draft.title; body.value = editor.draft.body;
+        render();
+      }
+      const next = body.value + transcript;
+      try { normalizeMemoInput(title.value, next); } catch { resolve(false); return; }
+      const start = body.selectionStart, end = body.selectionEnd, direction = body.selectionDirection;
+      body.value = next; body.setSelectionRange(start, end, direction);
+      void updateDraft().then(() => resolve(true));
+    };
+    if (composing) pendingVoice.push(apply); else apply();
+  });
   const bind = (id: string, action: () => void) => element(id).addEventListener('click', action);
   bind('new', () => { void send({ kind: 'new' }); });
   bind('back', () => { void send({ kind: 'list' }); });
@@ -85,6 +106,7 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
     if (event.target === search) void query();
     else if (event.target === title || event.target === body) void updateDraft();
     else render();
+    for (const apply of pendingVoice.splice(0)) apply();
   });
   let scrollFrame = 0;
   cards.addEventListener('scroll', () => {
@@ -246,5 +268,5 @@ export function mountMemoPreview(doc: Document, controller: Controller): () => v
   const observe = () => { if (stopped) return; if (controller.getState().generation !== lastGeneration) render(); frame = win.requestAnimationFrame(observe); };
   // 初回loadは起動接続層が完了を確認してからmountする。ここでは重複読込しない。
   render(); frame = win.requestAnimationFrame(observe);
-  return () => { stopped = true; win.cancelAnimationFrame(frame); win.cancelAnimationFrame(scrollFrame); };
+  return () => { stopped = true; for (const apply of pendingVoice.splice(0)) apply(); if (voice) delete voice.append; win.cancelAnimationFrame(frame); win.cancelAnimationFrame(scrollFrame); };
 }

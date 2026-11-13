@@ -9,6 +9,8 @@ import { mountBackupPreview } from './ui/backup-preview';
 import { createProductV3Upgrade } from './product-v3-upgrade';
 import { mountV3Upgrade } from './ui/v3-upgrade';
 import { requestNavigation } from './navigation-state';
+import { mountVoiceInput } from './ui/voice-input';
+import type { VoiceEditBridge } from './ui/memo-preview';
 
 export interface ProductLocalDependencies extends MigrationDependencies {
   readonly now: () => string;
@@ -23,7 +25,12 @@ export interface ProductLocalViews {
 
 const defaultViews: ProductLocalViews = {
   mountMigration: mountMigrationPreview,
-  mountMemo: mountMemoPreview,
+  mountMemo(doc, controller) {
+    const bridge: VoiceEditBridge = {};
+    const disposeMemo = mountMemoPreview(doc, controller, bridge);
+    const disposeVoice = mountVoiceInput(doc, controller, bridge);
+    return () => { disposeVoice(); disposeMemo(); };
+  },
   mountBackup: mountBackupPreview,
   mountUpgrade: mountV3Upgrade,
 };
