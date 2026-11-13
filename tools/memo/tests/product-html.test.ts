@@ -68,6 +68,10 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
       expect(exported.format).toBe('myhomepage.memo.v2-original');
       expect(exported.values['myhomepage.memo.data.v2']).toBe(raw);
       expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(raw);
+      await page.getByLabel('退避ファイルを保存・確認し、旧タブを閉じました。v3へ更新します。').check();
+      await page.getByRole('button', { name: '確認してv3へ更新' }).click();
+      await page.getByText('v3更新の読戻しを確認しました。', { exact: true }).waitFor();
+      expect(JSON.parse((await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2')))!).version).toBe(3);
       await context.close(); return;
     }
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBeNull();

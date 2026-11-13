@@ -6,7 +6,9 @@ import { mountMemoPreview } from './ui/memo-preview';
 import { mountMigrationPreview } from './ui/migration-preview';
 import { createLocalBackup } from './local-backup';
 import { mountBackupPreview } from './ui/backup-preview';
-import { createV2OriginalExport } from './v2-original-export';
+import { createProductV3Upgrade } from './product-v3-upgrade';
+import { mountV3Upgrade } from './ui/v3-upgrade';
+import { requestNavigation } from './navigation-state';
 
 export interface ProductLocalDependencies extends MigrationDependencies {
   readonly now: () => string;
@@ -16,12 +18,14 @@ export interface ProductLocalViews {
   readonly mountMigration: typeof mountMigrationPreview;
   readonly mountMemo: typeof mountMemoPreview;
   readonly mountBackup?: typeof mountBackupPreview;
+  readonly mountUpgrade?: typeof mountV3Upgrade;
 }
 
 const defaultViews: ProductLocalViews = {
   mountMigration: mountMigrationPreview,
   mountMemo: mountMemoPreview,
   mountBackup: mountBackupPreview,
+  mountUpgrade: mountV3Upgrade,
 };
 
 /**
@@ -30,14 +34,15 @@ const defaultViews: ProductLocalViews = {
  */
 export function createProductLocalApp(doc: Document, deps: ProductLocalDependencies,
   views: ProductLocalViews = defaultViews) {
-  const store = createLocalMemoStore({ storage: deps.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
+  const upgrade = createProductV3Upgrade(deps);
+  const store = createLocalMemoStore({ storage: upgrade.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
   const controller = createLocalMemoController({ store, createId: deps.createId });
-  const migration = createLocalMigrationController({ ...deps, acceptExistingV3: true });
+  const migration = createLocalMigrationController({ ...deps, storage: upgrade.storage, acceptExistingV3: true });
   let disposeMemo = () => {};
   let disposed = false;
   let disposeBackup: (() => void) | undefined;
-  const prepareBackup = createLocalBackup({ storage: deps.storage, locks: deps.locks, now: deps.now });
-  const prepareOriginal = createV2OriginalExport({ storage: deps.storage, locks: deps.locks, now: deps.now });
+  let disposeUpgrade: (() => void) | undefined;
+  const prepareBackup = createLocalBackup({ storage: upgrade.storage, locks: deps.locks, now: deps.now });
 
   const enter = async (): Promise<boolean> => {
     if (disposed || migration.getState().kind !== 'ready') return false;
@@ -46,12 +51,33 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     disposeMemo();
     disposeMemo = views.mountMemo(doc, {
       getState: controller.getState,
-      async dispatch(command) { return disposed ? { kind: 'blocked', reason: 'disposed' } : controller.dispatch(command); },
+      async dispatch(command) {
+        if (disposed) return { kind: 'blocked', reason: 'disposed' };
+        const result = await controller.dispatch(command);
+        if (upgrade.getState() === 'legacy-changed') {
+          const status = doc.getElementById('product-status');
+          if (status) status.textContent = '旧キーの変更を検出しました。停止・要確認です。自動取込・再移行・上書きは行いません。';
+        }
+        return result;
+      },
     });
     if (!disposeBackup && views.mountBackup) {
       const original = controller.getState().storageVersion === 2;
       disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' }
-        : original ? prepareOriginal() : prepareBackup(), original ? 'v2-original' : 'backup');
+        : original ? upgrade.prepare() : prepareBackup(), original ? 'v2-original' : 'backup');
+      if (original && views.mountUpgrade) disposeUpgrade = views.mountUpgrade(doc, upgrade, () => {
+        const state = controller.getState();
+        return state.write.kind !== 'writing' && state.write.kind !== 'unknown' && state.write.kind !== 'rejected'
+          && !state.confirmation && !state.unresolved.length
+          && (!state.editor || requestNavigation(state.editor, { kind: 'switch-source' }).kind === 'allowed');
+      }, async () => {
+        const result = await controller.dispatch({ kind: 'load' });
+        if (!disposed && controller.getState().storageVersion === 3 && views.mountBackup) {
+          disposeBackup?.();
+          disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' } : prepareBackup());
+        }
+        return result;
+      });
     }
     return true;
   };
@@ -71,6 +97,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       disposed = true;
       disposeMemo();
       disposeBackup?.();
+      disposeUpgrade?.(); upgrade.dispose();
     },
   });
 }
