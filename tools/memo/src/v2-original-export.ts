@@ -11,6 +11,8 @@ export function createV2OriginalExport(deps: {
   storage: { getItem(key: string): string | null };
   locks: LocalLockManager | undefined;
   now: () => string;
+  /** 生値はUIへ渡さず、製品更新サービス内で退避対象を固定するためだけに使う。 */
+  captured?: (value: Readonly<{ legacy: string | null; raw: string }>) => void;
 }) {
   return async (): Promise<BackupResult> => {
     let reason: BackupFailure = 'lock-failure';
@@ -33,6 +35,7 @@ export function createV2OriginalExport(deps: {
         values: { [OLD_STORAGE_KEY]: captured.legacy, [NEW_STORAGE_KEY]: captured.raw } });
       const bytes = new TextEncoder().encode(json).byteLength;
       if (bytes > MAX_BACKUP_BYTES) return { kind: 'failed', reason: 'too-large' };
+      deps.captured?.(Object.freeze(captured));
       return { kind: 'prepared', json, bytes, filename: `memo-v2-original-${new Date(exportedAt).toISOString().replace(/[:.]/g, '-')}.json` };
     } catch (error) {
       return { kind: 'failed', reason: error instanceof LocalLocksUnavailableError ? 'locks-unavailable' : reason };

@@ -4,6 +4,65 @@ import type { ProductLocalViews } from '../src/product-local-app';
 import { NEW_STORAGE_KEY } from '../src/local-migration';
 
 describe('product local composition', () => {
+  it('更新直後のload失敗後、通常loadでv3を確認したらバックアップへ切り替える', async () => {
+    let raw = JSON.stringify({ version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] });
+    let failRead = false;
+    let enter!: () => Promise<boolean>;
+    let migration!: Parameters<ProductLocalViews['mountMigration']>[1];
+    let memo!: Parameters<ProductLocalViews['mountMemo']>[1];
+    let upgrade!: Parameters<NonNullable<ProductLocalViews['mountUpgrade']>>[1];
+    let reload!: () => Promise<unknown>;
+    const modes: (string | undefined)[] = [];
+    const app = createProductLocalApp({} as Document, {
+      storage: { getItem: key => { if (failRead) throw new Error('synthetic'); return key === NEW_STORAGE_KEY ? raw : null; }, setItem: (_key, value) => { raw = value; } },
+      locks: { request: async (_name, _options, callback) => callback() },
+      createId: () => '00000000-0000-4000-8000-000000000001', now: () => '2026-11-12T00:00:00.000Z',
+    }, {
+      mountMigration: (_doc, port, next) => { migration = port; enter = next; },
+      mountMemo: (_doc, port) => { memo = port; return () => {}; },
+      mountBackup: (_doc, _prepare, mode) => { modes.push(mode); return () => {}; },
+      mountUpgrade: (_doc, port, _canStart, load) => { upgrade = port; reload = load; return () => {}; },
+    });
+    await migration.inspect(); await enter();
+    await upgrade.prepare(); await upgrade.confirm();
+    failRead = true; await reload();
+    expect(modes).toEqual(['v2-original']);
+    failRead = false; await memo.dispatch({ kind: 'load' });
+    expect(modes).toEqual(['v2-original', undefined]);
+    await memo.dispatch({ kind: 'load' });
+    expect(modes).toHaveLength(2);
+    app.dispose();
+  });
+  it('更新からUI切替まで通常コマンドを拒否し、解除後は受理する', async () => {
+    const raw = JSON.stringify({ version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] });
+    let enter!: () => Promise<boolean>;
+    let migration!: Parameters<ProductLocalViews['mountMigration']>[1];
+    let memo!: Parameters<ProductLocalViews['mountMemo']>[1];
+    let busy!: (value: boolean) => void;
+    const app = createProductLocalApp({} as Document, {
+      storage: { getItem: key => key === NEW_STORAGE_KEY ? raw : null, setItem: vi.fn() },
+      locks: { request: async (_name, _options, callback) => callback() },
+      createId: () => '00000000-0000-4000-8000-000000000001', now: () => '2026-11-12T00:00:00.000Z',
+    }, {
+      mountMigration: (_doc, port, next) => { migration = port; enter = next; },
+      mountMemo: (_doc, port) => { memo = port; return () => {}; },
+      mountBackup: () => () => {},
+      mountUpgrade: (_doc, _upgrade, _canStart, _reload, setBusy) => { busy = setBusy!; return () => {}; },
+    });
+    await migration.inspect(); await enter();
+    await memo.dispatch({ kind: 'new' });
+    const before = app.controller.getState();
+    busy(true);
+    for (const command of [{ kind: 'new' }, { kind: 'save' }, { kind: 'load' }] as const)
+      expect(await memo.dispatch(command)).toEqual({ kind: 'blocked', reason: 'writing' });
+    expect(app.controller.getState()).toBe(before);
+    expect(await memo.dispatch({ kind: 'draft', value: { title: '更新待機中の入力', body: '保持する本文', tagIds: [] } })).toEqual({ kind: 'done' });
+    expect(app.controller.getState().editor?.draft.title).toBe('更新待機中の入力');
+    busy(false);
+    expect(await memo.dispatch({ kind: 'new' })).toMatchObject({ kind: 'confirmation-required' });
+    expect(app.controller.getState().editor?.draft.title).toBe('更新待機中の入力');
+    app.dispose();
+  });
   it('正常v3は入場でき、dispose後のUI操作は書き込まない', async () => {
     const raw = JSON.stringify({ version: 3, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [], deletedMemoIds: [] });
     const write = vi.fn();
