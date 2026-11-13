@@ -141,6 +141,11 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
     expect(backup.format).toBe('myhomepage.memo.local-backup');
     expect(backup.data.memos[0].title).toBe('合成製品メモ');
     expect(backup).not.toHaveProperty('migration');
+    // 保存済みeditorを保持する詳細画面からも、両復元のファイル診断を開始できる。
+    await page.getByLabel('単件回復のバックアップJSON').setInputFiles({ name: 'detail-recovery.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await page.getByRole('region', { name: '完全削除後の回復', exact: true }).getByRole('button', { name: /をプレビュー/ }).first().waitFor();
+    await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({ name: 'detail-restore.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await page.getByRole('region', { name: '追加型復元', exact: true }).getByRole('checkbox').first().waitFor();
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeBackup);
     // 実製品compositionの同一storeで削除→読取専用プレビュー→単件回復を確認する。
     await page.locator('#back').click();

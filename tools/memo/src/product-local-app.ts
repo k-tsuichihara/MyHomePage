@@ -62,8 +62,10 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let disposeRestore: (() => void) | undefined, disposeRecovery: (() => void) | undefined;
   const normalReady = () => {
     const state = controller.getState();
-    return !disposed && !upgradeBusy && !state.editor && state.read.kind === 'ready'
-      && state.write.kind !== 'writing' && !state.confirmation;
+    return !disposed && !upgradeBusy && state.route.kind !== 'edit' && state.read.kind === 'ready'
+      && state.write.kind !== 'writing' && state.write.kind !== 'unknown' && state.write.kind !== 'rejected'
+      && !state.confirmation && !state.unresolved.length
+      && (!state.editor || requestNavigation(state.editor, { kind: 'switch-source' }).kind === 'allowed');
   };
   const restoreBusy = () => ['reading', 'writing', 'confirmation'].includes(restore.getState().phase);
   const recoveryBusy = () => ['reading', 'writing', 'diagnosing', 'opening', 'preview', 'unknown'].includes(recovery.getState().phase);
