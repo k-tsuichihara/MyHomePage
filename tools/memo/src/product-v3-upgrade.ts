@@ -14,6 +14,7 @@ export function createProductV3Upgrade(deps: { storage: MigrationStorage; locks:
   let captured: Readonly<{ legacy: string | null; raw: string }> | null = null;
   let baseline: string | null | undefined;
   let epoch = 0;
+  const preparationListeners = new Set<() => void>();
   const checkLegacy = () => {
     if (state === 'disposed' || state === 'legacy-changed' || state === 'unknown') throw new Error('stopped');
     if (baseline !== undefined && deps.storage.getItem(OLD_STORAGE_KEY) !== baseline) {
@@ -27,9 +28,14 @@ export function createProductV3Upgrade(deps: { storage: MigrationStorage; locks:
   return {
     storage,
     getState: () => state,
+    onPreparation(listener: () => void) {
+      preparationListeners.add(listener);
+      return () => { preparationListeners.delete(listener); };
+    },
     async prepare() {
       if (['writing', 'unknown', 'updated', 'legacy-changed', 'disposed'].includes(state)) return { kind: 'failed' as const, reason: 'read-failure' as const };
       const operation = ++epoch; captured = null; state = 'idle';
+      for (const listener of preparationListeners) listener();
       const result = await createV2OriginalExport({ ...deps, captured(value) {
         if (operation === epoch && state !== 'disposed') captured = value;
       } })();
@@ -72,6 +78,6 @@ export function createProductV3Upgrade(deps: { storage: MigrationStorage; locks:
         });
       } catch { return 'unavailable'; }
     },
-    dispose() { ++epoch; captured = null; state = 'disposed'; },
+    dispose() { ++epoch; captured = null; state = 'disposed'; preparationListeners.clear(); },
   };
 }

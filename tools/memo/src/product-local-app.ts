@@ -40,6 +40,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   const migration = createLocalMigrationController({ ...deps, storage: upgrade.storage, acceptExistingV3: true });
   let disposeMemo = () => {};
   let disposed = false;
+  let upgradeBusy = false;
   let disposeBackup: (() => void) | undefined;
   let disposeUpgrade: (() => void) | undefined;
   const prepareBackup = createLocalBackup({ storage: upgrade.storage, locks: deps.locks, now: deps.now });
@@ -53,6 +54,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       getState: controller.getState,
       async dispatch(command) {
         if (disposed) return { kind: 'blocked', reason: 'disposed' };
+        if (upgradeBusy) return { kind: 'blocked', reason: 'writing' };
         const result = await controller.dispatch(command);
         if (upgrade.getState() === 'legacy-changed') {
           const status = doc.getElementById('product-status');
@@ -77,7 +79,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
           disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' } : prepareBackup());
         }
         return result;
-      });
+      }, busy => { upgradeBusy = busy; });
     }
     return true;
   };
