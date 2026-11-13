@@ -6,11 +6,11 @@
 
 ## 現在位置と公開までの推奨順序
 
-- 現在：**STEP 03（TypeScript版の公開UI統合）**。
-- 現在のレビュー対象：**R02最終local接続（初期復元・停止保守候補）**。local製品候補のAI実装はCOMPLETE、レビュー待ち。公開HTML切替・実データ移行・Auth/cloud接続・実環境受入は各後続工程へ残す。
+- 現在：**STEP 04（S04のrepository準備を先行）**。R02はオーナー判断でCOMPLETEとして閉じ、今回再調査しない。
+- 現在のレビュー対象：**S04最小helper権限整理**。追加GRANTなしのSQL案・静的回帰・Q04引継ぎ条件を準備。次はレビュー後、Q04の適用/実証を個別承認する段階。C03〜C05製品接続へは今回先行しない。
 - C03〜C05のUI非依存層は実装済みだが、実Auth・実HTTP・single-rpc認定・製品UI結線は未検証。C05では明示logoutとAuth失効を区別し、離脱可否は既存navigation契約を正本とする。
 - R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、D05確定はPR #49、C03〜C05の通信なし境界はPR #50〜#68で段階的に整備した。今回R02へ着手したが、公開HTML・本番Auth・実ユーザーデータ・Pages公開には接続していない。
-- 未決事項：Q05の正式検証範囲、S04のACL原本完全性・NOLOGIN候補の必要性/非波及、製品接続・公開前ゲート。仕様確定は、これらの解消やDB・本番操作の承認ではない。
+- 未決事項：Q05の正式検証範囲、Q04でのhelper制限の適用/実証、製品接続・公開前ゲート。ACL原本完全性・NOLOGIN用途等のUNKNOWNは保持するが、追加GRANT/完全復元を行わない今回のS04準備の必須条件にはしない。DB・本番操作の承認ではない。
 - 導入時のSDK 2.111.0/2.119.0とTypeScript 7のWebAuthn/DOM型宣言衝突は、停止・報告後、オーナー承認のskipLibCheckで回避した。全.d.tsの内部型検査が省略される影響・見直し条件はAuth契約に記録。既存strict等は維持し、SDK 2.119.0の公開API型対応と通信なし26件を確認した。バージョン変更・追加緩和・実操作は別承認。
 - PR #51マージ後、SDK import時のStorage probe/デバッグ参照を未許可起動ゲートが検出して停止した。PR #52では、supabase-js/auth-js各2.119.0固定・元SHA/パス/件数の検証付きでdebug初期化式だけをメモリ内置換。元SDK・ロック機構は不変。最終試験記録は全Vitest1,448件、パッチ23件、隔離Chromium11件PASS。import前のgetter取得と監視対象API呼出しを別々に0件確認し、旧成果物の検証失効も回帰試験済み。専用キー永続化、再読込/再起動、失効・複数タブ・実ロックを確認。過去の失敗profileは保全。詳細と未検証範囲はAuth契約を参照。
 - 今回の状態購読・ライフサイクルは初回に合成試験24件を追加。レビュー後は再購読回帰2件も追加し、全Vitest1,474件・パッチ23件・隔離Authブラウザ11件を再確認。期限到達は現在値確認時に通知し、通知を認可判定へ転用しない。製品UI・実Authの未検証事項とE2E後処理の原因未確定・無介入完走未確認はAuth契約へ記録する。
@@ -87,7 +87,7 @@
 | S01 | A01〜A17のカタログ監査・課題記録 | 完了 | [DB監査記録](../tools/memo/tests/DEV-DB-AUDIT.md)、[チェックリスト](../tools/memo/tests/DEV-DB-AUDIT-CHECKLIST.md)、PR #30・#31 | 手動実施報告の記録。A17やR02解決ではない |
 | S02 | 8RPC本文比較・追加S01〜S06監査の記録 | 完了 | DB監査記録§13・15、PR #32〜#34・#39・#40 | 改行正規化後8本文一致、戻り値型OID一致等。実Auth/RLS/HTTP合格ではない。#37は#38でrevert、復元修正は#39 |
 | S03 | R02 T00〜T05読取監査の取得 | 完了 | [既存手順](../tools/memo/tests/db-audit/R02-PREAPPLY-AUDIT.md)、オーナーの今回の手動報告 | T00:PG17.11/UTF8/on/15s・3s、T01:12関数、T02:20行/4署名/13列、T03:80行欠落等なし、T04:4一致、T05:seed20/UNKNOWNなし。AI独立検証なし |
-| S04 | R02：ACL原本完全性・必要主体・変更/復旧条件の確定 | 進行中 | [R02計画](../tools/memo/tests/db-audit/R02-ACL-CHANGE-PLAN.md)、[補助権限設計](../tools/memo/tests/HELPER-EXECUTE-DESIGN.md)、PR #36・#41〜#46、今回のオーナー合意/報告 | v1.1.0で可能な限り完了。既存補助4関数に限定しT00〜T05を再利用、調査を際限なく拡大しない。困難なら残課題と判断材料を報告。B案方針承認済みだが、原本完全性・NOLOGIN必要性/非波及は未確定。変更/復旧実行版・ACL変更・実試験は未承認、権限課題R02未解決 |
+| S04 | helper直接EXECUTE制限の最小設計・SQL・静的検証 | 完了 | [現在の最小契約](../tools/memo/tests/db-audit/S04-MINIMAL-ACL.md)、[SQL案](../tools/memo/tests/db-audit/s04-helper-execute.sql)、[静的回帰](../tools/memo/tests/s04-helper-execute.test.ts)、旧PR #36・#41〜#46 | 今回の目的縮小承認によるrepository準備範囲のみCOMPLETE。4署名のPUBLIC/anon/authenticated EXECUTE撤回、追加GRANTなし、owner不足/client残存時は原子的取消し。原本完全再現は必須にしない。実DB未適用・権限課題未解決、実適用/実Auth/RLS/GRANT/8RPCはQ04。A17はS05保留 |
 | S05 | A17：将来オブジェクトのdefault権限対応 | 保留 | DB監査記録§14、PR #35 | 新規追加予定なしの判断で変更保留。追加前・追加後・本番公開前の権限レビューは残る |
 
 ## 6. テスト・品質確認
@@ -97,7 +97,7 @@
 | Q01 | 型チェック・Vitest・ビルドの既存回帰基盤 | 完了 | [package.json](../tools/memo/package.json)、試験案内、通信なし基盤、PR #29 | 過去記録は全Vitest1,300件等PASS。今回再実行なし。リリース対象コミットの最終回帰は別確認 |
 | Q02 | 合成メモリUI・ブラウザE2E | 完了 | [ブラウザ契約](../tools/memo/tests/BROWSER-UI.md)、tests/browser/、PR #12以降 | 過去記録83件PASS。実OS日本語IME・実端末受入とは別 |
 | Q03 | 隔離ChromiumのStorage/Web Locks・形式/切替試験 | 完了 | [永続化](../tools/memo/tests/LOCAL-PERSISTENCE.md)、Phase B、[切替設計](../tools/memo/tests/RELEASE-TRANSITION.md)、PR #14・#15・#17・#26 | 過去記録22/16/20件PASS。容量・再起動は記録範囲に限定 |
-| Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 要確認 | RPC契約、通信なし基盤、DB監査記録、[過去DB33試験](../tools/memo-db-test/TEST-SUMMARY-2026-10-25.md)、今回のオーナー合意 | v1.1.0公開前に必要。実認証・RPC・RLS・権限・障害/競合動作を検証。既存テストを活用し重複を避ける。過去33件を現在統合の合格へ流用せず、実接続は別承認 |
+| Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 要確認 | RPC契約、通信なし基盤、DB監査記録、[過去DB33試験](../tools/memo-db-test/TEST-SUMMARY-2026-10-25.md)、[S04引継ぎ](../tools/memo/tests/db-audit/S04-MINIMAL-ACL.md) | v1.1.0公開前に必要。S04 SQL案の承認後適用・helper直接拒否・8RPC/CHECK/index正常性、実認証・RLS・障害/競合動作を検証。既存テストを活用し重複を避ける。過去33件や静的回帰を実経路合格へ流用せず、実接続は別承認 |
 | Q05 | 実機・IME・主要操作・ドラフト保護・アクセシビリティ等の受入範囲確認 | 要確認 | ブラウザ契約、Phase Bの未検証事項、今回のオーナー合意 | 必要。Windows + Chrome中心を想定し、日本語IME・主要操作・編集中データ保護を重視。Firefox・Safari/WebKit等は後回し。スマホ実機を含む正式検証範囲・対応対象は後日確定し、対象外と断定しない |
 
 ## 7. 本番移行・公開
