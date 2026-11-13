@@ -3,7 +3,7 @@ import type { ControllerCommand } from '../local-app-state';
 import { isDirty } from '../editor-state';
 import { renderMemoDetail } from './memo-detail-content';
 import { normalizeMemoInput } from '../input';
-export interface VoiceEditBridge { append?: (session: string, text: string) => Promise<boolean> }
+export interface VoiceEditBridge { append?: (session: string, text: string, isCurrent: () => boolean) => Promise<boolean> }
 
 type Controller = ReturnType<typeof createLocalMemoController>;
 const messages: Record<string, string> = {
@@ -50,9 +50,9 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     text: search.value, sort: sort.value, selectedTagIds: [...tagIds] }, scrollTop: cards.scrollTop });
   const updateDraft = () => send({ kind: 'draft', value: { title: title.value, body: body.value, tagIds: selected('editor-tags') } });
   const pendingVoice: (() => void)[] = [];
-  if (voice) voice.append = (session, transcript) => new Promise(resolve => {
+  if (voice) voice.append = (session, transcript, isCurrent) => new Promise(resolve => {
     const apply = () => {
-      if (stopped || controller.getState().editor?.sessionId !== session || controller.getState().route.kind !== 'edit') { resolve(false); return; }
+      if (stopped || !isCurrent() || controller.getState().editor?.sessionId !== session || controller.getState().route.kind !== 'edit') { resolve(false); return; }
       if (lastSession !== session) {
         // controllerから直接開かれた新セッションは、次の描画フレームより先に結果が届く。
         // 前セッションのフォーカス中DOMを再利用せず、編集基準を一度描画してから追記する。

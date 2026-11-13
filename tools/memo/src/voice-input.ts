@@ -15,7 +15,7 @@ export type VoiceStatus = 'idle' | 'listening' | 'unsupported' | 'failed' | 'inv
 /** 認識は明示開始だけ。結果は現在の編集セッションへ追記し、保存は呼び出さない。 */
 export function createVoiceInput(controller: Controller, factory: (() => VoiceRecognition) | undefined,
   notify: (status: VoiceStatus) => void, now: () => Date = () => new Date(),
-  append?: (session: string, text: string) => Promise<boolean>) {
+  append?: (session: string, text: string, isCurrent: () => boolean) => Promise<boolean>) {
   let recognition: VoiceRecognition | null = null, disposed = false, starting = false, appending = false;
   let epoch = 0;
   const stop = () => {
@@ -59,7 +59,7 @@ export function createVoiceInput(controller: Controller, factory: (() => VoiceRe
           if (append) {
             stop();
             const completionEpoch = epoch; appending = true;
-            void append(session, transcript).then(applied => {
+            void append(session, transcript, () => !disposed && epoch === completionEpoch).then(applied => {
               if (!disposed && epoch === completionEpoch) { appending = false; notify(applied ? 'idle' : 'invalid-input'); }
             }, () => {
               if (!disposed && epoch === completionEpoch) { appending = false; notify('failed'); }

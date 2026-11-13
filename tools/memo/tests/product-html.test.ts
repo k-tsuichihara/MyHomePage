@@ -119,6 +119,16 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
     await editorBody.press('End'); await editorBody.pressSequentially('さらに入力');
     await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
     expect(await page.locator('#detail-body').textContent()).toBe('手入力変換中合成音声追記さらに入力');
+    await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    await editorBody.focus();
+    await editorBody.dispatchEvent('compositionstart');
+    const beforeStoppedVoice = await editorBody.inputValue();
+    await page.evaluate(() => { (window as unknown as { __speechProbe: { emit(): void } }).__speechProbe.emit(); });
+    await page.getByRole('button', { name: '音声入力を停止', exact: true }).click();
+    await editorBody.dispatchEvent('compositionend');
+    expect(await editorBody.inputValue()).toBe(beforeStoppedVoice);
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
+    expect(await page.locator('#detail-body').textContent()).toBe(beforeStoppedVoice);
     const beforeBackup = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     expect(JSON.parse(beforeBackup!).version).toBe(3);
     expect(JSON.parse(beforeBackup!).deletedMemoIds).toEqual([]);

@@ -15,7 +15,7 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
   };
   const stop = doc.createElement('button'); stop.type = 'button'; stop.textContent = '音声入力を停止';
   const voice = createVoiceInput(controller, Native ? () => new Native() : undefined, value => { status.textContent = messages[value]; stop.disabled = value !== 'listening'; }, undefined,
-    (session, text) => bridge.append?.(session, text) ?? Promise.resolve(false));
+    (session, text, isCurrent) => bridge.append?.(session, text, isCurrent) ?? Promise.resolve(false));
   stop.disabled = true; stop.onclick = () => voice.stop();
   const buttons: HTMLButtonElement[] = [];
   for (const [id, label] of [['list-view', '新規音声メモ'], ['detail-view', '音声で本文へ追記'], ['editor-view', '音声で本文へ追記']]) {
