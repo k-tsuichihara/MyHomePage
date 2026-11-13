@@ -21,11 +21,11 @@ it('製品候補は公開外枠と相対URLを保持し、旧JSを実行しな�
   expect(await readFile(new URL('memo.html', root), 'utf8')).toBe(shell);
 });
 
-it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の整合性とStorage接続：%s', async mode => {
+it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('製品資産の整合性とStorage接続：%s', async mode => {
   const root = new URL('../', import.meta.url);
   execFileSync(process.execPath, ['scripts/build-product.mjs'], { cwd: fileURLToPath(root) });
-  const html = await readFile(new URL('.product/site/tools/memo/memo.html', root), 'utf8');
-  const bundle = await readFile(new URL('.product/memo-app.js', root), 'utf8');
+  const html = await readFile(new URL(mode === 'maintenance' ? '.product/maintenance/tools/memo/memo.html' : '.product/site/tools/memo/memo.html', root), 'utf8');
+  const bundle = await readFile(new URL(mode === 'maintenance' ? '.product/maintenance-app.js' : '.product/memo-app.js', root), 'utf8');
   const browser = await chromium.launch({ headless: true });
   try {
     const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: true });
@@ -42,10 +42,12 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
       } });
       Object.defineProperty(window, '__storageReads', { value: { count: 0 } });
       const values = new Map<string, string>();
+      if (mode === 'maintenance') values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 3, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [], deletedMemoIds: [] }));
+      const writes = { count: 0 }; Object.defineProperty(window, '__writes', { value: writes });
       if (mode === 'v2-original') values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 2, migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [] }));
       Object.defineProperty(window, 'localStorage', { value: {
         getItem: (key: string) => { (window as unknown as { __storageReads: { count: number } }).__storageReads.count++; return values.get(key) ?? null; },
-        setItem: (key: string, value: string) => { values.set(key, value); },
+        setItem: (key: string, value: string) => { writes.count++; values.set(key, value); },
       } });
       Object.defineProperty(navigator, 'locks', { value: {
         request: async (_name: string, _options: unknown, callback: () => Promise<unknown>) => callback(),
@@ -64,6 +66,23 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
     const page = await context.newPage();
     page.setDefaultTimeout(4000);
     await page.goto('https://product.test/tools/memo/memo.html');
+    if (mode === 'maintenance') {
+      await page.getByText(/保守版：書込停止。検証済みv3/).waitFor();
+      expect(await page.locator('input,button,textarea').count()).toBe(0);
+      expect(await page.evaluate(() => (window as unknown as { __writes: { count: number } }).__writes.count)).toBe(0);
+      await context.close(); return;
+    }
+    if (mode === 'initial') {
+      const backup = { format: 'myhomepage.memo.local-backup', backupVersion: 1, sourceStorageVersion: 3,
+        exportedAt: '2026-01-01T00:00:00Z', data: { memos: [], tags: [], memoTags: [], deletedMemoIds: [] } };
+      await page.getByLabel('初期復元のバックアップJSON').setInputFiles({ name: 'initial.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+      await page.getByRole('button', { name: '初期復元の確認へ', exact: true }).click();
+      expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBeNull();
+      await page.getByRole('button', { name: '確認して初期復元', exact: true }).click();
+      await page.getByText('初期復元の書込と読戻しを確認しました。', { exact: true }).waitFor();
+      expect(JSON.parse((await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2')))!).version).toBe(3);
+      await context.close(); return;
+    }
     if (mode !== 'normal' && mode !== 'v2-original') {
       expect(await page.evaluate(() => (window as unknown as { __storageReads: { count: number } }).__storageReads.count)).toBe(0);
       expect(await page.locator('#product-status').textContent()).toContain(mode === 'corrupt-js' ? '起動前' : '安全条件');
