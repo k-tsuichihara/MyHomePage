@@ -43,7 +43,15 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let upgradeBusy = false;
   let disposeBackup: (() => void) | undefined;
   let disposeUpgrade: (() => void) | undefined;
+  let backupOriginal = false;
   const prepareBackup = createLocalBackup({ storage: upgrade.storage, locks: deps.locks, now: deps.now });
+  const syncBackup = () => {
+    const state = controller.getState();
+    if (disposed || !backupOriginal || state.read.kind !== 'ready' || state.storageVersion !== 3 || !views.mountBackup) return;
+    disposeBackup?.();
+    disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' } : prepareBackup());
+    backupOriginal = false;
+  };
 
   const enter = async (): Promise<boolean> => {
     if (disposed || migration.getState().kind !== 'ready') return false;
@@ -54,8 +62,9 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       getState: controller.getState,
       async dispatch(command) {
         if (disposed) return { kind: 'blocked', reason: 'disposed' };
-        if (upgradeBusy) return { kind: 'blocked', reason: 'writing' };
+        if (upgradeBusy && command.kind !== 'draft') return { kind: 'blocked', reason: 'writing' };
         const result = await controller.dispatch(command);
+        syncBackup();
         if (upgrade.getState() === 'legacy-changed') {
           const status = doc.getElementById('product-status');
           if (status) status.textContent = '旧キーの変更を検出しました。停止・要確認です。自動取込・再移行・上書きは行いません。';
@@ -65,6 +74,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     });
     if (!disposeBackup && views.mountBackup) {
       const original = controller.getState().storageVersion === 2;
+      backupOriginal = original;
       disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' }
         : original ? upgrade.prepare() : prepareBackup(), original ? 'v2-original' : 'backup');
       if (original && views.mountUpgrade) disposeUpgrade = views.mountUpgrade(doc, upgrade, () => {
@@ -74,10 +84,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
           && (!state.editor || requestNavigation(state.editor, { kind: 'switch-source' }).kind === 'allowed');
       }, async () => {
         const result = await controller.dispatch({ kind: 'load' });
-        if (!disposed && controller.getState().storageVersion === 3 && views.mountBackup) {
-          disposeBackup?.();
-          disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' } : prepareBackup());
-        }
+        syncBackup();
         return result;
       }, busy => { upgradeBusy = busy; });
     }
