@@ -2,14 +2,15 @@ import type { createInitialRestoreController, InitialCommand } from '../initial-
 import { MAX_IMPORT_BYTES } from '../backup-json';
 
 /** 合成環境の初期復元専用画面。通常利用を選ぶ操作は既存の通常UIへ委ねる。 */
-export function mountInitialRestorePreview(doc: Document, controller: ReturnType<typeof createInitialRestoreController>): void {
+export function mountInitialRestorePreview(doc: Document, controller: ReturnType<typeof createInitialRestoreController>): () => void {
+  let disposed = false;
   const root = doc.getElementById('memo-app')!, section = doc.createElement('section'); section.setAttribute('aria-label', '保存領域喪失時の初期復元');
   const notice = doc.createElement('p'); notice.textContent = '全件一括の初期復元です。JSONは平文で、暗号化・署名による真正性保証はありません。バックアップ作成後の変更や削除履歴は復元できず、古い状態が再導入される可能性があります。新旧キーが両方存在しない場合だけ実行できます。';
   const file = doc.createElement('input'); file.type = 'file'; file.accept = '.json'; file.setAttribute('aria-label', '初期復元のバックアップJSON');
   const status = doc.createElement('p'); status.setAttribute('role', 'status');
   const history = doc.createElement('p'), controls = doc.createElement('div');
   const held = new Map<HTMLElement, boolean>(); let readingFile = false, fileError = '';
-  const send = async (command: InitialCommand) => { const p = controller.dispatch(command); render(); await p; render(); };
+  const send = async (command: InitialCommand) => { if (disposed) return; const p = controller.dispatch(command); render(); await p; render(); };
   const button = (label: string, command: InitialCommand, disabled = false) => {
     const node = doc.createElement('button'); node.type = 'button'; node.textContent = label; node.disabled = disabled; node.onclick = () => { void send(command); }; return node;
   };
@@ -25,6 +26,7 @@ export function mountInitialRestorePreview(doc: Document, controller: ReturnType
     finally { readingFile = false; render(); }
   })(); };
   function render() {
+    if (disposed) return;
     const s = controller.getState(), busy = readingFile || s.phase === 'reading' || s.phase === 'writing', modal = s.phase === 'confirmation';
     for (const child of Array.from(root.children)) if (child !== section && child instanceof doc.defaultView!.HTMLElement && (busy || modal)) {
       if (!held.has(child)) held.set(child, child.inert); child.inert = true;
@@ -54,4 +56,5 @@ export function mountInitialRestorePreview(doc: Document, controller: ReturnType
     if (!completed) controls.append(button('初期復元を終了して通常利用', { kind: 'leave' }, busy));
   }
   section.append(notice, file, status, history, controls); root.append(section); render();
+  return () => { disposed = true; for (const [node, previous] of held) node.inert = previous; held.clear(); section.remove(); };
 }
