@@ -3,7 +3,9 @@ import { MAX_IMPORT_BYTES } from '../backup-json';
 import { compareRestoreRow } from '../local-restore';
 
 /** 保存先へ直接アクセスせず、合成環境の復元controllerだけを操作する。 */
-export function mountRestorePreview(doc: Document, controller: ReturnType<typeof createLocalRestoreController>): void {
+export function mountRestorePreview(doc: Document, controller: ReturnType<typeof createLocalRestoreController>): () => void {
+  let disposed = false;
+  const held = new Map<HTMLElement, boolean>();
   const section = doc.createElement('section'); section.setAttribute('aria-label', '追加型復元');
   const notice = doc.createElement('p'); notice.textContent = '既存の正常v3へ新しいメモを追加します。初期復元ではありません。バックアップの削除履歴は取り込みません。元ID重複行には共通の正常タグ関連を適用します。入力10 MiB・深度32、メモ10000・タグ5000・関連100000・削除ID100000、候補16 MiBが上限です。';
   const file = doc.createElement('input'); file.type = 'file'; file.accept = '.json'; file.setAttribute('aria-label', 'バックアップJSONを選択');
@@ -14,7 +16,7 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
     const node = doc.createElement('button'); node.type = 'button'; node.textContent = label; node.disabled = disabled;
     node.onclick = () => { void send(command); }; return node;
   };
-  const send = async (command: RestoreCommand) => { const promise = controller.dispatch(command); render(); await promise; render(); };
+  const send = async (command: RestoreCommand) => { if (disposed) return; const promise = controller.dispatch(command); render(); await promise; render(); };
   file.onchange = () => { void read(); };
   async function read() {
     if (readingFile) return; const selected = file.files?.[0]; if (!selected) return;
@@ -31,11 +33,16 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
     finally { readingFile = false; render(); }
   }
   function render() {
+    if (disposed) return;
     const s = controller.getState(), busy = s.phase === 'writing' || s.phase === 'reading';
     // 確認・適用中の通常画面操作を止める。ブラウザ自体の更新・終了は保証しない。
     for (const child of Array.from(doc.getElementById('memo-app')!.children)) {
-      if (child !== section && child instanceof doc.defaultView!.HTMLElement) child.inert = busy || readingFile || s.phase === 'confirmation';
+      if (child !== section && child instanceof doc.defaultView!.HTMLElement && (busy || readingFile || s.phase === 'confirmation')) {
+        if (!held.has(child)) held.set(child, child.inert);
+        child.inert = true;
+      }
     }
+    if (!busy && !readingFile && s.phase !== 'confirmation') { for (const [node, previous] of held) node.inert = previous; held.clear(); }
     file.disabled = busy || readingFile;
     recovery.textContent = s.phase === 'failed'
       ? '再操作する場合は「バックアップJSONを選択」でファイルを選び直し、再診断・対象選択・確認を最初から行ってください。自動再試行はしません。'
@@ -67,4 +74,5 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
     if (s.phase === 'unknown') controls.append(button('保存状況を再確認', { kind: 'inspect' }));
   }
   section.append(notice, file, status, recovery, controls, rows); doc.getElementById('memo-app')!.append(section); render();
+  return () => { disposed = true; for (const [node, previous] of held) node.inert = previous; held.clear(); section.remove(); };
 }

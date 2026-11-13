@@ -62,6 +62,7 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
       return route.fulfill({ contentType: url.pathname.endsWith('.html') ? 'text/html' : css || url.pathname.endsWith('.css') ? 'text/css' : 'text/javascript', body });
     });
     const page = await context.newPage();
+    page.setDefaultTimeout(4000);
     await page.goto('https://product.test/tools/memo/memo.html');
     if (mode !== 'normal' && mode !== 'v2-original') {
       expect(await page.evaluate(() => (window as unknown as { __storageReads: { count: number } }).__storageReads.count)).toBe(0);
@@ -140,7 +141,44 @@ it.each(['normal', 'v2-original', 'missing-css', 'corrupt-js', 'corrupt-css'])('
     expect(backup.format).toBe('myhomepage.memo.local-backup');
     expect(backup.data.memos[0].title).toBe('合成製品メモ');
     expect(backup).not.toHaveProperty('migration');
+    // 保存済みeditorを保持する詳細画面からも、両復元のファイル診断を開始できる。
+    await page.getByLabel('単件回復のバックアップJSON').setInputFiles({ name: 'detail-recovery.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await page.getByRole('region', { name: '完全削除後の回復', exact: true }).getByRole('button', { name: /をプレビュー/ }).first().waitFor();
+    await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({ name: 'detail-restore.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await page.getByRole('region', { name: '追加型復元', exact: true }).getByRole('checkbox').first().waitFor();
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeBackup);
+    // 実製品compositionの同一storeで削除→読取専用プレビュー→単件回復を確認する。
+    await page.locator('#back').click();
+    await page.locator('#cards summary').first().click();
+    await page.getByRole('button', { name: 'ゴミ箱へ', exact: true }).click();
+    await page.locator('#confirm-yes').click();
+    await page.locator('#trash-view').click();
+    await page.locator('#cards .open-card').first().click();
+    await page.locator('#permanent-delete').click(); await page.locator('#confirm-yes').click();
+    const afterDelete = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    await page.getByLabel('単件回復のバックアップJSON').setInputFiles({ name: 'synthetic.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    const recovery = page.getByRole('region', { name: '完全削除後の回復', exact: true });
+    await recovery.getByRole('button', { name: /をプレビュー/ }).first().click();
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(afterDelete);
+    await recovery.getByRole('button', { name: '新しいメモとして復元', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('detail-title')?.textContent === '合成製品メモ' && !document.getElementById('detail-view')?.hidden);
+    const recovered = JSON.parse((await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2')))!);
+    const restoredMemo = recovered.memos[0];
+    expect(restoredMemo.id).not.toBe(backup.data.memos[0].id);
+    expect(restoredMemo.revision).toBe(1); expect(restoredMemo.lastRequestId).toBeNull();
+    expect(restoredMemo.pinnedAt).toBeNull(); expect(restoredMemo.deletedAt).toBeNull();
+    await recovery.getByRole('button', { name: 'バックアッププレビューに戻る', exact: true }).click();
+    await recovery.getByRole('button', { name: 'バックアップ一覧へ戻る', exact: true }).click();
+    const snapshot = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{') });
+    await page.waitForFunction(() => !(document.querySelector('input[aria-label="バックアップJSONを選択"]') as HTMLInputElement).disabled);
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(snapshot);
+    await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({ name: 'valid.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    const restoreArea = page.getByRole('region', { name: '追加型復元', exact: true });
+    await restoreArea.getByRole('checkbox').first().check();
+    await restoreArea.getByRole('button', { name: '追加内容を確認', exact: true }).click();
+    await restoreArea.getByRole('button', { name: '確認して復元', exact: true }).click();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('myhomepage.memo.data.v2')!).memos.length === 2);
     await page.locator('#back').click();
     await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = false; });
     await page.getByRole('button', { name: '新規音声メモ', exact: true }).click();
