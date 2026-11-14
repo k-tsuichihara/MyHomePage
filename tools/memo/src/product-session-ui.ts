@@ -5,6 +5,7 @@ import type { LeaveConfirmation } from './navigation-state';
 import type { createStorageTargetController, StorageTarget, StorageTargetDecision, StorageLeaveDecision } from './storage-target-controller';
 import type { createCloudController } from './cloud-controller';
 import { isDirty } from './editor-state';
+import { uuidKey } from './read-primitives';
 
 /** 所有する既存sessionだけを注入する。SDK/Storage/transportをこのUIで生成しない。 */
 export type ProductSessionPort = Pick<ReturnType<typeof createMemoAuthSession>,
@@ -77,14 +78,14 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     }
     const value = context();
     const current = cloud.target.current();
-    if (current.target === 'cloud' && value && value.userId === cloudOwner && value.generation !== current.generation) {
+    if (current.target === 'cloud' && value && uuidKey(value.userId) === cloudOwner && value.generation !== current.generation) {
       cloud.target.acceptAuthenticatedGeneration({ authenticated: true, generation: value.generation });
       cloudStatus.textContent = '認証が更新されました。再読取には保存先を選び直してください。';
     }
     const selected = cloud.target.current().target === 'cloud';
     local.setCloudSelected?.(selected);
     source.textContent = selected ? '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
-    if (selected && (!value || value.userId !== cloudOwner)) {
+    if (selected && (!value || uuidKey(value.userId) !== cloudOwner)) {
       cloudStatus.textContent = '停止：同じユーザーで再認証してください。クラウド選択とドラフトは保持しています。';
     }
   };
@@ -143,7 +144,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const readCloud = async () => {
     if (!cloud || closed || loading || cloud.target.current().target !== 'cloud') return;
     const auth = context();
-    if (!auth || auth.userId !== cloudOwner) { refresh(); return; }
+    if (!auth || uuidKey(auth.userId) !== cloudOwner) { refresh(); return; }
     const selection = cloud.target.current();
     loading = true; cloudStatus.textContent = 'クラウド読取中です。書込は行いません。';
     try {
@@ -167,7 +168,9 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (!cloud) return;
     if (result.kind === 'rejected') { feedback.textContent = '保存先を変更できません。現在の認証・編集状態を確認してください。'; refresh(); return; }
     if (result.kind !== 'changed') return;
-    if (result.state.target === 'cloud' && from !== 'cloud') cloudOwner = context()?.userId ?? null;
+    if (result.state.target === 'cloud' && from !== 'cloud') {
+      const auth = context(); cloudOwner = auth ? uuidKey(auth.userId) : null;
+    }
     if (result.state.target === 'local') { cloudOwner = null; cloudStatus.textContent = ''; }
     observedApp = undefined;
     refresh();

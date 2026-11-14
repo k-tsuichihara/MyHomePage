@@ -24,9 +24,11 @@ export interface ProductLocalDependencies extends MigrationDependencies {
   readonly now: () => string;
 }
 
+type ProductMemoDisposer = (() => void) & { stopVoice?(): void };
+
 export interface ProductLocalViews {
   readonly mountMigration: typeof mountMigrationPreview;
-  readonly mountMemo: typeof mountMemoPreview;
+  readonly mountMemo: (...args: Parameters<typeof mountMemoPreview>) => ProductMemoDisposer;
   readonly mountBackup?: typeof mountBackupPreview;
   readonly mountUpgrade?: typeof mountV3Upgrade;
   readonly mountRestore?: typeof mountRestorePreview;
@@ -40,7 +42,7 @@ const defaultViews: ProductLocalViews = {
     const bridge: VoiceEditBridge = {};
     const disposeMemo = mountMemoPreview(doc, controller, bridge);
     const disposeVoice = mountVoiceInput(doc, controller, bridge);
-    return () => { disposeVoice(); disposeMemo(); };
+    return Object.assign(() => { disposeVoice(); disposeMemo(); }, { stopVoice: disposeVoice.stop });
   },
   mountBackup: mountBackupPreview,
   mountUpgrade: mountV3Upgrade,
@@ -59,7 +61,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   const store = createLocalMemoStore({ storage: upgrade.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
   const controller = createLocalMemoController({ store, createId: deps.createId });
   const migration = createLocalMigrationController({ ...deps, storage: upgrade.storage, acceptExistingV3: true });
-  let disposeMemo = () => {};
+  let disposeMemo: ProductMemoDisposer = () => {};
   let disposed = false;
   const connectedCloud = session?.getContext && session.isCurrent ? cloud : undefined;
   const localAvailable = () => !disposed && connectedCloud?.target.current().target !== 'cloud';
@@ -186,7 +188,11 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     setCloudSelected(selected) {
       for (const id of ['memo-app', 'migration-view']) {
         const node = doc.getElementById(id); if (!node) continue;
-        if (selected) { if (!heldInert.has(node)) heldInert.set(node, node.inert); node.inert = true; }
+        if (selected) {
+          // 音声結果の旧epochも無効にしてから、停止ボタンを含むlocal UIを抑止する。
+          if (!heldInert.has(node)) { if (id === 'memo-app') disposeMemo.stopVoice?.(); heldInert.set(node, node.inert); }
+          node.inert = true;
+        }
         else if (heldInert.has(node)) { node.inert = heldInert.get(node)!; heldInert.delete(node); }
       }
     },

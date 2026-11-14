@@ -138,4 +138,6 @@ P2回帰として、editorなしのタグ保存rejected/unknownの2件を追加�
 
 AI Gateは既存の製品候補Chromium fixtureへC03 session・C04 controller・C05を注入し、RPC senderだけを合成化する。15件を追加（session関連Chromium計33件）：初期local/明示cloud/load1回、未認証拒否、未注入local、cancel保持、古い確認、saving、editor外失敗、同一user世代更新、失効、logout、切替前/旧世代/終了後応答、二重要求、通信失敗/未認定応答/拒否、secret非露出、local書込fallbackなし。合成応答の`single-rpc`は既存C01成功分岐を試すfixture値であり、実経路の認定ではない。
 
+追加P2回帰2件（Chromium計35件）：cloud切替確定時にはdefault製品viewの`stopVoice`から既存voice.stopを呼び、停止ボタンを含むlocal UIをinertにする前に認識を停止する。cancelでは停止せず、停止後の旧callbackは既存epoch検証で無視し、localへ戻った後は明示的に再開できる。custom viewが音声を提供する場合も返却disposerのstopVoiceを接続する。認証所有者の比較・保持にはAuth層と同じ`uuidKey`を使い、UUIDの大文字小文字差だけで別user扱いしない。合成認識器と実C03/C05＋合成senderで、停止/late result遮断/再開、表記差を伴う世代更新/再選択load、write/fetchなしを確認した。
+
 通常product entryは引き続きsession/hostを生成・注入しない。C04/C05/Authのruntime実装は型参照だけに留め、build混入拒否とCSP、loopback＋Permit境界は維持。実SDK/実Auth Storage/実transport、cloud一覧/詳細・write接続、実製品Auth/RPC/RLS、single-rpc認定は未実施。次は既存snapshotの読取専用一覧/詳細接続をfakeで進められる。実環境操作・Human Gateは別承認であり、今回要求/実行しない。

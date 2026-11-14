@@ -40,6 +40,46 @@ async function login(page: Page) {
 async function selectCloud(page: Page) {
   await page.getByRole('button', { name: 'クラウドを選択', exact: true }).click();
 }
+it('cloud切替をcancelした間は音声を保持し、確定前に停止して旧認識結果を遮断する', async () => {
+  const page = await pageFor('cloud-voice');
+  try {
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('音声ドラフト');
+    await page.locator('#editor-view').getByRole('button', { name: '音声で本文へ追記', exact: true }).click();
+    expect(await probe(page, 'fixture.voiceCalls.start')).toBe(1);
+    const draft = await probe(page, 'fixture.state().editor.draft');
+    await selectCloud(page); await page.getByRole('button', { name: '保存先変更をキャンセル' }).click();
+    expect(await probe(page, 'fixture.voiceCalls.abort')).toBe(0);
+    expect(await page.getByRole('button', { name: '音声入力を停止', exact: true }).isEnabled()).toBe(true);
+    await selectCloud(page); await page.getByRole('button', { name: '確認して保存先を変更' }).click();
+    await page.getByText(/クラウド読取成功/).waitFor();
+    expect(await probe(page, 'fixture.voiceCalls.abort')).toBe(1);
+    expect(await probe(page, 'fixture.voiceDetached()')).toBe(true);
+    await probe(page, 'fixture.lateVoice()');
+    expect(await probe(page, 'fixture.state().editor.draft')).toEqual(draft);
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await page.getByRole('button', { name: '確認して保存先を変更' }).click();
+    await page.locator('#editor-view').getByRole('button', { name: '音声で本文へ追記', exact: true }).click();
+    expect(await probe(page, 'fixture.voiceCalls.start')).toBe(2);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
+it('同一userのUUID大文字小文字差を正規化し、世代更新と再選択後のloadを許可する', async () => {
+  const page = await pageFor('cloud-casing');
+  try {
+    await selectCloud(page); await page.getByText(/クラウド読取成功/).waitFor();
+    await probe(page, 'fixture.uppercaseAuth()');
+    await page.getByText(/認証が更新されました/).waitFor();
+    expect(await probe(page, 'fixture.target().generation')).toBe(await probe(page, 'fixture.auth().generation'));
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await selectCloud(page); await page.getByText(/クラウド読取成功/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_load_snapshot']);
+    expect(await page.locator('body').textContent()).not.toMatch(/00000000-0000-4000-8000-00000000abcd/i);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('C05の初期localからcloud選択し既存C03/C04経路のloadのみ1回、local保存へfallbackしない', async () => {
   const page = await pageFor('cloud');
   try {

@@ -5,10 +5,11 @@ import { createPendingMigration } from '../src/migration';
 import { createCloudController } from '../src/cloud-controller';
 import { createStorageTargetController } from '../src/storage-target-controller';
 import type { AuthenticatedRpcSender } from '../src/auth-session';
+import type { VoiceRecognition } from '../src/voice-input';
 
 // 既存製品compositionへ合成session/Storageだけを注入。SDK/実fetchは使わない。
 const mode = (window as unknown as { fixtureMode: string }).fixtureMode;
-const id = '00000000-0000-4000-8000-000000000002';
+const id = mode === 'cloud-casing' ? '00000000-0000-4000-8000-00000000abcd' : '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
 const value = { user: { id }, access_token: 'synthetic-token-private', expires_at: 200 };
 let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data' || (mode.startsWith('cloud') && mode !== 'cloud-signed-out') ? value : null;
@@ -16,13 +17,22 @@ let emit!: (event: string, session: unknown) => void;
 const calls = { login: 0, logout: 0, restore: 0, unsubscribe: 0, listenerUnsubscribe: 0, dispose: 0, writes: 0, fetch: 0,
   readCompleted: 0, cloudDispose: 0 };
 const rpcNames: string[] = [];
+const voiceCalls = { start: 0, abort: 0 };
+let latestVoice: VoiceRecognition | undefined;
+let lateVoiceResult: VoiceRecognition['onresult'];
+if (mode === 'cloud-voice') Object.defineProperty(window, 'SpeechRecognition', { value: class implements VoiceRecognition {
+  lang = ''; continuous = false; interimResults = false;
+  onresult: VoiceRecognition['onresult'] = null; onerror = null; onend = null;
+  start() { voiceCalls.start++; latestVoice = this; lateVoiceResult = this.onresult; }
+  abort() { voiceCalls.abort++; }
+} });
 let releaseRead: (() => void) | undefined;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
 let holdWrite = false;
 let failReads = false, failWrites = false;
 const api: MemoAuthApi = {
   getSession: async () => { calls.restore++; return { data: { session: current }, error: null }; },
-  getUser: async () => ({ data: { user: { id } }, error: null }),
+  getUser: async () => ({ data: { user: { id: value.user.id } }, error: null }),
   async signInWithPassword() {
     calls.login++;
     if (mode === 'pending') await new Promise<void>(resolve => { releaseLogin = resolve; });
@@ -78,6 +88,10 @@ const app = createProductLocalApp(document, {
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
+  voiceCalls,
+  lateVoice: () => lateVoiceResult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: '停止後の旧結果' } }] }),
+  voiceDetached: () => latestVoice?.onresult === null,
+  uppercaseAuth: () => { value.user.id = value.user.id.toUpperCase(); value.expires_at++; emit('TOKEN_REFRESHED', value); },
   refreshAuth: () => { value.expires_at++; emit('TOKEN_REFRESHED', value); },
   migration: () => app.migration.getState(),
   saveTag: () => app.controller.dispatch({ kind: 'mutate', operation: {

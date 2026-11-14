@@ -25,5 +25,6 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
   const notice = doc.createElement('p'); notice.textContent = '音声入力はブラウザの認識サービスを利用します。音声が外部サービスへ送信される場合があります。アプリは録音を保存しません。開始はボタン操作時だけです。';
   section.append(notice, stop, status); doc.getElementById('memo-app')!.append(section);
   const pagehide = () => voice.stop(); win.addEventListener('pagehide', pagehide);
-  return () => { voice.dispose(); win.removeEventListener('pagehide', pagehide); buttons.forEach(button => button.remove()); section.remove(); };
+  return Object.assign(() => { voice.dispose(); win.removeEventListener('pagehide', pagehide); buttons.forEach(button => button.remove()); section.remove(); },
+    { stop: () => voice.stop() });
 }
