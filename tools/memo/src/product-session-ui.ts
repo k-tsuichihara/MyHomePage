@@ -1,6 +1,6 @@
 import type { createMemoAuthSession, MemoAuthState } from './auth-session';
 import type { LocalAppState } from './local-app-state';
-import { requestNavigation, confirmNavigation } from './navigation-state';
+import { appDepartureReason, requestNavigation, confirmNavigation } from './navigation-state';
 import type { LeaveConfirmation } from './navigation-state';
 
 /** 所有する既存sessionだけを注入する。SDK/Storage/transportをこのUIで生成しない。 */
@@ -94,7 +94,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (unavailable) return;
     const decision = departure();
     if (!decision) { feedback.textContent = '保存処理中はログアウトできません。'; return; }
-    if (decision.tickets.length) { pending = decision; confirmation.hidden = false; refresh(); }
+    if (appDepartureReason(decision.app) || decision.tickets.length) { pending = decision; confirmation.hidden = false; refresh(); }
     else void run('logout');
   };
   const onProceed = () => {

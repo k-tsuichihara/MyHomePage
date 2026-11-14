@@ -4,6 +4,13 @@ import { getMemoNeighbors, queryMemos } from './memo-query';
 import type { MemoQueryResult } from './memo-query';
 import { validateLocalFormat } from './local-format';
 import { record, uuid } from './read-primitives';
+import type { LocalAppState } from './local-app-state';
+
+/** editor外のタグ操作等の失敗も離脱確認へ含める。判定だけで状態は変更しない。 */
+export function appDepartureReason(app: Pick<LocalAppState, 'unresolved' | 'write'>): 'unknown' | 'rejected' | null {
+  if (app.unresolved.length || app.write.kind === 'unknown') return 'unknown';
+  return app.write.kind === 'rejected' ? 'rejected' : null;
+}
 
 export type NavigationTarget = { readonly kind: 'list' } | { readonly kind: 'detail'; readonly id: string }
   | { readonly kind: 'switch-source' } | { readonly kind: 'logout' };

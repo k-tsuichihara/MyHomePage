@@ -49,6 +49,9 @@ const app = createProductLocalApp(document, {
 }, undefined, mode === 'absent' ? undefined : injected);
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
+  saveTag: () => app.controller.dispatch({ kind: 'mutate', operation: {
+    kind: 'save-tag', id: '00000000-0000-4000-8000-000000000020', name: '合成タグ', expectedRevision: null } }),
+  reload: () => app.controller.dispatch({ kind: 'load' }),
   expired: () => { clock = 200_000; session.getState(); },
   stale: () => notify?.({ phase: 'signed-out', generation: 0, userId: null, reauthenticateUserId: null, expiresAt: null, reason: 'none' }),
   emit: () => emit('SIGNED_IN', current),

@@ -152,6 +152,34 @@ it.each(['rejected', 'unknown'])('cleanでも%sをnavigationへ委譲してlogou
     expect(await probe(page, 'fixture.state().write.kind')).toBe(failure);
   } finally { await page.context().close(); }
 });
+it.each(['rejected', 'unknown'])('editor外のタグ保存%sもlogout確認しcancel保持・古い確認拒否・続行できる', async failure => {
+  const page = await pageFor('restore');
+  try {
+    await probe(page, failure === 'rejected' ? 'fixture.failReads(true)' : 'fixture.failWrites()');
+    await probe(page, 'fixture.saveTag()');
+    expect(await probe(page, 'fixture.state().editor')).toBeNull();
+    expect(await probe(page, 'fixture.state().write.kind')).toBe(failure);
+    const before = await probe(page, 'fixture.state()');
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await page.getByRole('button', { name: 'ログアウトをキャンセル' }).click();
+    expect(await probe(page, 'fixture.state()')).toEqual(before);
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await probe(page, 'fixture.failReads(false); fixture.reload()');
+    await page.getByRole('button', { name: '確認してログアウト' }).click();
+    await page.getByText(/確認後に状態が変わりました/).waitFor();
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    const after = await probe(page, 'fixture.state()');
+    const writes = await probe(page, 'fixture.calls.writes');
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await page.getByRole('button', { name: '確認してログアウト' }).click();
+    await page.getByText('未ログイン', { exact: true }).waitFor();
+    expect(await probe(page, 'fixture.calls.logout')).toBe(1);
+    expect(await probe(page, 'fixture.state()')).toEqual(after);
+    expect(await probe(page, 'fixture.calls.writes')).toBe(writes);
+    expect(await probe(page, 'fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('注入なしならAuth UI/初期化がなく既存local保存が動く', async () => {
   const page = await pageFor('absent');
   try {

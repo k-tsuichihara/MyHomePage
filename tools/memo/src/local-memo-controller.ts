@@ -1,5 +1,5 @@
 import { beginSave, confirmResave, createEditor, editDraft, immutable, isDirty, settleSave } from './editor-state';
-import { listNeighbors, prepareLocalList, requestNavigation } from './navigation-state';
+import { appDepartureReason, listNeighbors, prepareLocalList, requestNavigation } from './navigation-state';
 import { queryMemos } from './memo-query';
 import { countTagUsage } from './tag-usage';
 import { validateLocalFormat } from './local-format';
@@ -85,8 +85,8 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
   function navigate(destination: Destination, accepted: boolean): CommandResult {
     if (!ready()) return blocked('not-ready');
     if (!accepted) {
-      if (app.unresolved.length || app.write.kind === 'unknown') return confirmation(destination, 'unknown');
-      if (app.write.kind === 'rejected') return confirmation(destination, 'rejected');
+      const reason = appDepartureReason(app);
+      if (reason) return confirmation(destination, reason);
       if (app.editor) {
         const decision = requestNavigation(app.editor, destination.kind === 'list' || destination.kind === 'new'
           ? { kind: 'list' } : { kind: 'detail', id: destination.id });
