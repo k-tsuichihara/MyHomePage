@@ -1,7 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
 基準：PR #79マージ後main `8ef563c`。実DB/SQL/Auth/RPC操作は今回0件。
-Q04は**進行中・実環境未実施**。S04 COMPLETEはrepository準備範囲であり、実権限変更済みではない。
+現在の実施状態は[Q04実行記録](Q04-RESULTS.md)を正本とする。S04適用成功報告とQ04-READ限定PASSを記録済み。Q04は**進行中**、Step 3以降は未承認。以下の未承認/未実施という表現は準備時点の条件として保持し、現在の実施記録と区別する。
 対象は承認済みdev-sandboxと合成テストユーザーのみ。production、実ユーザーデータ、公開操作は対象外。
 
 ## 1. 再利用と残るUNKNOWN
@@ -75,6 +75,25 @@ HTTP 401/403 + SQLSTATE 42501 + 対象関数の権限拒否文が一致した場
 
 C03〜C05製品接続後のAuth/session復元・失効・同一ユーザー再認証・Auth generation・送信前後の応答反映拒否は、既存製品Auth/controller/senderで検証する。DB CLIの合格をここへ流用しない。offlineのtimeout/disconnect/generation/no-auto-retryを再利用し、実通信障害を作るためだけに書込を繰り返さない。
 実経路の再送・応答出所が未確認なら`single-rpc`未認定を維持する。Q04をPASSにしても自動昇格しない。今回、製品UI・C05接続は変更していない。
+
+### Step 3の次回承認候補（未承認）
+
+最初の候補は既存[ケース13](TAG-EDIT-TEST.md)・`tag-edit-read.mjs`。新規の専用タグ1件だけで、`memo_save_tag`→valid_text/trim_edges/edge_spacesとCHECK/indexのtag_keyを使う通常経路に到達できるため。過去のhelper監査を繰り返すのではなく、S04撤回後の実書込という未検証部分を確認する。
+
+| 承認対象 | 具体的な範囲 |
+|---|---|
+| 対象 | 既に確認済みdev-sandbox・合成ユーザー1名・新規生成する専用タグ1件のみ |
+| Auth | 最大1回。既存の固定接続先/公開キー検査・通常Auth。管理キーなし |
+| RPC | 最大7回：`memo_save_tag`3回（作成、改名、古いrevisionの拒否試行） + `memo_load_snapshot`4回。HTTP全体はAuthを含め最大8回 |
+| 書込影響 | 正常なら作成→改名の2回が成立し、タグ1件がrevision=2で残る。3回目はHTTP409/PT409/固定競合文の一致とsnapshot不変を期待。誤成功なら同じ専用タグの名前/revisionが変化し得る |
+| 人間の操作 | 個別承認後だけ既存コマンドを起動し、合成資格情報をローカル入力。既存CREATE/RENAME/CONFLICT確認は操作承認であり、技術判定を人間へ要求しない |
+| 判定/記録 | 既存`runTagEditCase`/`tagRpc`が所有者、revision、created_at、全snapshot不変、期待競合を検査し、既存wx記録へ保存。ローカル表示には合成ID/引数が含まれるため端末全体を共有しない |
+| 制限 | 各要求15秒、redirect拒否、retry0、既存対象の編集・メモ作成・タグ削除・cleanup・他ケース自動続行なし。人間の入力待ちを含む試験全体を30秒に収める契約ではない（Step 2専用の通信全体30秒と区別） |
+| 停止 | 確認取消し、HTTP/本文/状態不一致、timeout、通信失敗、記録失敗で後続停止。旧CLIのFAIL表示も、送信後の結果不確定ならQ04ではUNKNOWNとして扱う。再送/自動修復なし |
+
+実行コマンドは既存の `node tools/memo-db-test/tag-edit-read.mjs`。**現在は起動しない**。このケースは認証の後に書込確認を求めるため、起動前にAuthと上記全ケース範囲の個別承認が必要。旧手順にあるDashboard/定義の再確認は、具体的な変更理由なしに追加しない。
+
+ここで確認できないASCII重複/非ASCII区別は既存ケース14、メモ書込/台帳/競合は既存の作成/更新/並行ケース、RLSは既存A/Bケースへ残す。全Step 3や8 RPCがこの1ケースだけで完了するとはしない。ケース13の過去PASSやoffline回帰を変更後の実PASSへ転記しない。既存判定器・手順・上限の静的照合まで準備済みで、runner再実装や新しい承認機構は追加しない。
 
 ## 3. 結果・記録・停止
 
