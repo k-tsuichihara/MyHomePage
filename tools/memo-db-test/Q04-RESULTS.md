@@ -69,21 +69,21 @@ AIは実結果ファイル・対象メモを読み直していない。実時刻
 
 **通信期間重複をDB内部の同時実行/ロック待ちの証明にしない。競合側resolve=null単独を未実行の証明にしない。single-rpcは未認定のまま。** 専用タグと専用メモは削除せず保持し、このケースを再実行しない。
 
-## Step 3のS04差分確認 — 完了候補
+## Step 3のS04差分確認 — 完了
 
-現時点では**S04差分のための追加実試験は不要**と判断する。理由と後続Q04条件の切分けは[準備書](Q04-PREPARATION.md)の再評価節を参照。
+PR #83のレビューPASS・マージ後、オーナーがStep 3の「S04差分確認」を完了として確定した。**S04差分のための追加実試験は不要**。理由と後続Q04条件の切分けは[準備書](Q04-PREPARATION.md)の再評価節を参照。既実施の監査/ケースを再実行しない。
 
 1. S04適用成功報告と内蔵ガードに加え、Q04-READでクライアントの4 helper直接拒否8件を確認。
 2. ケース13でタグ作成/改名のhelper/CHECK/index実行とrevision競合を確認。
 3. ケース6で未実証だったメモ作成/更新・memo側CHECK/helper経路・競合・保存照合を確認。
 4. S04ではRPC本文、CHECK/index式、RLS、表権限、入力/名前比較規則を変更していない。これらの過去PASSを理由なく全件再実行する必要はない。その他RPCを変更後の新実測PASSへ昇格する意味でもない。
 
-これは限定したS04差分の完了候補であり、**Q04全体のPASS/完了ではない**。製品Auth/session、controller/sender/UI接続、実製品のAuth/所有者/RLS境界、障害/競合/古い応答の受入、応答出所・single-rpc等は後続条件として残す。
+これは限定したS04差分の完了であり、**Q04全体のPASS/完了ではない**。製品Auth/session、controller/sender/UI接続、実製品のAuth/所有者/RLS境界、障害/競合/古い応答の受入、応答出所・single-rpc等はStep 4の後続条件として残す。
 
 ## 現在の状態と承認境界
 
-- S04：repository準備完了 + dev-sandbox適用成功報告 + helper直接拒否PASS + ケース13/6総合PASS。Step 3のS04差分確認を完了候補とする。
+- S04：repository準備完了 + dev-sandbox適用成功報告 + helper直接拒否PASS + ケース13/6総合PASS。Step 3のS04差分確認はオーナー確定により完了。
 - Q04：**進行中**。S04差分として次の実試験候補は追加しない。実環境操作・cleanupは未承認。Q04全体をPASSへ昇格しない。
 - A17/S05保留、過去の監査PASS、Human Gate専用経路の既知課題は変更しない。
-- 次はこの文書の完了候補レビューと、製品Auth/cloud接続に依存するQ04残条件の引継ぎ。追加の旧DB CLI実行を要求しない。製品実装/実環境操作へは今回先行しない。
+- Step 4第1単位として既存session注入による製品候補UIのAuth表示・操作・終了を実装し、fake sessionによるChromium回帰を確認した。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)を参照。実SDK生成・実Storage・cloud保存先・controller/senderの製品接続は未実施。追加の旧DB CLI実行を要求しない。
 - 今回の記録整理中は、追加SQL・Auth/RPC通信・DB操作・再試行を実施していない。過去記録・準備manifestは上書きしない。生成manifestの`applied:false`は生成時の値として保存し、この実施報告と区別する。

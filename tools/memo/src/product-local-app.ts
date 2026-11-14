@@ -17,6 +17,8 @@ import { mountRestorePreview } from './ui/restore-preview';
 import { mountDeletedRecoveryPreview } from './ui/deleted-recovery-preview';
 import { createInitialRestoreController } from './initial-restore-controller';
 import { mountInitialRestorePreview } from './ui/initial-restore-preview';
+import { mountProductSession } from './product-session-ui';
+import type { ProductSessionPort } from './product-session-ui';
 
 export interface ProductLocalDependencies extends MigrationDependencies {
   readonly now: () => string;
@@ -52,7 +54,7 @@ const defaultViews: ProductLocalViews = {
  * 移行診断がreadyになり通常loadにも成功するまで、メモ操作UIを公開しない。
  */
 export function createProductLocalApp(doc: Document, deps: ProductLocalDependencies,
-  views: ProductLocalViews = defaultViews) {
+  views: ProductLocalViews = defaultViews, session?: ProductSessionPort) {
   const upgrade = createProductV3Upgrade(deps);
   const store = createLocalMemoStore({ storage: upgrade.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
   const controller = createLocalMemoController({ store, createId: deps.createId });
@@ -65,6 +67,15 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let backupOriginal = false;
   let disposeRestore: (() => void) | undefined, disposeRecovery: (() => void) | undefined;
   let disposeInitial: (() => void) | undefined;
+  let sessionUi: ReturnType<typeof mountProductSession> | undefined;
+  // 各既存controllerが持つbusy状態の変化をAuth UIにも反映する。
+  async function withSessionRefresh<T>(start: () => Promise<T>): Promise<T> {
+    try {
+      const operation = start();
+      sessionUi?.refresh();
+      return await operation;
+    } finally { sessionUi?.refresh(); }
+  }
   const normalReady = () => {
     const state = controller.getState();
     return !disposed && !upgradeBusy && state.route.kind !== 'edit' && state.read.kind === 'ready'
@@ -96,13 +107,15 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       getState: restore.getState,
       async dispatch(command) {
         if (disposed) return;
-        await restore.dispatch(command);
-        if (!disposed && restore.getState().phase === 'applied') await controller.dispatch({ kind: 'load' });
+        await withSessionRefresh(async () => {
+          await restore.dispatch(command);
+          if (!disposed && restore.getState().phase === 'applied') await controller.dispatch({ kind: 'load' });
+        });
       },
     });
     if (!disposeRecovery && views.mountRecovery) disposeRecovery = views.mountRecovery(doc, {
       getState: recovery.getState,
-      async dispatch(command) { if (!disposed) await recovery.dispatch(command); },
+      async dispatch(command) { if (!disposed) await withSessionRefresh(() => recovery.dispatch(command)); },
     }, () => { const route = controller.getState().route; return route.kind === 'detail' ? route.id : null; });
   };
   const prepareBackup = createLocalBackup({ storage: upgrade.storage, locks: deps.locks, now: deps.now });
@@ -125,7 +138,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       async dispatch(command) {
         if (disposed) return { kind: 'blocked', reason: 'disposed' };
         if ((upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()) && command.kind !== 'draft') return { kind: 'blocked', reason: 'writing' };
-        const result = await controller.dispatch(command);
+        const result = await withSessionRefresh(() => controller.dispatch(command));
         syncBackup();
         if (upgrade.getState() === 'legacy-changed') {
           const status = doc.getElementById('product-status');
@@ -137,7 +150,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     mountRecoveryViews();
     if (!disposeInitial && controller.getState().storageVersion === null && views.mountInitial) disposeInitial = views.mountInitial(doc, {
       getState: initial.getState,
-      async dispatch(command) { if (!disposed) await initial.dispatch(command); },
+      async dispatch(command) { if (!disposed) await withSessionRefresh(() => initial.dispatch(command)); },
     });
     if (!disposeBackup && views.mountBackup) {
       const original = controller.getState().storageVersion === 2;
@@ -153,24 +166,28 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
         const result = await controller.dispatch({ kind: 'load' });
         syncBackup();
         return result;
-      }, busy => { upgradeBusy = busy; });
+      }, busy => { upgradeBusy = busy; sessionUi?.refresh(); });
     }
     return true;
   };
 
   const migrationPort: typeof migration = {
     getState: migration.getState,
-    async inspect() { if (!disposed) await migration.inspect(); },
+    async inspect() { if (!disposed) await withSessionRefresh(() => migration.inspect()); },
     cancel(token) { if (!disposed) migration.cancel(token); },
-    async confirm(token) { if (!disposed) await migration.confirm(token); },
+    async confirm(token) { if (!disposed) await withSessionRefresh(() => migration.confirm(token)); },
   };
   views.mountMigration(doc, migrationPort, enter);
+  sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
+    isBusy: () => disposed || upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()
+      || migration.getState().kind === 'running' || controller.getState().write.kind === 'writing' }) : undefined;
   return Object.freeze({
     controller,
     migration,
     dispose() {
       if (disposed) return;
       disposed = true;
+      sessionUi?.dispose();
       disposeMemo();
       disposeBackup?.();
       disposeUpgrade?.(); upgrade.dispose();
