@@ -3,7 +3,8 @@ import { uuidKey } from '../read-primitives';
 
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
 export function mountProductSnapshot(doc: Document, parent: HTMLElement,
-  edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean) {
+  edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean,
+  trash?: (memo: Memo, valid: () => boolean) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
@@ -35,6 +36,15 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
       const valid = active!.valid;
       if (edit(selected, tagIds, valid)) clear();
+    }));
+    if (trash && memo.deletedAt === null) root.append(button('ゴミ箱へ移動', () => {
+      if (!current(token)) return;
+      root.replaceChildren(text('p', 'このメモをゴミ箱へ移動しますか。'),
+        button('確認してゴミ箱へ移動', () => {
+          const latest = current(token), selected = latest?.memos[index]; if (!selected || selected.deletedAt !== null) return;
+          const valid = active!.valid;
+          if (trash(selected, valid)) clear();
+        }), button('移動をキャンセル', () => detail(index, token)));
     }));
   };
   const list = (token: object) => {

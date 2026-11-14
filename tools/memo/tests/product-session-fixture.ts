@@ -2,7 +2,7 @@ import { createProductLocalApp } from '../src/product-local-app';
 import { createMemoAuthSession, type MemoAuthApi, type MemoAuthState } from '../src/auth-session';
 import { isDirty } from '../src/editor-state';
 import { createPendingMigration } from '../src/migration';
-import { createCloudController } from '../src/cloud-controller';
+import { createCloudController, type CloudUncertainOperationResult, type CloudStateResult } from '../src/cloud-controller';
 import { createStorageTargetController } from '../src/storage-target-controller';
 import type { AuthenticatedRpcSender } from '../src/auth-session';
 import type { VoiceRecognition } from '../src/voice-input';
@@ -16,7 +16,7 @@ const value = { user: { id }, access_token: 'synthetic-token-private', expires_a
 let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data' || (mode.startsWith('cloud') && !mode.endsWith('-signed-out')) ? value : null;
 let emit!: (event: string, session: unknown) => void;
 const calls = { login: 0, logout: 0, restore: 0, unsubscribe: 0, listenerUnsubscribe: 0, dispose: 0, writes: 0, fetch: 0,
-  readCompleted: 0, saveCompleted: 0, resolveCompleted: 0, cloudDispose: 0 };
+  readCompleted: 0, saveCompleted: 0, resolveCompleted: 0, stateCompleted: 0, cloudDispose: 0 };
 const rpcNames: string[] = [];
 const generatedIds: string[] = [];
 const voiceCalls = { start: 0, abort: 0 };
@@ -31,7 +31,10 @@ if (mode === 'cloud-voice') Object.defineProperty(window, 'SpeechRecognition', {
 let releaseRead: (() => void) | undefined;
 let releaseSave: (() => void) | undefined;
 let releaseResolve: (() => void) | undefined;
+let releaseState: (() => void) | undefined;
 let savedArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
+let stateArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
+let stateResult: CloudUncertainOperationResult<CloudStateResult> | null = null;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
 let holdWrite = false;
 let failReads = false, failWrites = false;
@@ -61,6 +64,19 @@ const api: MemoAuthApi = {
 };
 const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   rpcNames.push(rpc);
+  if (mode.startsWith('cloud-trash') && rpc === 'memo_change_state') {
+    stateArgs = args;
+    if (args.p_action !== 'trash') throw new Error('unexpected-state-action');
+    if (mode === 'cloud-trash-pending') await new Promise<void>(resolve => { releaseState = resolve; });
+    if (mode === 'cloud-trash-unknown') throw new Error('synthetic-password raw-provider-token');
+    if (mode === 'cloud-trash-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: 'revision conflict' } };
+    if (mode === 'cloud-trash-rejected') return { provenance: 'single-rpc', status: 403, body: { code: '42501', message: 'raw-provider-token' } };
+    if (mode === 'cloud-trash-deleted') return { provenance: 'single-rpc', status: 500, body: { code: 'P0002', message: 'previously applied, memo deleted' } };
+    return { provenance: mode === 'cloud-trash-unverified' ? 'unverified' : 'single-rpc', status: 200,
+      body: mode === 'cloud-trash-invalid' ? { message: 'synthetic-password raw-provider-token' }
+        : { ...snapshot().memos[0]!, id: args.p_id, deleted_at: '2026-11-14T00:00:00Z',
+          revision: Number(args.p_expected_revision) + 1, last_request_id: args.p_request_id } };
+  }
   if (operationMode.startsWith('cloud-edit') && (rpc === 'memo_save' || rpc === 'memo_resolve_request')) {
     const saved = () => ({ memo: { ...snapshot().memos[0]!, id: args.p_id, title: args.p_title, body: args.p_body,
       revision: args.p_expected_revision === null ? 1 : Number(args.p_expected_revision) + 1, last_request_id: args.p_request_id }, tagIds: args.p_tag_ids });
@@ -83,7 +99,7 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   return { provenance: mode === 'cloud-unverified' || snapshotMode === 'unverified' ? 'unverified' : 'single-rpc', status: 200,
     body: mode === 'cloud-permission' || snapshotMode === 'permission' ? null
       : snapshotMode === 'invalid' ? { message: 'raw-provider-token', user_id: id }
-      : mode.startsWith('cloud-snapshot') || operationMode.startsWith('cloud-edit') ? snapshot() : { memos: [], tags: [], memoTags: [] } };
+      : mode.startsWith('cloud-snapshot') || mode.startsWith('cloud-trash') || operationMode.startsWith('cloud-edit') ? snapshot() : { memos: [], tags: [], memoTags: [] } };
 };
 const session = createMemoAuthSession(api, () => clock, sender);
 const targets = createStorageTargetController();
@@ -93,10 +109,13 @@ const cloudPort = {
     try { return await cloudController.load(context); } finally { calls.readCompleted++; }
   },
   dispose() { calls.cloudDispose++; return cloudController.dispose(); },
-  ...(operationMode.startsWith('cloud-edit') ? { async save(...args: Parameters<typeof cloudController.save>) {
+  ...(operationMode.startsWith('cloud-edit') || (mode.startsWith('cloud-trash') && mode !== 'cloud-trash-no-writer') ? { async save(...args: Parameters<typeof cloudController.save>) {
     try { return await cloudController.save(...args); } finally { calls.saveCompleted++; }
   }, async resolve(...args: Parameters<typeof cloudController.resolve>) {
     try { return await cloudController.resolve(...args); } finally { calls.resolveCompleted++; }
+  } } : {}),
+  ...(mode.startsWith('cloud-trash') ? { async changeState(...args: Parameters<typeof cloudController.changeState>) {
+    try { stateResult = await cloudController.changeState(...args); return stateResult; } finally { calls.stateCompleted++; }
   } } : {}),
 };
 let notify: ((state: MemoAuthState) => void) | undefined;
@@ -127,6 +146,8 @@ Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
   generatedIds,
+  stateArgs: () => stateArgs, stateResult: () => stateResult, releaseState: () => releaseState?.(),
+  invalidateSnapshot: () => targets.setDirty(false),
   differentUser: () => { value.user.id = '00000000-0000-4000-8000-000000000999'; },
   externalLogout: () => session.logout(),
   savedArgs: () => savedArgs, releaseSave: () => releaseSave?.(),

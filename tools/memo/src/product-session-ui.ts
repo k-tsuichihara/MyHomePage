@@ -3,7 +3,9 @@ import type { LocalAppState } from './local-app-state';
 import { appDepartureReason, requestNavigation, confirmNavigation } from './navigation-state';
 import type { LeaveConfirmation } from './navigation-state';
 import type { createStorageTargetController, StorageTarget, StorageTargetDecision, StorageLeaveDecision } from './storage-target-controller';
-import type { createCloudController } from './cloud-controller';
+import type { createCloudController, CloudUncertainOperationResult, CloudStateResult } from './cloud-controller';
+import type { AuthContext } from './auth-session';
+import type { Memo } from './types';
 import { isDirty } from './editor-state';
 import { uuidKey } from './read-primitives';
 import { mountProductSnapshot } from './ui/product-snapshot-view';
@@ -16,11 +18,11 @@ export type ProductSessionPort = Pick<ReturnType<typeof createMemoAuthSession>,
   & Partial<Pick<ReturnType<typeof createMemoAuthSession>, 'getContext' | 'isCurrent'>>
   & { dispose(): void | Promise<void> };
 
-/** 生成済みC04/C05を所有する接続。任意の単件save/resolve以外のwriteやtransportは渡さない。 */
+/** 生成済みC04/C05を所有する接続。単件save/resolveとtrash以外のwriteやtransportは渡さない。 */
 export interface ProductCloudHost {
   readonly target: ReturnType<typeof createStorageTargetController>;
   readonly controller: Pick<ReturnType<typeof createCloudController>, 'load' | 'dispose'>
-    & Partial<Pick<ReturnType<typeof createCloudController>, 'save' | 'resolve'>>;
+    & Partial<Pick<ReturnType<typeof createCloudController>, 'save' | 'resolve' | 'changeState'>>;
 }
 
 const phases: Record<MemoAuthState['phase'], string> = {
@@ -54,6 +56,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const newCloud = button('クラウドに新規メモ');
   const cloudStatus = doc.createElement('p'); cloudStatus.id = 'product-cloud-state'; cloudStatus.setAttribute('role', 'status');
   if (cloud) root.append(chooseLocal, chooseCloud, cloudStatus);
+  const trashStatus = doc.createElement('p'); trashStatus.id = 'product-cloud-trash-state'; trashStatus.setAttribute('role', 'status');
+  if (cloud?.controller.changeState) root.append(trashStatus);
   const feedback = doc.createElement('p'); feedback.setAttribute('role', 'status');
   const confirmation = doc.createElement('div'); confirmation.hidden = true;
   confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'ログアウトの離脱確認');
@@ -63,17 +67,27 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   form.append(login, restore, logout); root.append(state, source, form, confirmation, feedback);
   let cloudEditor: ReturnType<typeof mountProductCloudEditor> | undefined;
   const snapshotView = cloud ? mountProductSnapshot(doc, root,
-    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid) => cloudEditor?.start(memo, tags, valid) ?? false : undefined) : undefined;
+    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid) =>
+      !isBusy() && !trashUncertain() && !busy && !pending && (cloudEditor?.start(memo, tags, valid) ?? false) : undefined,
+    cloud.controller.changeState && local.createId ? startTrash : undefined) : undefined;
   const anchor = doc.getElementById('product-status');
   if (anchor) anchor.after(root); else doc.body.prepend(root);
   let closed = false, busy = false, generation = -1, unavailable = false;
+  // 不明操作はC04の返却結果ごと保持する。UI独自の再送・照合状態には変換しない。
+  type TrashRecord = { readonly request: Readonly<{ context: AuthContext; id: string; expectedRevision: number; requestId: string }>;
+    result: CloudUncertainOperationResult<CloudStateResult> | null };
+  let trashRecord: TrashRecord | null = null, trashRunning = false;
+  const trashUncertain = () => !!trashRecord && (!trashRecord.result || trashRecord.result.kind === 'unresolved'
+    || trashRecord.result.kind === 'stale-response' || (trashRecord.result.kind === 'completed'
+      && (trashRecord.result.result.kind === 'unknown' || trashRecord.result.result.kind === 'failed')));
   type TargetConfirmation = Extract<StorageTargetDecision, { kind: 'confirmation-required' }>;
   let pending: { app: LocalAppState; generation: number; tickets: LeaveConfirmation[];
     editor: EditorState | null;
+    trash: TrashRecord | null;
     intent: 'logout' | StorageTarget; target?: TargetConfirmation } | undefined;
   let observedApp: LocalAppState | undefined, cloudOwner: string | null = null;
   let observedEditor: EditorState | null | undefined, selectionTicket = {};
-  const isBusy = () => local.isBusy() || !!cloudEditor?.isBusy();
+  const isBusy = () => local.isBusy() || !!cloudEditor?.isBusy() || trashRunning;
   let loading = false;
   const context = () => {
     const value = session.getContext?.();
@@ -102,7 +116,9 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     }
     const selected = cloud.target.current().target === 'cloud';
     local.setCloudSelected?.(selected);
-    source.textContent = selected ? cloudEditor ? '保存先：クラウド（メモの単件作成・編集・保存）' : '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
+    source.textContent = selected ? cloudEditor
+      ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ゴミ箱移動' : ''}）`
+      : cloud.controller.changeState ? '保存先：クラウド（閲覧・単件ゴミ箱移動）' : '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
     if (selected && (!value || uuidKey(value.userId) !== cloudOwner)) {
       cloudStatus.textContent = '停止：同じユーザーで再認証してください。クラウド選択とドラフトは保持しています。';
     }
@@ -120,7 +136,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       generation = current.generation;
       syncSource();
       chooseLocal.disabled = chooseCloud.disabled = busy || !!pending || isBusy();
-      newCloud.disabled = !cloudEditor || !!cloudEditor.getState() || busy || !!pending || isBusy() || loading
+      newCloud.disabled = !cloudEditor || !!cloudEditor.getState() || trashUncertain() || busy || !!pending || isBusy() || loading
         || !cloudContext();
       state.textContent = Object.hasOwn(phases, current.phase) ? phases[current.phase] : phases.blocked;
       if (current.phase === 'blocked') state.textContent += '。同じユーザーで再認証してください。';
@@ -160,10 +176,11 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const editors = [...app.retainedEditors, ...(app.editor ? [app.editor] : []), ...(editor ? [editor] : [])];
     const decisions = editors.map(editor => requestNavigation(editor, { kind: intent === 'logout' ? 'logout' : 'switch-source' }));
     if (decisions.some(decision => decision.kind === 'blocked')) return null;
-    return { app, editor, generation, intent, tickets: decisions.flatMap(decision =>
+    return { app, editor, trash: trashRecord, generation, intent, tickets: decisions.flatMap(decision =>
       decision.kind === 'confirmation-required' ? [decision.ticket] : []) };
   };
   const leaveDecision = (decision: NonNullable<ReturnType<typeof departure>>): StorageLeaveDecision => {
+    if (trashUncertain()) return { kind: 'confirmation-required', reason: 'unknown' };
     const reason = appDepartureReason(decision.app);
     return reason || decision.tickets.length ? { kind: 'confirmation-required', reason: reason ?? 'unsaved' } : { kind: 'allowed' };
   };
@@ -185,7 +202,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         return;
       }
       cloudStatus.textContent = result.kind === 'completed'
-        ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : '書込未接続です。'}`
+        ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '通常メモの単件ゴミ箱移動ができます。' : '書込未接続です。'}`
           : result.result.kind === 'unknown' || result.result.kind === 'failed' ? 'UNKNOWN：読取結果を確認できません。自動再試行しません。'
           : '停止：クラウド読取は許可されませんでした。'
         : result.kind === 'stale-response' ? '停止：古いクラウド応答を反映しません。'
@@ -251,6 +268,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const current = local.getState();
     const valid = !isBusy() && current === ticket.app && generation === ticket.generation
       && (cloudEditor?.getState() ?? null) === ticket.editor
+      && trashRecord === ticket.trash
       && ticket.tickets.every(value => confirmNavigation(value.state, value, true).kind === 'allowed');
     clearConfirmation();
     if (!valid) { feedback.textContent = '確認後に状態が変わりました。操作をやり直してください。'; refresh(); return; }
@@ -265,7 +283,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     clearConfirmation(); feedback.textContent = '離脱をキャンセルしました。'; refresh(); };
   const onLocal = () => requestDeparture('local'), onCloud = () => requestDeparture('cloud');
   const onNewCloud = () => {
-    if (closed || unavailable || busy || pending || isBusy() || loading || !cloudContext()) return;
+    if (closed || unavailable || busy || pending || isBusy() || loading || trashUncertain() || !cloudContext()) return;
     if (cloudEditor?.startNew()) {
       snapshotView?.clear();
       cloudStatus.textContent = '新規メモを編集中です。保存成功前に一覧へ追加しません。';
@@ -287,9 +305,46 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   let unsubscribe = () => {};
   try { unsubscribe = session.subscribe(refresh); } catch { unavailable = true; feedback.textContent = '認証状態を購読できませんでした。'; }
   refresh(); void run('restore');
+  function startTrash(memo: Memo, valid: () => boolean): boolean {
+    if (!cloud?.controller.changeState || !local.createId || closed || unavailable || busy || pending || isBusy() || loading
+      || trashUncertain() || cloudEditor?.getState() || memo.deletedAt !== null || !valid()) return false;
+    const auth = cloudContext(); if (!auth) return false;
+    let request: TrashRecord['request'];
+    try { request = Object.freeze({ context: auth, id: memo.id, expectedRevision: memo.revision, requestId: local.createId() }); }
+    catch { trashStatus.textContent = '停止：要求を作れません。ゴミ箱への移動は開始していません。'; return false; }
+    const record: TrashRecord = { request, result: null }; trashRecord = record; trashRunning = true;
+    // 要求開始後の旧snapshotを現在値として扱わず、行だけの楽観更新もしない。
+    snapshotView?.clear(); trashStatus.textContent = 'ゴミ箱へ移動中です。離脱・二重送信はできません。'; refresh();
+    void (async () => {
+      try {
+        const result = await cloud.controller.changeState!(request.context, request.id, 'trash',
+          { expectedRevision: request.expectedRevision, requestId: request.requestId });
+        record.result = result;
+        if (closed || trashRecord !== record) return;
+        if (!valid() || !cloudContext() || !session.isCurrent?.(request.context)) {
+          trashStatus.textContent = '停止：古い状態変更の応答を現在画面へ反映しません。元要求は保持し、自動再送しません。'; return;
+        }
+        trashStatus.textContent = result.kind === 'completed'
+          ? result.result.kind === 'ok' ? result.result.value.kind === 'changed'
+            ? 'ゴミ箱への移動要求の成功を確認しました。現在snapshotの確認には明示再読取が必要です。'
+            : '状態変更要求は適用済みですが、メモは削除済みです。現在状態は明示再読取が必要です。'
+          : result.result.kind === 'rejected' ? result.result.reason === 'conflict'
+            ? '競合：ゴミ箱への移動は拒否されました。自動再送せず、明示再読取が必要です。'
+            : '拒否：ゴミ箱への移動は許可されませんでした。自動再送しません。'
+          : result.result.kind === 'not-attempted' ? '停止：状態変更は送信されていません。'
+          : 'UNKNOWN：ゴミ箱へ移動できたか不明です。元要求を保持して停止します。自動再送・独自照合はしません。'
+          : result.kind === 'unresolved' || result.kind === 'stale-response'
+            ? 'UNKNOWN：ゴミ箱へ移動できたか不明です。元要求を保持して停止します。自動再送・独自照合はしません。'
+            : '停止：ゴミ箱への移動を開始・完了できませんでした。';
+      } catch { if (!closed) trashStatus.textContent = 'UNKNOWN：状態変更の結果を確認できません。元要求を保持して停止し、自動再送しません。'; }
+      finally { trashRunning = false; if (!closed) refresh(); }
+    })();
+    return true;
+  }
   return Object.freeze({ refresh, dispose() {
     if (closed) return 'applied' as const;
-    if (cloudEditor?.isBusy()) return 'busy' as const;
+    if (cloudEditor?.isBusy() || trashRunning) return 'busy' as const;
+    if (trashUncertain()) return 'pending' as const;
     if (cloudEditor?.getState()?.unresolved.length) return 'pending' as const;
     if (cloud && !loading) { const result = cloud.controller.dispose(); if (result !== 'applied') return result; }
     closed = true; clearConfirmation(); email.value = password.value = '';
