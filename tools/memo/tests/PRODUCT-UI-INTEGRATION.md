@@ -218,4 +218,20 @@ AI Gateは既存fixtureの状態変更応答と確認helperを共通化し、復
 
 既存Playwright E2E 83件もPASS。product buildは製品Chromiumのセットアップで実行し、通常のAuth/cloud混入拒否を維持する。
 
-未接続：完全削除/ゴミ箱一括削除/cloudタグ変更、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04による単件完全削除のfake製品接続（別承認）。
+第7単位時点で未接続だった単件完全削除は以下の第8単位で接続する。
+
+## Q04 Step 4 第8単位：ゴミ箱内cloudメモ1件の完全削除
+
+任意注入のC04 `deletePermanently(context,id,mutation)`を使う。ゴミ箱内の現在snapshot詳細だけに「完全削除」を追加し、復元とは別の入口とする。「このメモを完全に削除します。元に戻せません。」の確認後に一度だけ実行する。キャンセル/旧確認ボタンは無送信。多段確認やタイトル・パスワード再入力は追加しない。
+
+- 正式RPCは `memo_delete_permanently(p_id uuid,p_expected_revision bigint)`。C04の既存mutationにはcreateId由来requestIdが必要だが、これはクライアント内識別用で、既存adapterはRPCへ送らない。削除要求のDB ledger/専用resolveはない（既存save台帳の削除済みredactionはSQLの責務）。UIにrequest引数・ledger・resolveを追加しない。
+- ID・expectedRevision・既存C04内部識別子を開始時に固定し、ゴミ箱状態とC03/C05/既存snapshot token/leaseを検査する。要求開始時にsnapshot全体を失効。UIで対象行を削除したり最新snapshotを推定したりしない。成功表示後も明示再読取が必要。自動load/retry/pollingは0。
+- C01の `single-rpc` 来歴付き204/空本文に対するokだけを要求成功として表示する。fixtureの来歴は合成テスト用で、実senderの認定には使わない。既存PT409の「対象不在またはrevision競合」は区別不能のconflict拒否として扱い、今回要求の成功にしない。汎用404・不正応答・unverified・通信断はUNKNOWNを保持し、「未削除」や成功とは断定しない。
+- trash/restoreと同じ要求/返却結果保持・busy・C05 unknown離脱確認を利用する。完全削除UNKNOWNでは新cloud edit/create/changeState/deleteを停止し、disposeはpending。処理中は二重送信/切替/logout/dispose/他writeを拒否する。save/resolve流用、独自照合、revision変更再送、local fallbackは行わない。
+- Auth失効/世代/別user/target/snapshot変更後の古い応答は現在成功へ反映しない。通常メモには完全削除を表示せず、古い確認ボタンを再利用しない。秘密値・内部ID・raw例外をDOM/URL/consoleへ出さない。未注入delete hostでも従来のread/edit/create/trash/restoreを維持し、通常entry/build拒否/CSP/Permitは変更しない。
+
+AI Gate：既存fixture/C03/C04/C05/Chromiumと確認helperを再利用し、削除固有15ケースを追加する。通常/ゴミ箱表示・復元との区別・不可逆確認/cancel/旧cancel・正確な2引数（requestId/action追加なし）・内部createId・204成功・競合/拒否/通信例外/404/unverified/不正本文、UNKNOWN保持/新write停止/離脱cancel、busy/二重送信/終了拒否、送信後Auth/世代/target/snapshot変更、別user/旧確認/dispose、local write/fetch0・秘密値非露出を検証する。共通token/結果分類等は既存trash/restore回帰を再利用する。
+
+AI Gate結果：typecheck、全Vitest 56ファイル/1744件（製品Chromium134件を含む）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。追加の15ケース以外も既存回帰を維持した。
+
+未接続：ゴミ箱一括削除/cloudタグ変更、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04によるゴミ箱一括削除のfake製品接続（別承認）。実通信/DB操作/cleanup/Human Gateは行わない。

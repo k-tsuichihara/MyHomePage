@@ -2,7 +2,7 @@ import { createProductLocalApp } from '../src/product-local-app';
 import { createMemoAuthSession, type MemoAuthApi, type MemoAuthState } from '../src/auth-session';
 import { isDirty } from '../src/editor-state';
 import { createPendingMigration } from '../src/migration';
-import { createCloudController, type CloudUncertainOperationResult, type CloudStateResult } from '../src/cloud-controller';
+import { createCloudController, type CloudUncertainOperationResult, type CloudStateResult, type CloudDeleteResult } from '../src/cloud-controller';
 import { createStorageTargetController } from '../src/storage-target-controller';
 import type { AuthenticatedRpcSender } from '../src/auth-session';
 import type { VoiceRecognition } from '../src/voice-input';
@@ -34,7 +34,7 @@ let releaseResolve: (() => void) | undefined;
 let releaseState: (() => void) | undefined;
 let savedArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
 let stateArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
-let stateResult: CloudUncertainOperationResult<CloudStateResult> | null = null;
+let stateResult: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult> | null = null;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
 let holdWrite = false;
 let failReads = false, failWrites = false;
@@ -62,9 +62,19 @@ const api: MemoAuthApi = {
     current = null; return { error: null }; },
   onAuthStateChange(callback) { emit = callback; return { data: { subscription: { unsubscribe: () => { calls.unsubscribe++; } } } }; },
 };
-const stateMode = mode.replace('cloud-restore', 'cloud-trash');
+const stateMode = mode.replace('cloud-restore', 'cloud-trash').replace('cloud-delete', 'cloud-trash');
 const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   rpcNames.push(rpc);
+  if (mode.startsWith('cloud-delete') && rpc === 'memo_delete_permanently') {
+    stateArgs = args;
+    if (mode === 'cloud-delete-pending') await new Promise<void>(resolve => { releaseState = resolve; });
+    if (mode === 'cloud-delete-unknown') throw new Error('synthetic-password raw-provider-token');
+    if (mode === 'cloud-delete-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: 'not found or revision conflict' } };
+    if (mode === 'cloud-delete-rejected') return { provenance: 'single-rpc', status: 403, body: { code: '42501', message: 'raw-provider-token' } };
+    if (mode === 'cloud-delete-not-found') return { provenance: 'single-rpc', status: 404, body: { code: 'P0002', message: 'raw-provider-token' } };
+    return { provenance: mode === 'cloud-delete-unverified' ? 'unverified' : 'single-rpc', status: 204,
+      body: mode === 'cloud-delete-invalid' ? { message: 'raw-provider-token' } : null };
+  }
   if (stateMode.startsWith('cloud-trash') && rpc === 'memo_change_state') {
     stateArgs = args;
     if (args.p_action !== (mode.startsWith('cloud-restore') ? 'restore' : 'trash')) throw new Error('unexpected-state-action');
@@ -115,8 +125,11 @@ const cloudPort = {
   }, async resolve(...args: Parameters<typeof cloudController.resolve>) {
     try { return await cloudController.resolve(...args); } finally { calls.resolveCompleted++; }
   } } : {}),
+  ...(mode.startsWith('cloud-delete') ? { async deletePermanently(...args: Parameters<typeof cloudController.deletePermanently>) {
+    try { const result = await cloudController.deletePermanently(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
+  } } : {}),
   ...(stateMode.startsWith('cloud-trash') ? { async changeState(...args: Parameters<typeof cloudController.changeState>) {
-    try { stateResult = await cloudController.changeState(...args); return stateResult; } finally { calls.stateCompleted++; }
+    try { const result = await cloudController.changeState(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
 };
 let notify: ((state: MemoAuthState) => void) | undefined;

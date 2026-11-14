@@ -1,5 +1,7 @@
 # Q04 実行記録（サニタイズ済み）
 
+Step 4第8単位のAI Gate：既存C04単件完全削除の製品候補UI接続をfake/offlineで検証する。不可逆確認後だけ正式RPCの2引数で送信、成功は要求単位のみでsnapshotを失効。conflict/rejected/UNKNOWN/対象不在を成功へ昇格せず、不明は保持し新cloud writeを停止。実通信/DB操作/cleanupは0、過去DB試験は再実行しない。Q04全体は進行中、single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第8単位を参照。
+
 Step 4第7単位のAI Gate：ゴミ箱内cloudメモ1件の復元を既存C04 changeStateへfake製品接続。PR #89の要求保持/離脱/busy/現在性を共有し、要求構成・操作確認・成功/競合/拒否/UNKNOWN・旧応答拒否をoffline Chromiumで検証する。成功は要求単位のみでsnapshotは失効、明示再読取を案内する。実通信/DB操作/cleanupは0。既実施DB試験は再実行せず、Q04全体進行中・single-rpc未認定を維持する。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第7単位を参照。
 
 Step 4第6単位のAI Gate：通常cloudメモ1件のゴミ箱移動を既存C04 changeStateへfake製品接続した。操作確認、要求構成、成功/競合/拒否/UNKNOWN、旧応答/二重操作拒否を製品Chromiumで確認。成功は要求単位のみ、snapshot全体を失効させ明示再読取を案内する。UNKNOWNは元要求/C04結果を保持し独自resolve・自動再送なし。実通信/DB操作/cleanupは0。第5単位までの未接続記述は履歴として保持する。Q04全体は進行中、single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)を参照。
