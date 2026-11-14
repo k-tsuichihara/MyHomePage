@@ -251,4 +251,22 @@ AI Gateは既存fixture/Chromium/C03/C04/C05を再利用して17ケース追加�
 
 AI Gate結果：typecheck、全Vitest 56ファイル/1761件（製品Chromium151件を含む）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。対象変更試験は同じcloud選択での暗黙再loadを期待せず、既存の明示local→cloud再選択を使用する。
 
-未接続：cloudタグ変更、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04によるcloudタグ単件作成/改名のfake製品接続（別承認）。
+第9単位時点で未接続だったcloudタグ作成/改名は以下の第10単位で接続する。
+
+## Q04 Step 4 第10単位：cloudタグ1件の作成/改名
+
+任意注入の既存C04 `saveTag(context,id,name,expectedRevision)`を使用する。現在有効なsnapshotの一覧から「タグを作成」、既存タグ一覧から「名前を変更」を提供する。改名では現在名を明示し、タグ名入力/作成または変更/キャンセルだけの簡単なフォームとする。追加確認・タグ削除・メモへのタグ割当変更は行わない。
+
+- 正式RPCは `memo_save_tag(p_id,p_name,p_expected_revision)`。新規は有効入力の明示送信時に既存createIdでIDを1回生成しexpectedRevision=null、改名はsnapshotのIDとrevisionを使う。どちらも開始時に要求を凍結し、requestId/ledger/専用resolveを追加しない。
+- localタグ処理でも使用する既存`normalizeTagName`を再利用する（前後空白除去、30 Unicodeコードポイント、空白のみ/禁止文字拒否、Unicode正規化なし）。localのタグフォームはlocal controllerへのdispatchと結合しているため保存処理ごと転用せず、validatorだけを共有する。UI独自validator・local保存経路への転送なし。
+- 開始/送信時に既存Auth/context/C05 owner/generation、snapshot token/leaseを確認する。改名は捕捉した既存タグのID/名前/revisionと現在snapshotを照合し、同IDの新snapshotへ自動差替えしない。cancel済み/切替後の古いフォームはDOM所属で拒否し、送信しない。
+- adapterが所有者、タグdomain、要求ID/正規化済み名前、新規revision=1/改名expectedRevision+1を検証したokだけを要求成功として表示する。snapshot全体を要求開始時に失効させ、明示再読取を案内する。楽観的タグ一覧更新・自動load/retry/pollingは0。
+- duplicateは既存constraint拒否、revision競合はconflict、権限等はrejectedとして成功にしない。通信断/unverified/不正返却等のUNKNOWNは元ID/名前/expectedRevisionとC04 uncertain operationを保持し、新しいcloud writeを停止する。未保存と断定せず、新ID作成/新revision改名の自動再送やsave/resolve流用を行わない。
+- 既存メモ操作と同じhost busy・不明保持・unknown離脱確認を共有する。送信中の二重操作/他write/切替/logout/disposeはbusy、不明のdisposeはpending。Auth失効/世代/別user/target/snapshot変更後の旧応答を現在成功へ反映しない。入力はsnapshot内の一時フォームであり、タグ専用の離脱状態機械や永続draftは作らない。
+- 内部ID・owner/token/資格情報/raw例外をDOM/URL/consoleへ出さない。タグ名は通常の利用者コンテンツとしてtextContent/input.valueだけで表示する。saveTag未注入時は従来経路を維持し、通常entry/build拒否/CSP/Permitは変更しない。
+
+AI Gateは既存fixture/Chromium/C03/C04/C05/状態操作経路を再利用しタグ固有22ケースを追加する。作成/改名の正常要求と3引数、createId回数/null・既存revision、trim、空白/31文字拒否・30コードポイント許可、cancel/旧cancel、duplicate/conflict/rejected/通信例外/unverified/返却ID・名前・revision不一致、UNKNOWN追跡/新write停止/離脱cancel、二重送信/busy、送信後Auth/世代/target/snapshot変更、別user/旧改名フォーム、同IDタグの新revision再読取後も旧フォームから自動差替えしないこと、local write/fetch0・秘密値非露出を検証する。共通契約は既存メモ操作回帰を再利用する。
+
+AI Gate結果：typecheck、全Vitest 56ファイル/1783件（製品Chromium173件を含む）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。
+
+未接続：cloudタグ削除、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04 deleteTagによるタグ単件削除のfake製品接続（別承認）。実通信/DB操作/cleanup/Human Gateは行わない。
