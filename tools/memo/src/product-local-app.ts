@@ -67,6 +67,15 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let backupOriginal = false;
   let disposeRestore: (() => void) | undefined, disposeRecovery: (() => void) | undefined;
   let disposeInitial: (() => void) | undefined;
+  let sessionUi: ReturnType<typeof mountProductSession> | undefined;
+  // 各既存controllerが持つbusy状態の変化をAuth UIにも反映する。
+  async function withSessionRefresh<T>(start: () => Promise<T>): Promise<T> {
+    try {
+      const operation = start();
+      sessionUi?.refresh();
+      return await operation;
+    } finally { sessionUi?.refresh(); }
+  }
   const normalReady = () => {
     const state = controller.getState();
     return !disposed && !upgradeBusy && state.route.kind !== 'edit' && state.read.kind === 'ready'
@@ -98,13 +107,15 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       getState: restore.getState,
       async dispatch(command) {
         if (disposed) return;
-        await restore.dispatch(command);
-        if (!disposed && restore.getState().phase === 'applied') await controller.dispatch({ kind: 'load' });
+        await withSessionRefresh(async () => {
+          await restore.dispatch(command);
+          if (!disposed && restore.getState().phase === 'applied') await controller.dispatch({ kind: 'load' });
+        });
       },
     });
     if (!disposeRecovery && views.mountRecovery) disposeRecovery = views.mountRecovery(doc, {
       getState: recovery.getState,
-      async dispatch(command) { if (!disposed) await recovery.dispatch(command); },
+      async dispatch(command) { if (!disposed) await withSessionRefresh(() => recovery.dispatch(command)); },
     }, () => { const route = controller.getState().route; return route.kind === 'detail' ? route.id : null; });
   };
   const prepareBackup = createLocalBackup({ storage: upgrade.storage, locks: deps.locks, now: deps.now });
@@ -127,10 +138,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       async dispatch(command) {
         if (disposed) return { kind: 'blocked', reason: 'disposed' };
         if ((upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()) && command.kind !== 'draft') return { kind: 'blocked', reason: 'writing' };
-        const operation = controller.dispatch(command);
-        sessionUi?.refresh();
-        const result = await operation;
-        sessionUi?.refresh();
+        const result = await withSessionRefresh(() => controller.dispatch(command));
         syncBackup();
         if (upgrade.getState() === 'legacy-changed') {
           const status = doc.getElementById('product-status');
@@ -142,7 +150,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     mountRecoveryViews();
     if (!disposeInitial && controller.getState().storageVersion === null && views.mountInitial) disposeInitial = views.mountInitial(doc, {
       getState: initial.getState,
-      async dispatch(command) { if (!disposed) await initial.dispatch(command); },
+      async dispatch(command) { if (!disposed) await withSessionRefresh(() => initial.dispatch(command)); },
     });
     if (!disposeBackup && views.mountBackup) {
       const original = controller.getState().storageVersion === 2;
@@ -158,21 +166,21 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
         const result = await controller.dispatch({ kind: 'load' });
         syncBackup();
         return result;
-      }, busy => { upgradeBusy = busy; });
+      }, busy => { upgradeBusy = busy; sessionUi?.refresh(); });
     }
     return true;
   };
 
   const migrationPort: typeof migration = {
     getState: migration.getState,
-    async inspect() { if (!disposed) await migration.inspect(); },
+    async inspect() { if (!disposed) await withSessionRefresh(() => migration.inspect()); },
     cancel(token) { if (!disposed) migration.cancel(token); },
-    async confirm(token) { if (!disposed) await migration.confirm(token); },
+    async confirm(token) { if (!disposed) await withSessionRefresh(() => migration.confirm(token)); },
   };
   views.mountMigration(doc, migrationPort, enter);
-  const sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
+  sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
     isBusy: () => disposed || upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()
-      || controller.getState().write.kind === 'writing' }) : undefined;
+      || migration.getState().kind === 'running' || controller.getState().write.kind === 'writing' }) : undefined;
   return Object.freeze({
     controller,
     migration,

@@ -1,13 +1,14 @@
 import { createProductLocalApp } from '../src/product-local-app';
 import { createMemoAuthSession, type MemoAuthApi, type MemoAuthState } from '../src/auth-session';
 import { isDirty } from '../src/editor-state';
+import { createPendingMigration } from '../src/migration';
 
 // 既存製品compositionへ合成session/Storageだけを注入。SDK/実fetchは使わない。
 const mode = (window as unknown as { fixtureMode: string }).fixtureMode;
 const id = '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
 const value = { user: { id }, access_token: 'synthetic-token-private', expires_at: 200 };
-let current: unknown = mode === 'restore' ? value : null;
+let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data' ? value : null;
 let emit!: (event: string, session: unknown) => void;
 const calls = { login: 0, logout: 0, restore: 0, unsubscribe: 0, listenerUnsubscribe: 0, dispose: 0, writes: 0, fetch: 0 };
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
@@ -38,6 +39,10 @@ const injected = { ...session,
   dispose() { calls.dispose++; session.dispose(); },
 };
 const values = new Map<string, string>();
+if (mode.startsWith('migration')) values.set('myhomepage.memo.items.v1', '[]');
+if (mode === 'migration-recover') values.set('myhomepage.memo.data.v2', JSON.stringify(createPendingMigration('[]', () => crypto.randomUUID())));
+if (mode === 'restore-data') values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 3,
+  migration: { status: 'not-required' }, memos: [], tags: [], memoTags: [], deletedMemoIds: [] }));
 const app = createProductLocalApp(document, {
   storage: { getItem: key => { if (failReads) throw new Error('fake-read-error'); return values.get(key) ?? null; },
     setItem: (key, data) => { calls.writes++; values.set(key, data); if (failWrites) throw new Error('fake-write-error'); } },
@@ -49,6 +54,7 @@ const app = createProductLocalApp(document, {
 }, undefined, mode === 'absent' ? undefined : injected);
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
+  migration: () => app.migration.getState(),
   saveTag: () => app.controller.dispatch({ kind: 'mutate', operation: {
     kind: 'save-tag', id: '00000000-0000-4000-8000-000000000020', name: '合成タグ', expectedRevision: null } }),
   reload: () => app.controller.dispatch({ kind: 'load' }),

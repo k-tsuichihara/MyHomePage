@@ -28,7 +28,7 @@ async function pageFor(mode = 'normal') {
   });
   const page = await context.newPage(); page.setDefaultTimeout(3000);
   await page.goto('https://product.test/tools/memo/memo.html');
-  await page.locator('#memo-app:not([hidden])').waitFor();
+  if (!mode.startsWith('migration')) await page.locator('#memo-app:not([hidden])').waitFor();
   return page;
 }
 const probe = (page: Page, code: string) => page.evaluate(code);
@@ -178,6 +178,69 @@ it.each(['rejected', 'unknown'])('editor外のタグ保存%sもlogout確認しca
     expect(await probe(page, 'fixture.state()')).toEqual(after);
     expect(await probe(page, 'fixture.calls.writes')).toBe(writes);
     expect(await probe(page, 'fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['migration', 'migration-recover'])('%s実行中はlogoutせず、完了後に再び操作できる', async mode => {
+  const page = await pageFor(mode);
+  try {
+    await page.locator('#migration-yes').waitFor({ state: 'visible' });
+    await page.getByText('ログイン済み', { exact: true }).waitFor();
+    await probe(page, 'fixture.holdWrite()');
+    await page.locator('#migration-yes').click();
+    await page.waitForFunction('fixture.migration().kind === "running"');
+    const logout = page.getByRole('button', { name: 'ログアウト', exact: true });
+    expect(await logout.isDisabled()).toBe(true);
+    await logout.dispatchEvent('click');
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    await probe(page, 'fixture.releaseWrite()');
+    await page.locator('#memo-app:not([hidden])').waitFor();
+    await page.waitForFunction('!document.querySelector("#product-session form button:last-child").disabled');
+    await logout.click(); await page.getByText('未ログイン', { exact: true }).waitFor();
+    expect(await probe(page, 'fixture.calls.logout')).toBe(1);
+    expect(await probe(page, 'fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['バックアップJSONを選択', '単件回復のバックアップJSON'])('%sの読取中はlogout抑止し、終了時にボタンを復帰する', async label => {
+  const page = await pageFor('restore-data');
+  try {
+    await page.getByText('ログイン済み', { exact: true }).waitFor();
+    await probe(page, 'fixture.holdWrite()');
+    const backup = { format: 'myhomepage.memo.local-backup', backupVersion: 1, sourceStorageVersion: 3,
+      exportedAt: '2026-01-01T00:00:00Z', data: { memos: [], tags: [], memoTags: [], deletedMemoIds: [] } };
+    await page.getByLabel(label, { exact: true }).setInputFiles({ name: 'fake.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    const logout = page.getByRole('button', { name: 'ログアウト', exact: true });
+    await page.waitForFunction('document.querySelector("#product-session form button:last-child").disabled');
+    await logout.dispatchEvent('click');
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    await probe(page, 'fixture.releaseWrite()');
+    await page.waitForFunction('!document.querySelector("#product-session form button:last-child").disabled');
+    expect(await probe(page, 'fixture.calls.writes')).toBe(0);
+    await logout.click(); await page.getByText('未ログイン', { exact: true }).waitFor();
+    expect(await probe(page, 'fixture.calls.logout')).toBe(1);
+    expect(await probe(page, 'fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('初期復元の診断中と確認中はlogoutせず、cancel完了時にボタンを復帰する', async () => {
+  const page = await pageFor('restore');
+  try {
+    await page.getByText('ログイン済み', { exact: true }).waitFor();
+    const backup = { format: 'myhomepage.memo.local-backup', backupVersion: 1, sourceStorageVersion: 3,
+      exportedAt: '2026-01-01T00:00:00Z', data: { memos: [], tags: [], memoTags: [], deletedMemoIds: [] } };
+    await page.getByLabel('初期復元のバックアップJSON').setInputFiles({ name: 'fake.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
+    await probe(page, 'fixture.holdWrite()');
+    await page.getByRole('button', { name: '初期復元の確認へ', exact: true }).click();
+    const logout = page.getByRole('button', { name: 'ログアウト', exact: true });
+    expect(await logout.isDisabled()).toBe(true);
+    await logout.dispatchEvent('click');
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    await probe(page, 'fixture.releaseWrite()');
+    await page.getByRole('button', { name: '初期復元をキャンセル', exact: true }).waitFor();
+    expect(await logout.isDisabled()).toBe(true);
+    await page.getByRole('button', { name: '初期復元をキャンセル', exact: true }).click();
+    expect(await logout.isDisabled()).toBe(false);
+    await logout.click(); await page.getByText('未ログイン', { exact: true }).waitFor();
+    expect(await probe(page, 'fixture.calls.logout')).toBe(1);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
   } finally { await page.context().close(); }
 });
 it('注入なしならAuth UI/初期化がなく既存local保存が動く', async () => {

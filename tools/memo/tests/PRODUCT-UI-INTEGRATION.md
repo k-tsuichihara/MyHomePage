@@ -119,4 +119,6 @@ AI Gateは既存製品候補HTMLを生成し、scriptだけを試験用注入ent
 
 P2回帰として、editorなしのタグ保存rejected/unknownの2件を追加（Chromium計13件）。両ケースでcancel後のapp全体不変、確認後reloadによる古い確認拒否、再確認続行時だけlogout、追加Storage書込/実fetchなしを確認する。
 
+追加P2では初回migrationの`running`もlogout抑止に含めた。既存controllerの状態を正本とし、移行・復元・単件回復・初期復元・通常操作の非同期開始/終了（例外終了を含む）でAuth UIを再描画する。v3更新のbusy通知でも再描画し、別の処理状態は複製しない。合成ロック待ちによる旧移行/pending復旧・追加型復元/単件回復・初期復元の診断/確認/cancelの5件を追加（Chromium計18件）し、処理中のlogout拒否と終了後のボタン復帰を確認した。実Storage・実通信は使わない。
+
 未結線：製品SDK生成・Auth専用実Storage/環境設定/通信境界、C04 controller/senderの製品操作接続、C05保存先反映、実Auth/実RPC・single-rpc。loopback＋Permit境界、SDKパッチ、製品build拒否、公開memo.htmlは変更しない。
