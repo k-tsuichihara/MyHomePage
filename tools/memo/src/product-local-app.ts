@@ -185,6 +185,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   // cloud読取結果をlocalへ流し込まず、local操作UIを止めてドラフトを保持する。
   const heldInert = new Map<HTMLElement, boolean>();
   sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
+    createId: deps.createId,
     setCloudSelected(selected) {
       for (const id of ['memo-app', 'migration-view']) {
         const node = doc.getElementById(id); if (!node) continue;
@@ -203,14 +204,16 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     controller,
     migration,
     dispose() {
-      if (disposed) return;
+      if (disposed) return 'applied' as const;
+      const result = sessionUi?.dispose();
+      if (result === 'busy' || result === 'pending') return result;
       disposed = true;
-      sessionUi?.dispose();
       disposeMemo();
       disposeBackup?.();
       disposeUpgrade?.(); upgrade.dispose();
       disposeRestore?.(); disposeRecovery?.();
       disposeInitial?.(); store.invalidateInitial();
+      return 'applied' as const;
     },
   });
 }

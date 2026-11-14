@@ -3,24 +3,26 @@ import { array, record, string, unique, uuid, uuidKey } from './read-primitives'
 import { validateMemoData } from './snapshot-validation';
 import type { LocalFailureReason } from './local-data-store';
 import type { Memo } from './types';
+import type { CloudSaveControlResult, CloudResolveControlResult, CloudSaveResult } from './cloud-controller';
 
 export interface Draft { readonly title: string; readonly body: string; readonly tagIds: readonly string[] }
-export interface SaveContext { readonly operationId: string; readonly source: 'local'; readonly sessionId: string }
+export interface SaveContext { readonly operationId: string; readonly source: 'local' | 'cloud'; readonly sessionId: string }
 export interface SaveAttempt {
   readonly context: SaveContext;
   readonly rawDraft: Draft;
   readonly request: { readonly id: string; readonly title: string; readonly body: string; readonly tagIds: readonly string[];
     readonly expectedRevision: number | null; readonly requestId: string };
 }
-type FailureReason = LocalFailureReason | 'invalid-response';
+type EditorFailureReason = LocalFailureReason | 'permission' | 'auth-unavailable' | 'communication';
+type FailureReason = EditorFailureReason | 'invalid-response';
 export type SaveStatus = { readonly kind: 'idle' } | { readonly kind: 'saving'; readonly attempt: SaveAttempt }
-  | { readonly kind: 'rejected'; readonly reason: LocalFailureReason }
+  | { readonly kind: 'rejected'; readonly reason: EditorFailureReason }
   | { readonly kind: 'unknown'; readonly reason: FailureReason; readonly attempt: SaveAttempt }
   | { readonly kind: 'saved' };
 export interface EditorState {
   readonly id: string;
   readonly sessionId: string;
-  readonly source: 'local';
+  readonly source: 'local' | 'cloud';
   readonly screen: 'edit' | 'detail';
   readonly draft: Draft;
   readonly baseline: Draft;
@@ -55,14 +57,14 @@ function equalDraft(a: Draft, b: Draft): boolean {
 export function isDirty(state: EditorState): boolean { return !equalDraft(state.draft, state.baseline); }
 
 /** 既存の通常メモまたは未保存の新規編集を開始する。保存先の読込は行わない。 */
-export function createEditor(id: string, sessionId: string, initial?: { memo: Memo; tagIds: string[] }): EditorState {
+export function createEditor(id: string, sessionId: string, initial?: { memo: Memo; tagIds: string[] }, source: 'local' | 'cloud' = 'local'): EditorState {
   let value: Draft = { title: '', body: '', tagIds: [] }, expectedRevision: number | null = null;
   if (initial) {
     const memo = validateMemoData({ memos: [initial.memo], tags: [], memoTags: [] }).memos[0]!;
     if (uuidKey(memo.id) !== uuidKey(uuid(id)) || memo.deletedAt !== null) throw new Error('Invalid editor target');
     value = { title: memo.title, body: memo.body, tagIds: tags(initial.tagIds) }; expectedRevision = memo.revision;
   }
-  return immutable({ id: uuid(id), sessionId: opaque(sessionId), source: 'local', screen: 'edit',
+  return immutable({ id: uuid(id), sessionId: opaque(sessionId), source, screen: 'edit',
     draft: draft(value), baseline: draft(value), expectedRevision, save: { kind: 'idle' },
     unresolved: [], usedRequestIds: [], usedOperationIds: [] });
 }
@@ -107,11 +109,62 @@ const reasons: readonly LocalFailureReason[] = ['invalid-input', 'request-id-reu
   'storage-failure', 'invalid-data', 'migration-required', 'recovery-required', 'snapshot-changed', 'id-exists',
   'not-found', 'trashed', 'conflict', 'revision-limit', 'invalid-tag', 'invalid-state', 'duplicate-tag', 'deleted-id', 'v3-required', 'delete-conflict', 'trash-conflict'];
 
+function matches(state: EditorState, context: SaveContext): state is EditorState & { save: Extract<SaveStatus, { kind: 'saving' }> } {
+  return state.save.kind === 'saving' && state.source === context.source && state.sessionId === context.sessionId
+    && state.save.attempt.context.operationId === context.operationId;
+}
+/** C04が検証済みの成功要求を編集baselineへ反映する。snapshotの現在値とは扱わない。 */
+function cloudSaved(state: EditorState, attempt: SaveAttempt, value: { memo: Memo; tagIds: readonly string[] }): EditorState {
+  return immutable({ ...state, baseline: draft(attempt.rawDraft), expectedRevision: value.memo.revision,
+    unresolved: state.unresolved.filter(row => row !== attempt), save: { kind: 'saved' }, screen: 'detail' });
+}
+function completeCloudSave(state: EditorState, attempt: SaveAttempt, outcome: CloudSaveResult): EditorState | null {
+  const rejected = (reason: EditorFailureReason): EditorState => immutable({ ...state,
+    unresolved: state.unresolved.filter(row => row !== attempt), save: { kind: 'rejected', reason } });
+  if (outcome.kind === 'ok') return outcome.value.kind === 'saved' ? cloudSaved(state, attempt, outcome.value.value) : rejected('not-found');
+  if (outcome.kind === 'not-attempted') return rejected('invalid-input');
+  if (outcome.kind === 'rejected') return rejected(outcome.reason === 'conflict' ? 'conflict'
+    : outcome.reason === 'permission' ? 'permission' : outcome.reason === 'not-found' ? 'not-found' : 'invalid-input');
+  return null;
+}
+/** cloud専用の結果接続。LocalSaveResultへ変換せず、C04の確定範囲だけを利用する。 */
+export function settleCloudSave(state: EditorState, context: SaveContext, result: CloudSaveControlResult, current = true): EditorState {
+  if (state.source !== 'cloud' || !matches(state, context)) return state;
+  const attempt = state.save.attempt;
+  const rejected = (reason: EditorFailureReason): EditorState => immutable({ ...state, save: { kind: 'rejected', reason } });
+  if (result.kind === 'stopped' || result.kind === 'busy') return rejected('auth-unavailable');
+  if (current && result.kind === 'completed') { const completed = completeCloudSave(state, attempt, result.result); if (completed) return completed; }
+  return markCloudSaveUnknown(state, context);
+}
+/** 元attemptへ保持したC04確定結果を、明示操作で回収する。新しいRPCや再判定は行わない。 */
+export function recoverCloudSave(state: EditorState, attempt: SaveAttempt,
+  result: Extract<CloudSaveControlResult, { kind: 'completed' }>): EditorState {
+  if (state.source !== 'cloud' || !state.unresolved.includes(attempt)) return state;
+  return completeCloudSave(state, attempt, result.result) ?? state;
+}
+/** 例外/古い応答は送信有無を推測せず不明として保持する。 */
+export function markCloudSaveUnknown(state: EditorState, context: SaveContext): EditorState {
+  if (state.source !== 'cloud' || !matches(state, context)) return state;
+  const attempt = state.save.attempt;
+  return immutable({ ...state, save: { kind: 'unknown', reason: 'communication', attempt }, unresolved: [...state.unresolved, attempt] });
+}
+/** 明示resolveの検証済み結果だけを反映。no-recordや不明は未解決を保持する。 */
+export function settleCloudResolution(state: EditorState, attempt: SaveAttempt, result: CloudResolveControlResult): EditorState {
+  if (state.source !== 'cloud' || !state.unresolved.includes(attempt) || result.kind !== 'diagnosed'
+    || result.pendingActive || result.result.kind !== 'ok') return state;
+  const outcome = result.result.value;
+  if (outcome.kind === 'saved') return cloudSaved(state, attempt, outcome.value);
+  if (outcome.kind === 'previously-applied-deleted') return immutable({ ...state,
+    unresolved: state.unresolved.filter(row => row !== attempt), save: { kind: 'rejected', reason: 'not-found' } });
+  return state;
+}
+
 /**
  * LocalSaveResultの接続境界。要求に対応しない応答は無視し、壊れた成功応答も不明とする。
  * 呼出側の例外も元例外を渡さず、unknown/unverifiedとして通知する。
  */
 export function settleSave(state: EditorState, context: SaveContext, input: unknown): EditorState {
+  if (state.source !== 'local') return state;
   if (state.save.kind !== 'saving') return state;
   const attempt = state.save.attempt;
   if (context.operationId !== attempt.context.operationId || context.source !== state.source

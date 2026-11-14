@@ -40,6 +40,208 @@ async function login(page: Page) {
 async function selectCloud(page: Page) {
   await page.getByRole('button', { name: 'クラウドを選択', exact: true }).click();
 }
+async function editCloud(page: Page) {
+  await selectCloud(page);
+  await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+  await page.getByRole('button', { name: 'このクラウドメモを編集', exact: true }).click();
+  await page.getByLabel('クラウドのタイトル', { exact: true }).fill('変更したクラウドタイトル');
+  await page.getByLabel('クラウドの本文', { exact: true }).fill('変更したクラウド本文');
+}
+async function returnCloud(page: Page) {
+  await selectCloud(page);
+  const confirm = page.getByRole('button', { name: '確認して保存先を変更', exact: true });
+  if (await confirm.isVisible()) await confirm.click();
+  await page.getByLabel('クラウドのタイトル', { exact: true }).waitFor();
+}
+it.each(['cloud-edit-pending', 'cloud-edit-pending-conflict'])('stale targetの%s完了結果を保持し、再選択後の明示回収で未解決を解消する', async mode => {
+  const page = await pageFor(mode);
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 2');
+    await probe(page, 'fixture.forceLocal(); fixture.releaseSave()');
+    await page.waitForFunction('fixture.calls.saveCompleted === 1');
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    await returnCloud(page);
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
+    expect(await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).isEnabled()).toBe(true);
+    const calls = await probe(page, 'fixture.rpcNames.slice()');
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    await page.getByText(mode.endsWith('conflict') ? /競合：保存は拒否/ : /保存要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(calls);
+    expect(await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).isEnabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).isDisabled()).toBe(true);
+    if (mode.endsWith('conflict')) expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await probe(page, 'fixture.dispose()')).toBe('applied');
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['cloud-edit-resolve-pending', 'cloud-edit-resolve-pending-deleted'])('stale targetの%s終端結果を保持し、閉鎖済みhandleへ再送せず回収する', async mode => {
+  const page = await pageFor(mode);
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存できたか不明/).waitFor();
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 3');
+    await probe(page, 'fixture.forceLocal(); fixture.releaseResolve()');
+    await page.waitForFunction('fixture.calls.resolveCompleted === 1');
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    await returnCloud(page);
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).isEnabled()).toBe(true);
+    const calls = await probe(page, 'fixture.rpcNames.slice()');
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    await page.getByText(mode.endsWith('deleted') ? /メモは削除済み/ : /保存要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(calls);
+    expect(await probe(page, 'fixture.rpcNames.filter(name => name === "memo_resolve_request").length')).toBe(1);
+    if (mode.endsWith('deleted')) expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await probe(page, 'fixture.dispose()')).toBe('applied');
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('cloud既存1件を編集/保存し、localへ書かず要求の成功だけを表示する', async () => {
+  const page = await pageFor('cloud-edit-success'); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    const local = await probe(page, 'fixture.state()');
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.savedArgs().p_expected_revision')).toBe(1);
+    expect(await probe(page, 'fixture.savedArgs().p_title')).toBe('変更したクラウドタイトル');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await probe(page, 'fixture.state()')).toEqual(local);
+    expect(await page.locator('#product-cloud-snapshot').isHidden()).toBe(true);
+    const output = (await page.locator('body').innerHTML()) + JSON.stringify(logs) + page.url();
+    for (const secret of ['synthetic-password', 'synthetic-token-private', 'synthetic-email@example.invalid', 'raw-provider-token']) expect(output).not.toContain(secret);
+    const request = await probe(page, 'fixture.savedArgs().p_request_id'); expect(output).not.toContain(request);
+    expect(output).not.toMatch(/00000000-0000-4000-8000-000000000(?:002|101|102|103)/);
+  } finally { await page.context().close(); }
+});
+it.each(['conflict', 'rejected', 'unknown'])('cloud save %sは成功扱いせず編集を保持し、自動再送しない', async outcome => {
+  const page = await pageFor(`cloud-edit-${outcome}`); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.locator('#product-cloud-editor').getByText(outcome === 'unknown' ? /保存できたか不明/ : outcome === 'conflict' ? /競合/ : /保存は拒否/).waitFor();
+    expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('変更したクラウドタイトル');
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + JSON.stringify(logs) + page.url();
+    for (const secret of ['synthetic-password', 'synthetic-token-private', 'synthetic-email@example.invalid', 'raw-provider-token']) expect(output).not.toContain(secret);
+    expect(output).not.toContain(await probe(page, 'fixture.savedArgs().p_request_id'));
+    if (outcome === 'unknown') {
+      expect(await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).isDisabled()).toBe(true);
+      expect(await probe(page, 'fixture.dispose()')).toBe('pending');
+      expect(await page.locator('#product-session').count()).toBe(1);
+    }
+  } finally { await page.context().close(); }
+});
+it.each(['unknown', 'no-record', 'deleted'])('結果不明後の明示resolve %sを元要求に結び付けて扱う', async outcome => {
+  const page = await pageFor(`cloud-edit-${outcome}`);
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存できたか不明/).waitFor();
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    if (outcome === 'unknown') await page.getByText(/保存要求の成功を確認/).waitFor();
+    if (outcome === 'no-record') await page.getByText(/未実行の証明ではありません/).waitFor();
+    if (outcome === 'deleted') await page.locator('#product-cloud-editor').getByText(/メモは削除済み/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save', 'memo_resolve_request']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    if (outcome !== 'unknown') expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('save中は二重save/保存先変更/logout/disposeを拒否し、追加編集を成功応答で消さない', async () => {
+  const page = await pageFor('cloud-edit-pending');
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 2');
+    await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).dispatchEvent('click');
+    expect(await probe(page, 'fixture.dispose()')).toBe('busy');
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('送信後の追加編集');
+    await probe(page, 'fixture.releaseSave()');
+    await page.getByText(/追加の未保存変更があります/).waitFor();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('送信後の追加編集');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['expired', 'generation', 'target'])('save中の%s変更で旧成功応答を現在の保存成功にしない', async change => {
+  const page = await pageFor('cloud-edit-pending');
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 2');
+    if (change === 'expired') await probe(page, 'fixture.expired()');
+    if (change === 'generation') await probe(page, 'fixture.refreshAuth()');
+    if (change === 'target') await probe(page, 'fixture.forceLocal()');
+    await probe(page, 'fixture.releaseSave()');
+    await page.waitForFunction('fixture.calls.saveCompleted === 1');
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('古いsnapshotの編集ボタンから編集を開始できず、ゴミ箱メモには編集を提供しない', async () => {
+  const page = await pageFor('cloud-edit-success');
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
+    expect(await page.getByRole('button', { name: 'このクラウドメモを編集', exact: true }).count()).toBe(0);
+    await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+    await page.getByRole('button', { name: 'このクラウドメモを編集', exact: true }).evaluate(node => Object.assign(window, { oldEditButton: node }));
+    await probe(page, 'fixture.refreshAuth()'); await page.getByText(/認証が更新されました/).waitFor();
+    await probe(page, 'window.oldEditButton.click()');
+    expect(await page.locator('#product-cloud-editor').isHidden()).toBe(true);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
+it('cloud dirty logoutのcancelはdraftとtargetを保持し、確認後の編集は古い確認を失効させる', async () => {
+  const page = await pageFor('cloud-edit-success');
+  try {
+    await editCloud(page);
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await page.getByRole('button', { name: 'ログアウトをキャンセル', exact: true }).click();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('確認後のcloud編集');
+    await page.getByRole('button', { name: '確認してログアウト', exact: true }).click();
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
+it('UNKNOWNのdraftは同一user再認証後も保持し、明示resolveだけで元要求を照合する', async () => {
+  const page = await pageFor('cloud-edit-unknown');
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存できたか不明/).waitFor();
+    await probe(page, 'fixture.refreshAuth()'); await page.getByText(/認証が更新されました/).waitFor();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    await page.getByText(/保存要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save', 'memo_resolve_request']);
+  } finally { await page.context().close(); }
+});
+it('実際にdisposeした後は取り外された編集/saveボタンから通信・UIを再開しない', async () => {
+  const page = await pageFor('cloud-edit-success');
+  try {
+    await editCloud(page);
+    await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).evaluate(node => Object.assign(window, { oldSaveButton: node }));
+    expect(await probe(page, 'fixture.dispose()')).toBe('applied');
+    await probe(page, 'window.oldSaveButton.click()');
+    expect(await page.locator('#product-session').count()).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('検証済みsnapshotだけを一覧/詳細/タグとして安全に読み、local draftや保存領域へ流し込まない', async () => {
   const page = await pageFor('cloud-snapshot'); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));

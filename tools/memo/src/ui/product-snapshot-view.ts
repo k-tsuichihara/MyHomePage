@@ -1,8 +1,9 @@
-import type { MemoData } from '../types';
+import type { MemoData, Memo } from '../types';
 import { uuidKey } from '../read-primitives';
 
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
-export function mountProductSnapshot(doc: Document, parent: HTMLElement) {
+export function mountProductSnapshot(doc: Document, parent: HTMLElement,
+  edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
@@ -29,6 +30,12 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement) {
       text('p', memo.deletedAt ? 'ゴミ箱内のメモ（読取専用）' : '通常メモ（読取専用）'),
       text('p', tags.length ? `タグ：${tags.join('、')}` : 'タグなし'),
       button('クラウド一覧へ戻る', () => list(token)));
+    if (edit && memo.deletedAt === null) root.append(button('このクラウドメモを編集', () => {
+      const latest = current(token), selected = latest?.memos[index]; if (!latest || !selected) return;
+      const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
+      const valid = active!.valid;
+      if (edit(selected, tagIds, valid)) clear();
+    }));
   };
   const list = (token: object) => {
     const value = current(token); if (!value) return;
