@@ -189,4 +189,18 @@ save/resolve注入済みのhostだけに「クラウドに新規メモ」を提�
 
 AI Gateは既存fixture/Chromiumケースを既存編集・新規で共通化し、24ケースを追加（計90件）。createIdの呼出しと固定UUID/expectedRevision=null/tagIds=[]、入力整形、保存成功、conflict/rejected/UNKNOWN、元要求の明示resolve/no-record/削除済みreceipt、二重送信/離脱・dispose抑止、dirty確認、Auth/target変更後の旧応答、stale確定結果回収、同一user再認証と別user拒否、dispose後旧操作、秘密値非露出を確認する。新規作成の追加ケースではlocal write/fetch0、RPCは明示load/save/resolveだけ。fixtureの単件save応答を新規expectedRevision=nullにも対応させ、C01/C04の検証をそのまま通す。
 
-未接続：cloud状態変更/削除/復元/タグ変更/一括操作、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04 changeStateによる単件状態変更のfake製品接続（別承認範囲）。実環境操作/Human Gateへは進まない。
+第5単位時点では状態変更は未接続。第6単位は以下を参照。実環境操作/Human Gateへは進まない。
+
+## Q04 Step 4 第6単位：通常cloudメモ1件のゴミ箱移動
+
+changeStateと既存createIdを注入したhostだけ、現在有効なsnapshotの通常メモ詳細へ「ゴミ箱へ移動」を提供する。既存の操作確認方針に合わせ確認/キャンセルを経由し、確認時もsnapshot token/leaseを再検査する。ゴミ箱メモには提供しない。
+
+- C03 context/C05 generation・owner・選択と既存snapshot現在性を再利用する。memo ID、expectedRevision、createId由来requestIdを開始時に固定し、正式action `trash` で既存C04 changeStateへ一度だけ渡す。Auth・競合・結果分類はC04/C01を正本とし、別のrevision/競合/retry判定を作らない。
+- 開始時にsnapshot全体を失効させる。対象行だけの楽観削除/書換えはしない。成功は状態変更要求の成功だけであり、現在値には明示再読取が必要と案内する。自動load/retry/pollingは0。削除済みreceiptを現在の移動成功にしない。
+- conflict/rejectedは成功にしない。C04のunresolved/stale-response等は元要求と返却結果を保持する。専用resolveは存在しないためsave/resolveを流用せず、UNKNOWNとして停止する。不明を未実行と解釈しない。不明保持中は新たなcloud編集/作成/状態変更を開始しない。明示保存先変更/logoutは既存C05のunknown離脱確認へ委譲する。自動fallbackなし。タブ寿命を超える保持は保証しない。
+- 処理中は既存host busyに含め、二重操作・保存先変更/logout/disposeを拒否する。不明保持中のdisposeはpending。Auth失効/世代変更/別user/保存先変更/失効snapshotの旧応答は現在成功へ反映しない。操作確認の古いボタンもsnapshot token/leaseで拒否する。
+- local controller/Storageへcloudデータを渡さない。内部memo ID/revision/requestId/owner・raw例外はDOM/URL/ログへ出さない。未注入hostは既存read/edit/create/local-onlyを維持する。通常entry/build拒否/CSP/Permitは変更しない。
+
+AI Gate：既存C03/C04/C05・合成sender・生成製品HTMLを共有するChromiumに19ケース追加（計109件）。確認/キャンセル、要求構成、changeState単独注入、成功/競合/拒否/通信例外/unverified/不正応答/削除済みreceipt、二重操作とbusy終了拒否、Auth/世代/target/snapshot変更後の旧応答、別userを含む古い確認ボタン、秘密値非露出/local write/fetch0を確認する。全Vitest 56ファイル/1719件、typecheck、diff検査PASS。
+
+未接続：cloud復元/完全削除/タグ変更/一括操作、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存changeStateによる単件復元のfake製品接続（別承認）。実通信/Human Gate/cleanupは行わない。
