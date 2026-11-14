@@ -1,5 +1,7 @@
 # メモツール v1.1.0 リリース進捗管理
 
+Q04/C03〜C05のrepository準備：同じproduct-entryから実SDK/session→既存authenticated sender/C04/C05→製品UIを組み立てるcloud候補buildを追加。通常local/保守buildの拒否境界は維持し、実行時key入力・専用Auth Storage・既存SDK patch・固定dev origin/8RPC境界を使用する。生成HTMLから実SDK＋合成HTTPをAI検証し、実Supabase/Auth/RPC/DB/SQL通信は0。**repository側の実製品接続準備はAI完了候補、機能未結線B=0を維持**。実受入/response provenance/single-rpc/C03〜C05/Q04全体/R03/Q05/R04/R05は未完了。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)冒頭を現在の正本とし、以下のlocal-only記述は通常build/各時点の履歴と区別する。
+
 Q04 Step 4 D05：login/restoreのapplied＋有効なC03 contextを既存C05 requestDeparture/request/confirmへ接続。dirty/UNKNOWN確認cancel保持・accept時だけcloud移行、起動local初期化との順序、古い認証完了の拒否をfake製品検証する。**Review8既知fake/offline未結線B=0、製品接続フェーズ完了候補**。C03〜C05/Q04全体は進行中、通常product entryはlocal-only、実接続/実環境受入・single-rpcは未完了。実通信/DB操作/cleanupなし。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)D05最終棚卸しが現在の正本で、以下のB件数は履歴。
 
 Q04 Step 4 B3：既存voice-input/音声UIをcloud新規・既存・複製editorへ共有接続。日本語/本文追記/同一clockタイトル/上限拒否/手動保存・失効後の旧結果遮断をfake検証する。音声はAI完了候補。ただし最終棚卸しでReview8 §1.1 D05のlogin成功/session復元後cloud選択がhostへ未結線と判明したため、**B=1、fake/offlineフェーズは閉じない**。次候補は既存C05離脱経路への配線で、今回未着手。C03〜C05/Q04全体は進行中、実製品接続/受入・single-rpc未完了。実通信/DB操作/cleanupは0。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)B3最終棚卸しを正本とし、以下の残件数は履歴として区別する。

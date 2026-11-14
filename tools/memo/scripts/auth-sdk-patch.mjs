@@ -64,7 +64,7 @@ export function requireArtifact(manifest, code) {
   if (!manifest || JSON.stringify(manifest) !== JSON.stringify(artifactManifest(code))) fail();
 }
 /** すべての検査後だけ出力する。元SDKの書換え・別形式への自動パッチはしない。 */
-export async function buildAuthBrowser({ root, entryPoint, outfile, write = true }) {
+export async function buildAuthBrowser({ root, entryPoint, outfile, write = true, define = {} }) {
   // 前回のJSは診断用に残すが、新しい試行が失敗した後は起動検証を通さない。
   if (write) {
     try { await unlink(`${outfile}.patch.json`); }
@@ -73,7 +73,7 @@ export async function buildAuthBrowser({ root, entryPoint, outfile, write = true
   const installed = await inspectInstalledSdk(root);
   let count = 0;
   const result = await build({ absWorkingDir: installed.root, entryPoints: [entryPoint], outfile, write: false,
-    bundle: true, platform: 'browser', format: 'esm', target: 'es2022', metafile: true,
+    bundle: true, platform: 'browser', format: 'esm', target: 'es2022', metafile: true, define,
     plugins: [{ name: PATCH_ID, setup(builder) {
       builder.onLoad({ filter: /[\\/]@supabase[\\/]auth-js[\\/].*[\\/]locks\.[cm]?js$/ }, async args => {
         const contents = patchLocksSource(await checkedFile(args.path), args.path, installed.target);
@@ -92,7 +92,7 @@ export async function buildAuthBrowser({ root, entryPoint, outfile, write = true
     await writeFile(outfile, code);
     await writeFile(`${outfile}.patch.json`, JSON.stringify(manifest));
   }
-  return { code, manifest };
+  return { code, manifest, metafile: result.metafile };
 }
 /** 現在の固定SDK・パッチ記録と成果物の一致を、ブラウザ起動前に確認する。ソースの鮮度証明ではない。 */
 export async function verifyAuthArtifact(root, outfile) {

@@ -1,5 +1,33 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## 通常product entryの実SDK/Auth/RPC composition準備（現在状態）
+
+fake/offlineの機能未結線B=0を維持し、既存product-entryから実製品用compositionを選べるrepository準備を追加する。通常local/保守buildは従来のAuth/cloud混入拒否を維持する。`npm run build:product-cloud`だけが同じentryをcloud候補モードでbuildし、`.product/cloud/site/tools/memo/memo.html`へ未公開成果物を生成する。公開memo.html・Pages設定は変更しない。
+
+- `product-cloud-app.ts`は既存製品page/secure/top-level境界を再利用し、`createMemoSdkAuth`→同一sessionの`createCloudController`→既存C05→`createProductLocalApp`を組み立てる。sessionのdisposeはSDK所有者のdisposeへ接続する。新Auth/RPC/状態機械は作らない。
+- AuthとRPCのoriginは既存`MEMO_RPC_ORIGIN`だけ。設定入力はdev-sandbox用publishable keyのみで任意URLを受け取らず、値をソース・bundle・manifest・URL・ログへ書かない。setup入力欄はpassword型、開始時に空にし成功後DOMから除去する。必要なSDK内部参照の完全メモリ消去は保証しない。
+- 設定開始前はSDK生成/Storage読書/アプリAuth/RPC0。開始操作でSDK/sessionを生成し、保存済み認証の復元通信が発生し得る。ページ内の明示境界であり、buildやpreview起動は実行承認ではない。メール/passwordは既存Auth UIへその場入力し、既存の参照非保持契約を使う。
+- Auth Storageは既存createMemoSessionStorageの専用キーだけ。localデータ用Storageアダプターと分離し、tokenの通常Auth永続化以外の保存・観測を追加しない。SDKのimport時debug probeは既存の版/SHA/1箇所検証付きauth-sdk-patchを再利用し、node_modules原本は変更しない。patch検証はDB監査の再実施ではない。
+- native fetchは既存SDK allowlistと8RPC senderへだけ必須注入する。Auth path/POST/GET、8RPCキー集合、origin/path/POST/redirect:error/期限・現在世代検証は既存C03/C04を再利用する。cloud候補HTMLのconnect-srcだけをtrusted originに限定し、通常local/保守版のCSPは広げない。
+- D05のlogin/restore後cloud選択、logout→local、失効/dirty/UNKNOWN/離脱/遅い応答は既存製品UIのまま。C04の生session/contextを別に作らず、同じ発行元を渡す。同期・転送・local fallback・独自retryなし。
+- **実senderは引き続きunverified**。HTTP200/正常JSONや合成HTTPを成功へ昇格せず、C01/C04はUNKNOWN/停止を返す。今回の受入候補でsnapshot本文表示・write成功を約束しない。response provenance/single-rpcの認定は別工程・別承認。
+
+### 起動方法（後続の承認後だけ使用）
+
+`tools/memo`で`npm run preview:product-cloud`。既存の所有profile/lifecycleを再利用し、専用のheaded Chromiumで`https://memo-product.localhost/tools/memo/memo.html`を開く。HTTPSの製品URLへ生成済み資産をroute.fulfillし、証明書/公開サーバー/Pagesの変更をしない。外部通信はtrusted Supabase origin以外を拒否し、Auth/RPCのpath判定は既存境界が行う。Human Gate専用runner/Permitは使用・変更しない。旧Chromiumネットワーク問題も再調査しない。
+
+起動・キー入力だけではAuth/RPC0。「承認済みクラウド接続を開始」が復元を開始し得る最初の操作。新規専用profileは空なので、その後既存UIへ合成テストユーザーのemail/passwordを入力してloginする。D05によりcloud選択→既存loadに進む。ここまでの実操作・実キー投入・実Authは今回未実施。previewのheaded起動自体も未実施で、生成entryのheadless/fake試験と区別する。
+
+profileは既存owner検証付き終了処理で管理し、raw console/trace/スクリーンショット/資格情報は採取しない。profileにSDK Auth専用キーが保存され得るが、Git/公開/build成果物ではない。保存先/所有検査は既存基盤を再利用する。
+
+### AI Gateと残る受入
+
+生成HTML/SRI/CSP→通常product entry→実SDK（HTTPだけ合成）→C03/C04/C05→製品UIをChromiumで検証する。未認証RPC0、login/restoreとD05、logout、遅い応答の世代拒否、pagehide/dispose/旧DOM、秘密非露出、unverified維持と設定前Storage0を追加確認。8RPC正式引数/未知RPC拒否・user/context・dispose/unsubscribeの詳細は既存sender/C03/C04試験を再利用する。実Supabase/Auth/RPC/DB/SQL通信0。
+
+最終AI Gate：typecheck、全Vitest 57ファイル/1907件、新規composition/生成entry10件（Chromium6件＋境界/成果物4件）、既存Playwright E2E83件、SDK patch回帰23件、local/保守build、cloud候補build、git diff --checkはPASS。最初の全回帰は長時間実行のため中断し、詳細出力で全件を再実行して上記PASS・終了コード0を確認した。headed previewのbuild/静的確認と、実SDK＋fake HTTPのheadless実行を区別する。
+
+repository準備はAI完了候補で、B=0を維持。C03/C04/C05/Q04全体、実製品経路/refresh/再読込保持/実ブラウザ通信/実RLSの受入、response provenance、single-rpc、R03/Q05/R04/R05は未完了。次の最小承認候補はdev-sandbox・合成ユーザーによる設定開始→login/restore→自動loadの限定受入。送信上限・停止条件と実操作の承認は別途具体化し、write/cleanupや過去PASS済みDB監査を再実施しない。SDK/実経路の挙動はfake証拠で認定しない。
+
 ## Q04 Step 4 D05：認証後の保存先選択と最終棚卸し（現在状態）
 
 Review8 §1.1に従い、`product-session-ui.run('login'|'restore')`の`applied`と有効なC03 contextを、既存`requestDeparture('cloud')`へ接続する。C05の`request/confirm`、既存`departure/leaveDecision/onProceed/onCancel`、`applyTarget/readCloud`を使い、dirty/UNKNOWN判定・確認UI・保存先状態機械・RPCを追加しない。
