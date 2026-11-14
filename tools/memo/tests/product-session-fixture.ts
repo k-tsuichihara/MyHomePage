@@ -2,7 +2,7 @@ import { createProductLocalApp } from '../src/product-local-app';
 import { createMemoAuthSession, type MemoAuthApi, type MemoAuthState } from '../src/auth-session';
 import { isDirty } from '../src/editor-state';
 import { createPendingMigration } from '../src/migration';
-import { createCloudController, type CloudUncertainOperationResult, type CloudStateResult, type CloudDeleteResult, type CloudEmptyTrashResult, type CloudSaveTagResult } from '../src/cloud-controller';
+import { createCloudController, type CloudUncertainOperationResult, type CloudStateResult, type CloudDeleteResult, type CloudEmptyTrashResult, type CloudSaveTagResult, type CloudDeleteTagResult } from '../src/cloud-controller';
 import { createStorageTargetController } from '../src/storage-target-controller';
 import type { AuthenticatedRpcSender } from '../src/auth-session';
 import type { VoiceRecognition } from '../src/voice-input';
@@ -34,12 +34,13 @@ let releaseResolve: (() => void) | undefined;
 let releaseState: (() => void) | undefined;
 let savedArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
 let stateArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
-let stateResult: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult | CloudEmptyTrashResult | CloudSaveTagResult> | null = null;
+let stateResult: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult | CloudEmptyTrashResult | CloudSaveTagResult | CloudDeleteTagResult> | null = null;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
 let holdWrite = false;
 let failReads = false, failWrites = false;
 let snapshotMode: 'success' | 'failure' | 'unverified' | 'permission' | 'invalid' = 'success';
-let changedTrashSet = false, changedTag = false;
+let changedTrashSet = false;
+let changedTag: false | 'both' | 'name' | 'revision' = false;
 const snapshot = () => {
   const memoId = '00000000-0000-4000-8000-000000000101', tagId = '00000000-0000-4000-8000-000000000103';
   const memo = { id: memoId, user_id: value.user.id, title: 'クラウドの合成メモ', body: '<b>読取専用の本文</b>',
@@ -52,7 +53,7 @@ const snapshot = () => {
     if (mode === 'cloud-empty-zero' || changedTrashSet) result.memos = [memo];
     else result.memos.push({ ...memo, id: '00000000-0000-4000-8000-000000000104', title: 'second trash', deleted_at: '2026-11-14T00:00:00Z', revision: 3 });
   }
-  if (changedTag) result.tags[0] = { ...result.tags[0]!, name: 'changed tag', revision: 2 };
+  if (changedTag) result.tags[0] = { ...result.tags[0]!, name: changedTag === 'revision' ? result.tags[0]!.name : 'changed tag', revision: changedTag === 'name' ? result.tags[0]!.revision : 2 };
   return result;
 };
 const api: MemoAuthApi = {
@@ -72,6 +73,15 @@ const api: MemoAuthApi = {
 const stateMode = mode.replace('cloud-restore', 'cloud-trash').replace('cloud-delete', 'cloud-trash').replace('cloud-empty', 'cloud-trash').replace('cloud-tag', 'cloud-trash');
 const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   rpcNames.push(rpc);
+  if (mode.startsWith('cloud-tag-delete') && rpc === 'memo_delete_tag') {
+    stateArgs = args;
+    if (mode === 'cloud-tag-delete-pending') await new Promise<void>(resolve => { releaseState = resolve; });
+    if (mode === 'cloud-tag-delete-unknown') throw new Error('synthetic-password raw-provider-token');
+    if (mode === 'cloud-tag-delete-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: 'tag revision conflict' } };
+    if (mode === 'cloud-tag-delete-rejected') return { provenance: 'single-rpc', status: 403, body: { code: '42501', message: 'raw-provider-token' } };
+    return { provenance: mode === 'cloud-tag-delete-unverified' ? 'unverified' : 'single-rpc', status: 204,
+      body: mode === 'cloud-tag-delete-invalid' ? { message: 'raw-provider-token' } : null };
+  }
   if (mode.startsWith('cloud-tag') && rpc === 'memo_save_tag') {
     stateArgs = args;
     if (mode === 'cloud-tag-pending') await new Promise<void>(resolve => { releaseState = resolve; });
@@ -155,6 +165,9 @@ const cloudPort = {
   }, async resolve(...args: Parameters<typeof cloudController.resolve>) {
     try { return await cloudController.resolve(...args); } finally { calls.resolveCompleted++; }
   } } : {}),
+  ...(mode.startsWith('cloud-tag-delete') ? { async deleteTag(...args: Parameters<typeof cloudController.deleteTag>) {
+    try { const result = await cloudController.deleteTag(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
+  } } : {}),
   ...(mode.startsWith('cloud-tag') ? { async saveTag(...args: Parameters<typeof cloudController.saveTag>) {
     try { const result = await cloudController.saveTag(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
@@ -195,7 +208,7 @@ const app = createProductLocalApp(document, {
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
-  generatedIds, changeTag: () => { changedTag = true; }, changeTrashSet: () => { changedTrashSet = true; },
+  generatedIds, changeTag: (kind: 'both' | 'name' | 'revision' = 'both') => { changedTag = kind; }, changeTrashSet: () => { changedTrashSet = true; },
   stateArgs: () => stateArgs, stateResult: () => stateResult, releaseState: () => releaseState?.(),
   invalidateSnapshot: () => targets.setDirty(false),
   differentUser: () => { value.user.id = '00000000-0000-4000-8000-000000000999'; },

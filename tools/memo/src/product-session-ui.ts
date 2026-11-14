@@ -3,7 +3,7 @@ import type { LocalAppState } from './local-app-state';
 import { appDepartureReason, requestNavigation, confirmNavigation } from './navigation-state';
 import type { LeaveConfirmation } from './navigation-state';
 import type { createStorageTargetController, StorageTarget, StorageTargetDecision, StorageLeaveDecision } from './storage-target-controller';
-import type { createCloudController, CloudUncertainOperationResult, CloudStateResult, CloudDeleteResult, CloudEmptyTrashResult, CloudSaveTagResult } from './cloud-controller';
+import type { createCloudController, CloudUncertainOperationResult, CloudStateResult, CloudDeleteResult, CloudEmptyTrashResult, CloudSaveTagResult, CloudDeleteTagResult } from './cloud-controller';
 import type { CloudTarget } from './cloud-rpc-types';
 import type { AuthContext } from './auth-session';
 import type { Memo, Tag } from './types';
@@ -24,7 +24,7 @@ export type ProductSessionPort = Pick<ReturnType<typeof createMemoAuthSession>,
 export interface ProductCloudHost {
   readonly target: ReturnType<typeof createStorageTargetController>;
   readonly controller: Pick<ReturnType<typeof createCloudController>, 'load' | 'dispose'>
-    & Partial<Pick<ReturnType<typeof createCloudController>, 'save' | 'resolve' | 'changeState' | 'deletePermanently' | 'emptyTrash' | 'saveTag'>>;
+    & Partial<Pick<ReturnType<typeof createCloudController>, 'save' | 'resolve' | 'changeState' | 'deletePermanently' | 'emptyTrash' | 'saveTag' | 'deleteTag'>>;
 }
 
 const phases: Record<MemoAuthState['phase'], string> = {
@@ -59,7 +59,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const cloudStatus = doc.createElement('p'); cloudStatus.id = 'product-cloud-state'; cloudStatus.setAttribute('role', 'status');
   if (cloud) root.append(chooseLocal, chooseCloud, cloudStatus);
   const stateStatus = doc.createElement('p'); stateStatus.id = 'product-cloud-trash-state'; stateStatus.setAttribute('role', 'status');
-  if (cloud?.controller.changeState || cloud?.controller.deletePermanently || cloud?.controller.emptyTrash || cloud?.controller.saveTag) root.append(stateStatus);
+  if (cloud?.controller.changeState || cloud?.controller.deletePermanently || cloud?.controller.emptyTrash || cloud?.controller.saveTag || cloud?.controller.deleteTag) root.append(stateStatus);
   const feedback = doc.createElement('p'); feedback.setAttribute('role', 'status');
   const confirmation = doc.createElement('div'); confirmation.hidden = true;
   confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'ログアウトの離脱確認');
@@ -75,15 +75,17 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     cloud.controller.deletePermanently && local.createId ? (memo, valid) => startStateChange(memo, 'delete-permanently', valid) : undefined,
     cloud.controller.emptyTrash && local.createId ? startEmptyTrash : undefined,
     cloud.controller.saveTag && local.createId ? { canStart: () => !closed && !unavailable && !busy && !pending && !isBusy()
-      && !loading && !stateUncertain() && !cloudEditor?.getState() && !!cloudContext(), save: startSaveTag } : undefined) : undefined;
+      && !loading && !stateUncertain() && !cloudEditor?.getState() && !!cloudContext(), save: startSaveTag } : undefined,
+    cloud.controller.deleteTag ? startDeleteTag : undefined) : undefined;
   const anchor = doc.getElementById('product-status');
   if (anchor) anchor.after(root); else doc.body.prepend(root);
   let closed = false, busy = false, generation = -1, unavailable = false;
   // 不明操作はC04の返却結果ごと保持する。UI独自の再送・照合状態には変換しない。
   type StateChangeRecord = { readonly request: Readonly<{ context: AuthContext; id: string; expectedRevision: number; requestId: string; action: 'trash' | 'restore' | 'delete-permanently' }>
     | Readonly<{ context: AuthContext; targets: readonly Readonly<CloudTarget>[]; requestId: string; action: 'empty-trash' }>
-    | Readonly<{ context: AuthContext; id: string; name: string; expectedRevision: number | null; action: 'save-tag' }>;
-    result: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult | CloudEmptyTrashResult | CloudSaveTagResult> | null };
+    | Readonly<{ context: AuthContext; id: string; name: string; expectedRevision: number | null; action: 'save-tag' }>
+    | Readonly<{ context: AuthContext; id: string; name: string; expectedRevision: number; action: 'delete-tag' }>;
+    result: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult | CloudEmptyTrashResult | CloudSaveTagResult | CloudDeleteTagResult> | null };
   let stateRecord: StateChangeRecord | null = null, stateRunning = false;
   const stateUncertain = () => !!stateRecord && (!stateRecord.result || stateRecord.result.kind === 'unresolved'
     || stateRecord.result.kind === 'stale-response' || (stateRecord.result.kind === 'completed'
@@ -125,8 +127,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const selected = cloud.target.current().target === 'cloud';
     local.setCloudSelected?.(selected);
     source.textContent = selected ? cloudEditor
-      ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ゴミ箱移動・復元' : ''}${cloud.controller.deletePermanently ? '・完全削除' : ''}${cloud.controller.emptyTrash ? '・ゴミ箱一括削除' : ''}${cloud.controller.saveTag ? '・タグ作成/改名' : ''}）`
-      : cloud.controller.changeState || cloud.controller.deletePermanently || cloud.controller.emptyTrash || cloud.controller.saveTag ? '保存先：クラウド（閲覧・注入済み操作）' : '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
+      ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ゴミ箱移動・復元' : ''}${cloud.controller.deletePermanently ? '・完全削除' : ''}${cloud.controller.emptyTrash ? '・ゴミ箱一括削除' : ''}${cloud.controller.saveTag ? '・タグ作成/改名' : ''}${cloud.controller.deleteTag ? '・タグ削除' : ''}）`
+      : cloud.controller.changeState || cloud.controller.deletePermanently || cloud.controller.emptyTrash || cloud.controller.saveTag || cloud.controller.deleteTag ? '保存先：クラウド（閲覧・注入済み操作）' : '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
     if (selected && (!value || uuidKey(value.userId) !== cloudOwner)) {
       cloudStatus.textContent = '停止：同じユーザーで再認証してください。クラウド選択とドラフトは保持しています。';
     }
@@ -210,7 +212,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         return;
       }
       cloudStatus.textContent = result.kind === 'completed'
-        ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : cloud.controller.saveTag ? 'タグの単件作成・改名ができます。' : '書込未接続です。'}`
+        ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : cloud.controller.saveTag ? 'タグの単件作成・改名ができます。' : cloud.controller.deleteTag ? 'タグの単件削除ができます。' : '書込未接続です。'}`
           : result.result.kind === 'unknown' || result.result.kind === 'failed' ? 'UNKNOWN：読取結果を確認できません。自動再試行しません。'
           : '停止：クラウド読取は許可されませんでした。'
         : result.kind === 'stale-response' ? '停止：古いクラウド応答を反映しません。'
@@ -348,6 +350,13 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     catch { stateStatus.textContent = '停止：タグ要求を作れません。保存は開始していません。'; return false; }
     return runStateRequest(request, valid, tag ? 'タグ改名' : 'タグ作成');
   }
+  function startDeleteTag(tag: Tag, valid: () => boolean): boolean {
+    if (!cloud?.controller.deleteTag || closed || unavailable || busy || pending || isBusy() || loading
+      || stateUncertain() || cloudEditor?.getState() || !valid()) return false;
+    const auth = cloudContext(); if (!auth) return false;
+    const request = Object.freeze({ context: auth, action: 'delete-tag' as const, id: tag.id, name: tag.name, expectedRevision: tag.revision });
+    return runStateRequest(request, valid, 'タグ削除');
+  }
   // 認証/結果判定はC04に委譲し、既存の単件操作と同じbusy・不明保持・離脱境界を使う。
   function runStateRequest(request: StateChangeRecord['request'], valid: () => boolean, label: string): boolean {
     const record: StateChangeRecord = { request, result: null }; stateRecord = record; stateRunning = true;
@@ -356,7 +365,9 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     void (async () => {
       try {
         // 完全削除のrequestIdは既存C04の内部識別用。RPC引数への変換は既存adapterだけが担う。
-        const result = request.action === 'save-tag'
+        const result = request.action === 'delete-tag'
+          ? await cloud!.controller.deleteTag!(request.context, request.id, request.expectedRevision)
+          : request.action === 'save-tag'
           ? await cloud!.controller.saveTag!(request.context, request.id, request.name, request.expectedRevision)
           : request.action === 'empty-trash'
           ? await cloud!.controller.emptyTrash!(request.context, request.targets, request.requestId)
@@ -369,7 +380,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
           stateStatus.textContent = '停止：古い状態変更の応答を現在画面へ反映しません。元要求は保持し、自動再送しません。'; return;
         }
         stateStatus.textContent = result.kind === 'completed'
-          ? result.result.kind === 'ok' ? request.action === 'delete-permanently' || request.action === 'empty-trash' || request.action === 'save-tag'
+          ? result.result.kind === 'ok' ? request.action === 'delete-permanently' || request.action === 'empty-trash' || request.action === 'save-tag' || request.action === 'delete-tag'
             || (typeof result.result.value === 'object' && result.result.value && 'kind' in result.result.value && result.result.value.kind === 'changed')
             ? `${label}要求の成功を確認しました。${request.action === 'empty-trash' ? `削除件数${result.result.value}件。` : ''}現在snapshotの確認には明示再読取が必要です。`
             : '状態変更要求は適用済みですが、メモは削除済みです。現在状態は明示再読取が必要です。'

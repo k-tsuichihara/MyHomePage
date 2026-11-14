@@ -1,5 +1,7 @@
 # Q04 実行記録（サニタイズ済み）
 
+Step 4第11単位のAI Gate：cloudタグ単件削除を既存C04 deleteTagへfake製品接続する。対象名の一段確認・正式2引数・旧確認拒否・UNKNOWN保持・busyを既存境界で検証する。snapshotは要求開始時に失効し、明示再読取を案内。関連解除/revision更新はSQLに委譲しUI独自処理なし。実通信/DB操作/cleanupは0、過去DB試験は再実行しない。Q04全体進行中・single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第11単位を参照。
+
 Step 4第10単位のAI Gate：cloudタグの単件作成/改名を既存C04 saveTagへfake製品接続する。正常/入力拒否/重複/競合/UNKNOWN/返却不整合/旧応答をofflineで検証し、元要求/C04不明操作を保持する。snapshotは失効し明示再読取を案内。実通信/DB操作/cleanupは0、過去DB試験は再実行しない。Q04全体進行中・single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第10単位を参照。
 
 Step 4第9単位のAI Gate：既存C04 emptyTrashへcloudゴミ箱一括完全削除をfake製品接続する。固定対象/内部requestId/元C04結果を保持し、件数不一致等のUNKNOWNを成功や未削除へ昇格しない。確認後だけ正式2配列で一度実行、snapshot全体は失効して明示再読取を案内する。実通信/DB操作/cleanupは0。過去DB試験の再実行なし、Q04全体進行中・single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第9単位を参照。
