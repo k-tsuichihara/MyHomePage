@@ -1,5 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
+Step 4第7単位：既存C04 changeStateへ単件復元（正式action `restore`）をfake製品接続。trashとの共通要求保持/現在性/busy/UNKNOWN/離脱契約を再利用し、操作確認後に一度だけ送信する。snapshotの楽観変更・自動load/retry/独自resolveなし。実通信/DB操作/cleanupは0。残りwriteは完全削除/一括削除/タグ変更、実製品接続・受入とsingle-rpcは未検証。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第7単位を参照し、以下は以前の接続状態の履歴と区別する。
+
 Step 4第6単位：通常cloudメモ1件のゴミ箱移動を既存C04 changeStateへfake製品接続。操作確認・busy抑止・旧応答拒否・UNKNOWN保持を確認し、snapshotは楽観更新せず失効させる。自動再送/独自resolve/実通信/DB操作/cleanupは0。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)を現在の接続範囲の正本とし、以下の「状態変更未接続」は第5単位時点の履歴と区別する。実製品受入・single-rpcは未検証。
 
 基準：PR #79マージ後main `8ef563c`。実DB/SQL/Auth/RPC操作は今回0件。

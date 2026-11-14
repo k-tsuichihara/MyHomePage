@@ -62,19 +62,20 @@ const api: MemoAuthApi = {
     current = null; return { error: null }; },
   onAuthStateChange(callback) { emit = callback; return { data: { subscription: { unsubscribe: () => { calls.unsubscribe++; } } } }; },
 };
+const stateMode = mode.replace('cloud-restore', 'cloud-trash');
 const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   rpcNames.push(rpc);
-  if (mode.startsWith('cloud-trash') && rpc === 'memo_change_state') {
+  if (stateMode.startsWith('cloud-trash') && rpc === 'memo_change_state') {
     stateArgs = args;
-    if (args.p_action !== 'trash') throw new Error('unexpected-state-action');
-    if (mode === 'cloud-trash-pending') await new Promise<void>(resolve => { releaseState = resolve; });
-    if (mode === 'cloud-trash-unknown') throw new Error('synthetic-password raw-provider-token');
-    if (mode === 'cloud-trash-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: 'revision conflict' } };
-    if (mode === 'cloud-trash-rejected') return { provenance: 'single-rpc', status: 403, body: { code: '42501', message: 'raw-provider-token' } };
-    if (mode === 'cloud-trash-deleted') return { provenance: 'single-rpc', status: 500, body: { code: 'P0002', message: 'previously applied, memo deleted' } };
-    return { provenance: mode === 'cloud-trash-unverified' ? 'unverified' : 'single-rpc', status: 200,
-      body: mode === 'cloud-trash-invalid' ? { message: 'synthetic-password raw-provider-token' }
-        : { ...snapshot().memos[0]!, id: args.p_id, deleted_at: '2026-11-14T00:00:00Z',
+    if (args.p_action !== (mode.startsWith('cloud-restore') ? 'restore' : 'trash')) throw new Error('unexpected-state-action');
+    if (stateMode === 'cloud-trash-pending') await new Promise<void>(resolve => { releaseState = resolve; });
+    if (stateMode === 'cloud-trash-unknown') throw new Error('synthetic-password raw-provider-token');
+    if (stateMode === 'cloud-trash-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: 'revision conflict' } };
+    if (stateMode === 'cloud-trash-rejected') return { provenance: 'single-rpc', status: 403, body: { code: '42501', message: 'raw-provider-token' } };
+    if (stateMode === 'cloud-trash-deleted') return { provenance: 'single-rpc', status: 500, body: { code: 'P0002', message: 'previously applied, memo deleted' } };
+    return { provenance: stateMode === 'cloud-trash-unverified' ? 'unverified' : 'single-rpc', status: 200,
+      body: stateMode === 'cloud-trash-invalid' ? { message: 'synthetic-password raw-provider-token' }
+        : { ...snapshot().memos[mode.startsWith('cloud-restore') ? 1 : 0]!, id: args.p_id, deleted_at: args.p_action === 'restore' ? null : '2026-11-14T00:00:00Z',
           revision: Number(args.p_expected_revision) + 1, last_request_id: args.p_request_id } };
   }
   if (operationMode.startsWith('cloud-edit') && (rpc === 'memo_save' || rpc === 'memo_resolve_request')) {
@@ -99,7 +100,7 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   return { provenance: mode === 'cloud-unverified' || snapshotMode === 'unverified' ? 'unverified' : 'single-rpc', status: 200,
     body: mode === 'cloud-permission' || snapshotMode === 'permission' ? null
       : snapshotMode === 'invalid' ? { message: 'raw-provider-token', user_id: id }
-      : mode.startsWith('cloud-snapshot') || mode.startsWith('cloud-trash') || operationMode.startsWith('cloud-edit') ? snapshot() : { memos: [], tags: [], memoTags: [] } };
+      : mode.startsWith('cloud-snapshot') || stateMode.startsWith('cloud-trash') || operationMode.startsWith('cloud-edit') ? snapshot() : { memos: [], tags: [], memoTags: [] } };
 };
 const session = createMemoAuthSession(api, () => clock, sender);
 const targets = createStorageTargetController();
@@ -109,12 +110,12 @@ const cloudPort = {
     try { return await cloudController.load(context); } finally { calls.readCompleted++; }
   },
   dispose() { calls.cloudDispose++; return cloudController.dispose(); },
-  ...(operationMode.startsWith('cloud-edit') || (mode.startsWith('cloud-trash') && mode !== 'cloud-trash-no-writer') ? { async save(...args: Parameters<typeof cloudController.save>) {
+  ...(operationMode.startsWith('cloud-edit') || (stateMode.startsWith('cloud-trash') && stateMode !== 'cloud-trash-no-writer') ? { async save(...args: Parameters<typeof cloudController.save>) {
     try { return await cloudController.save(...args); } finally { calls.saveCompleted++; }
   }, async resolve(...args: Parameters<typeof cloudController.resolve>) {
     try { return await cloudController.resolve(...args); } finally { calls.resolveCompleted++; }
   } } : {}),
-  ...(mode.startsWith('cloud-trash') ? { async changeState(...args: Parameters<typeof cloudController.changeState>) {
+  ...(stateMode.startsWith('cloud-trash') ? { async changeState(...args: Parameters<typeof cloudController.changeState>) {
     try { stateResult = await cloudController.changeState(...args); return stateResult; } finally { calls.stateCompleted++; }
   } } : {}),
 };
