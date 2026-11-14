@@ -40,6 +40,110 @@ async function login(page: Page) {
 async function selectCloud(page: Page) {
   await page.getByRole('button', { name: 'クラウドを選択', exact: true }).click();
 }
+it('検証済みsnapshotだけを一覧/詳細/タグとして安全に読み、local draftや保存領域へ流し込まない', async () => {
+  const page = await pageFor('cloud-snapshot'); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    const view = page.locator('#product-cloud-snapshot');
+    expect(await view.isHidden()).toBe(true);
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('保持するlocal draft');
+    const before = await probe(page, 'fixture.state()');
+    await selectCloud(page); await page.getByRole('button', { name: '確認して保存先を変更' }).click();
+    await view.getByRole('heading', { name: 'クラウドメモ一覧（読取専用）', exact: true }).waitFor();
+    expect(await view.getByRole('button').count()).toBe(2);
+    await view.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+    expect(await view.locator('pre').textContent()).toBe('<b>読取専用の本文</b>');
+    expect(await view.locator('b').count()).toBe(0);
+    expect(await view.getByText('タグ：既存クラウドタグ', { exact: true }).count()).toBe(1);
+    expect(await view.locator('input,textarea,select,form,a').count()).toBe(0);
+    await view.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    await view.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
+    expect(await view.getByText('ゴミ箱内のメモ（読取専用）', { exact: true }).count()).toBe(1);
+    expect(await view.getByText('タグなし', { exact: true }).count()).toBe(1);
+    await page.locator('#save').dispatchEvent('click');
+    expect(await probe(page, 'fixture.state()')).toEqual(before);
+    expect(await probe(page, 'fixture.stored()')).toEqual([]);
+    const output = (await page.locator('body').innerHTML()) + JSON.stringify(logs) + page.url();
+    expect(output).not.toMatch(/00000000-0000-4000-8000-000000000(?:002|101|102|103)/);
+    for (const secret of ['synthetic-email@example.invalid', 'synthetic-password', 'synthetic-token-private', 'raw-provider-token', 'user_id', 'last_request_id']) expect(output).not.toContain(secret);
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await page.getByRole('button', { name: '確認して保存先を変更' }).click();
+    expect(await view.isHidden()).toBe(true); expect(await view.textContent()).toBe('');
+    expect(await page.locator('#memo-title').inputValue()).toBe('保持するlocal draft');
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
+it.each(['expired', 'generation', 'logout', 'dispose'])('snapshot表示後の%sで一覧/詳細と旧ボタンを失効させる', async change => {
+  const page = await pageFor('cloud-snapshot');
+  try {
+    await selectCloud(page);
+    await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).waitFor();
+    await probe(page, 'window.oldCloudButton = document.querySelector("#product-cloud-snapshot button")');
+    if (change === 'expired') await probe(page, 'fixture.expired()');
+    if (change === 'generation') await probe(page, 'fixture.refreshAuth()');
+    if (change === 'logout') await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    if (change === 'dispose') await probe(page, 'fixture.dispose()');
+    await page.waitForFunction('!document.querySelector("#product-cloud-snapshot") || document.querySelector("#product-cloud-snapshot").hidden');
+    await probe(page, 'window.oldCloudButton.click()');
+    expect(await page.getByText(/クラウドメモ詳細/).count()).toBe(0);
+    expect(await page.getByText('クラウドの合成メモ', { exact: true }).count()).toBe(0);
+    if (change === 'expired' || change === 'generation') expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('通知前の期限到達も一覧選択時に既存isCurrentで検出し詳細を開かない', async () => {
+  const page = await pageFor('cloud-snapshot');
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).waitFor();
+    await probe(page, 'fixture.expireSilently(); document.querySelector("#product-cloud-snapshot button").click()');
+    expect(await page.locator('#product-cloud-snapshot').isHidden()).toBe(true);
+    expect(await page.getByText(/クラウドメモ詳細/).count()).toBe(0);
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
+it.each(['failure', 'unverified', 'permission', 'invalid'])('成功snapshotの再loadが%sでも旧一覧/詳細を残さず再試行しない', async outcome => {
+  const page = await pageFor('cloud-snapshot'); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await probe(page, `fixture.snapshotMode('${outcome}')`);
+    await selectCloud(page);
+    await page.locator('#product-cloud-state').filter({ hasText: /UNKNOWN|停止/ }).waitFor();
+    expect(await page.locator('#product-cloud-snapshot').isHidden()).toBe(true);
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await page.getByText('クラウドの合成メモ', { exact: true }).count()).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + JSON.stringify(logs);
+    for (const secret of ['synthetic-email@example.invalid', 'synthetic-password', 'synthetic-token-private', 'raw-provider-token']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it('同じcloud選択はsnapshotを失効させず再loadもしない', async () => {
+  const page = await pageFor('cloud-snapshot');
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+    await selectCloud(page);
+    expect(await page.getByText('クラウドメモ詳細（読取専用）', { exact: true }).count()).toBe(1);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
+it('取り外した旧snapshotのボタンは再load後の一覧を操作できない', async () => {
+  const page = await pageFor('cloud-snapshot');
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).waitFor();
+    await probe(page, 'window.oldCloudButton = document.querySelector("#product-cloud-snapshot button")');
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).waitFor();
+    await probe(page, 'window.oldCloudButton.click()');
+    expect(await page.getByText('クラウドメモ一覧（読取専用）', { exact: true }).count()).toBe(1);
+    expect(await page.getByText('クラウドメモ詳細（読取専用）', { exact: true }).count()).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
 it('cloud切替をcancelした間は音声を保持し、確定前に停止して旧認識結果を遮断する', async () => {
   const page = await pageFor('cloud-voice');
   try {
@@ -171,7 +275,7 @@ it.each(['cloud-failure', 'cloud-unverified', 'cloud-permission'])('%sをlocal�
   } finally { await page.context().close(); }
 });
 it.each(['local', 'generation', 'dispose'])('pending load後の%s変更で古いcloud応答を反映せず自動送信しない', async change => {
-  const page = await pageFor('cloud-pending');
+  const page = await pageFor('cloud-snapshot-pending');
   try {
     await selectCloud(page); await page.waitForFunction('fixture.rpcNames.length === 1');
     await selectCloud(page);
@@ -191,6 +295,7 @@ it.each(['local', 'generation', 'dispose'])('pending load後の%s変更で古い
       expect(await probe(page, 'fixture.calls.listenerUnsubscribe')).toBe(1);
     }
     expect(await page.getByText(/クラウド読取成功/).count()).toBe(0);
+    expect(await page.getByText('クラウドの合成メモ', { exact: true }).count()).toBe(0);
     expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
     expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
   } finally { await page.context().close(); }

@@ -140,4 +140,19 @@ AI Gateは既存の製品候補Chromium fixtureへC03 session・C04 controller�
 
 追加P2回帰2件（Chromium計35件）：cloud切替確定時にはdefault製品viewの`stopVoice`から既存voice.stopを呼び、停止ボタンを含むlocal UIをinertにする前に認識を停止する。cancelでは停止せず、停止後の旧callbackは既存epoch検証で無視し、localへ戻った後は明示的に再開できる。custom viewが音声を提供する場合も返却disposerのstopVoiceを接続する。認証所有者の比較・保持にはAuth層と同じ`uuidKey`を使い、UUIDの大文字小文字差だけで別user扱いしない。合成認識器と実C03/C05＋合成senderで、停止/late result遮断/再開、表記差を伴う世代更新/再選択load、write/fetchなしを確認した。
 
-通常product entryは引き続きsession/hostを生成・注入しない。C04/C05/Authのruntime実装は型参照だけに留め、build混入拒否とCSP、loopback＋Permit境界は維持。実SDK/実Auth Storage/実transport、cloud一覧/詳細・write接続、実製品Auth/RPC/RLS、single-rpc認定は未実施。次は既存snapshotの読取専用一覧/詳細接続をfakeで進められる。実環境操作・Human Gateは別承認であり、今回要求/実行しない。
+第2単位時点ではcloud一覧/詳細・writeは未接続。通常product entryは引き続きsession/hostを生成・注入しない。C04/C05/Authのruntime実装は型参照だけに留め、build混入拒否とCSP、loopback＋Permit境界は維持する。実環境操作・Human Gateは別承認であり、今回要求/実行しない。
+
+## Q04 Step 4 第3単位：検証済みsnapshotの読取専用一覧・詳細
+
+`ui/product-snapshot-view.ts`はC04 loadの`completed/result.ok/value`だけを受け取る。C01で検証・所有者除去・変換・凍結済みのdomain値を再利用し、raw responseの変換/検証は複製しない。通常メモとゴミ箱内のメモをsnapshotの順に一覧表示し、1件選択でタイトル・本文・通常/ゴミ箱の固定表示・既存タグ名を閲覧できる。戻る操作以外に詳細の操作はない。高度な一覧/並替/ページングは追加しない。
+
+- snapshotは現在の表示のメモリだけに保持。local controller/Storageへ渡さず、保存/複製/キャッシュ/同期しない。cloud選択中のlocal操作拒否と音声停止は第2単位のまま。
+- 保持の有効性はload時の既存C05選択オブジェクトとC03 `isCurrent(context)`で判定。Auth/target/generationをrendererの別状態機械へ複製せず、製品hostの現在性predicateを渡す。
+- Auth通知/現在値確認による失効・認証世代更新、実際の保存先変更、再load開始、購読/現在値取得失敗、disposeでsnapshot参照と一覧/詳細DOMを破棄する。期限到達の検出は既存C03に従い、追加timer/pollingなし。一覧→詳細/詳細→一覧の操作時にも現在性を再検査し、通知前の期限到達でも操作を拒否する。
+- 同じcloud選択のno-opはsnapshotを破棄せず、再loadもしない。選択を変えた場合と区別する。別loadの一覧を、取り外された旧ボタンから開くことも表示ticketで拒否する。
+- pending load後のtarget/Auth変更・disposeでは第2単位の応答遮断を維持。UNKNOWN/failed/denied/stale-responseは一覧を表示しない。失効はcloud選択/local draftを維持し、表示データだけを破棄する。認証復帰だけでsnapshotを復活/自動再loadさせない。
+- DOMへ出す値は検証済みのタイトル・本文・タグ名と固定文言だけ。全てtextContentで描画し、HTMLとして解釈しない。ユーザーが書いた本文自体は閲覧対象である。内部のメモ/タグ/user/request ID、revision、raw JSON/headers、認証情報/例外はDOM/属性/URL/ログへ転記しない。選択は表示内の添字とticketで行い、ID入りリンクも作らない。
+
+AI Gate：同じ製品候補HTML・C03/C04/C05・合成sender fixtureへ12件追加（Chromium計47件）。複数メモ/ゴミ箱/タグ/HTML風本文、一覧↔詳細、local復帰とdraft/Storage不変、Auth失効/世代更新/logout/disposeと旧ボタン、通知前の期限到達、成功後の再load失敗/未認定/権限拒否/不正応答、同じcloud選択no-opを確認。既存pending load後のlocal/generation/dispose回帰3件も実データ入りの合成snapshotへ更新し、旧結果を表示しないことを確認する。単一RPCの合成成功は実経路single-rpc認定ではない。
+
+未接続：cloud write/編集/新規/削除/復元/タグ変更、実SDK生成/実Auth Storage/実transport、通常entryへの注入・公開配信、実製品Auth/RPC/RLS、single-rpc。次の最小候補は既存C04 save/resolveと編集/navigation契約を使う単件編集・保存のfake製品接続（別承認範囲）。実通信/Human Gateは今回実行しない。
