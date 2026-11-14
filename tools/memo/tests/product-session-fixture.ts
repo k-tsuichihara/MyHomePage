@@ -2,21 +2,37 @@ import { createProductLocalApp } from '../src/product-local-app';
 import { createMemoAuthSession, type MemoAuthApi, type MemoAuthState } from '../src/auth-session';
 import { isDirty } from '../src/editor-state';
 import { createPendingMigration } from '../src/migration';
+import { createCloudController } from '../src/cloud-controller';
+import { createStorageTargetController } from '../src/storage-target-controller';
+import type { AuthenticatedRpcSender } from '../src/auth-session';
+import type { VoiceRecognition } from '../src/voice-input';
 
 // 既存製品compositionへ合成session/Storageだけを注入。SDK/実fetchは使わない。
 const mode = (window as unknown as { fixtureMode: string }).fixtureMode;
-const id = '00000000-0000-4000-8000-000000000002';
+const id = mode === 'cloud-casing' ? '00000000-0000-4000-8000-00000000abcd' : '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
 const value = { user: { id }, access_token: 'synthetic-token-private', expires_at: 200 };
-let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data' ? value : null;
+let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data' || (mode.startsWith('cloud') && mode !== 'cloud-signed-out') ? value : null;
 let emit!: (event: string, session: unknown) => void;
-const calls = { login: 0, logout: 0, restore: 0, unsubscribe: 0, listenerUnsubscribe: 0, dispose: 0, writes: 0, fetch: 0 };
+const calls = { login: 0, logout: 0, restore: 0, unsubscribe: 0, listenerUnsubscribe: 0, dispose: 0, writes: 0, fetch: 0,
+  readCompleted: 0, cloudDispose: 0 };
+const rpcNames: string[] = [];
+const voiceCalls = { start: 0, abort: 0 };
+let latestVoice: VoiceRecognition | undefined;
+let lateVoiceResult: VoiceRecognition['onresult'];
+if (mode === 'cloud-voice') Object.defineProperty(window, 'SpeechRecognition', { value: class implements VoiceRecognition {
+  lang = ''; continuous = false; interimResults = false;
+  onresult: VoiceRecognition['onresult'] = null; onerror = null; onend = null;
+  start() { voiceCalls.start++; latestVoice = this; lateVoiceResult = this.onresult; }
+  abort() { voiceCalls.abort++; }
+} });
+let releaseRead: (() => void) | undefined;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
 let holdWrite = false;
 let failReads = false, failWrites = false;
 const api: MemoAuthApi = {
   getSession: async () => { calls.restore++; return { data: { session: current }, error: null }; },
-  getUser: async () => ({ data: { user: { id } }, error: null }),
+  getUser: async () => ({ data: { user: { id: value.user.id } }, error: null }),
   async signInWithPassword() {
     calls.login++;
     if (mode === 'pending') await new Promise<void>(resolve => { releaseLogin = resolve; });
@@ -28,7 +44,23 @@ const api: MemoAuthApi = {
     current = null; return { error: null }; },
   onAuthStateChange(callback) { emit = callback; return { data: { subscription: { unsubscribe: () => { calls.unsubscribe++; } } } }; },
 };
-const session = createMemoAuthSession(api, () => clock);
+const sender: AuthenticatedRpcSender = async (_bearer, rpc) => {
+  rpcNames.push(rpc);
+  if (rpc !== 'memo_load_snapshot') throw new Error('write-not-allowed');
+  if (mode === 'cloud-pending') await new Promise<void>(resolve => { releaseRead = resolve; });
+  if (mode === 'cloud-failure') throw new Error('synthetic-email@example.invalid synthetic-password raw-provider-token');
+  return { provenance: mode === 'cloud-unverified' ? 'unverified' : 'single-rpc', status: 200,
+    body: mode === 'cloud-permission' ? null : { memos: [], tags: [], memoTags: [] } };
+};
+const session = createMemoAuthSession(api, () => clock, sender);
+const targets = createStorageTargetController();
+const cloudController = createCloudController(session);
+const cloudPort = {
+  async load(context: Parameters<typeof cloudController.load>[0]) {
+    try { return await cloudController.load(context); } finally { calls.readCompleted++; }
+  },
+  dispose() { calls.cloudDispose++; return cloudController.dispose(); },
+};
 let notify: ((state: MemoAuthState) => void) | undefined;
 const injected = { ...session,
   subscribe(listener: (state: MemoAuthState) => void) {
@@ -51,9 +83,16 @@ const app = createProductLocalApp(document, {
     return callback();
   } },
   createId: () => crypto.randomUUID(), now: () => '2026-11-14T00:00:00.000Z',
-}, undefined, mode === 'absent' ? undefined : injected);
+}, undefined, mode === 'absent' || mode === 'cloud-no-session' ? undefined : injected,
+  mode.startsWith('cloud') && mode !== 'cloud-no-host' ? { target: targets, controller: cloudPort } : undefined);
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
+  rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
+  voiceCalls,
+  lateVoice: () => lateVoiceResult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: '停止後の旧結果' } }] }),
+  voiceDetached: () => latestVoice?.onresult === null,
+  uppercaseAuth: () => { value.user.id = value.user.id.toUpperCase(); value.expires_at++; emit('TOKEN_REFRESHED', value); },
+  refreshAuth: () => { value.expires_at++; emit('TOKEN_REFRESHED', value); },
   migration: () => app.migration.getState(),
   saveTag: () => app.controller.dispatch({ kind: 'mutate', operation: {
     kind: 'save-tag', id: '00000000-0000-4000-8000-000000000020', name: '合成タグ', expectedRevision: null } }),

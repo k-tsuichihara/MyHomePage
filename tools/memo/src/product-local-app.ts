@@ -18,15 +18,17 @@ import { mountDeletedRecoveryPreview } from './ui/deleted-recovery-preview';
 import { createInitialRestoreController } from './initial-restore-controller';
 import { mountInitialRestorePreview } from './ui/initial-restore-preview';
 import { mountProductSession } from './product-session-ui';
-import type { ProductSessionPort } from './product-session-ui';
+import type { ProductCloudHost, ProductSessionPort } from './product-session-ui';
 
 export interface ProductLocalDependencies extends MigrationDependencies {
   readonly now: () => string;
 }
 
+type ProductMemoDisposer = (() => void) & { stopVoice?(): void };
+
 export interface ProductLocalViews {
   readonly mountMigration: typeof mountMigrationPreview;
-  readonly mountMemo: typeof mountMemoPreview;
+  readonly mountMemo: (...args: Parameters<typeof mountMemoPreview>) => ProductMemoDisposer;
   readonly mountBackup?: typeof mountBackupPreview;
   readonly mountUpgrade?: typeof mountV3Upgrade;
   readonly mountRestore?: typeof mountRestorePreview;
@@ -40,7 +42,7 @@ const defaultViews: ProductLocalViews = {
     const bridge: VoiceEditBridge = {};
     const disposeMemo = mountMemoPreview(doc, controller, bridge);
     const disposeVoice = mountVoiceInput(doc, controller, bridge);
-    return () => { disposeVoice(); disposeMemo(); };
+    return Object.assign(() => { disposeVoice(); disposeMemo(); }, { stopVoice: disposeVoice.stop });
   },
   mountBackup: mountBackupPreview,
   mountUpgrade: mountV3Upgrade,
@@ -54,13 +56,15 @@ const defaultViews: ProductLocalViews = {
  * 移行診断がreadyになり通常loadにも成功するまで、メモ操作UIを公開しない。
  */
 export function createProductLocalApp(doc: Document, deps: ProductLocalDependencies,
-  views: ProductLocalViews = defaultViews, session?: ProductSessionPort) {
+  views: ProductLocalViews = defaultViews, session?: ProductSessionPort, cloud?: ProductCloudHost) {
   const upgrade = createProductV3Upgrade(deps);
   const store = createLocalMemoStore({ storage: upgrade.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
   const controller = createLocalMemoController({ store, createId: deps.createId });
   const migration = createLocalMigrationController({ ...deps, storage: upgrade.storage, acceptExistingV3: true });
-  let disposeMemo = () => {};
+  let disposeMemo: ProductMemoDisposer = () => {};
   let disposed = false;
+  const connectedCloud = session?.getContext && session.isCurrent ? cloud : undefined;
+  const localAvailable = () => !disposed && connectedCloud?.target.current().target !== 'cloud';
   let upgradeBusy = false;
   let disposeBackup: (() => void) | undefined;
   let disposeUpgrade: (() => void) | undefined;
@@ -78,7 +82,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   }
   const normalReady = () => {
     const state = controller.getState();
-    return !disposed && !upgradeBusy && state.route.kind !== 'edit' && state.read.kind === 'ready'
+    return localAvailable() && !upgradeBusy && state.route.kind !== 'edit' && state.read.kind === 'ready'
       && state.write.kind !== 'writing' && state.write.kind !== 'unknown' && state.write.kind !== 'rejected'
       && !state.confirmation && !state.unresolved.length
       && (!state.editor || requestNavigation(state.editor, { kind: 'switch-source' }).kind === 'allowed');
@@ -106,7 +110,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     if (!disposeRestore && views.mountRestore) disposeRestore = views.mountRestore(doc, {
       getState: restore.getState,
       async dispatch(command) {
-        if (disposed) return;
+        if (!localAvailable()) return;
         await withSessionRefresh(async () => {
           await restore.dispatch(command);
           if (!disposed && restore.getState().phase === 'applied') await controller.dispatch({ kind: 'load' });
@@ -115,7 +119,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     });
     if (!disposeRecovery && views.mountRecovery) disposeRecovery = views.mountRecovery(doc, {
       getState: recovery.getState,
-      async dispatch(command) { if (!disposed) await withSessionRefresh(() => recovery.dispatch(command)); },
+      async dispatch(command) { if (localAvailable()) await withSessionRefresh(() => recovery.dispatch(command)); },
     }, () => { const route = controller.getState().route; return route.kind === 'detail' ? route.id : null; });
   };
   const prepareBackup = createLocalBackup({ storage: upgrade.storage, locks: deps.locks, now: deps.now });
@@ -124,19 +128,19 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     const state = controller.getState();
     if (disposed || !backupOriginal || state.read.kind !== 'ready' || state.storageVersion !== 3 || !views.mountBackup) return;
     disposeBackup?.();
-    disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' } : prepareBackup());
+    disposeBackup = views.mountBackup(doc, async () => !localAvailable() ? { kind: 'failed', reason: 'read-failure' } : prepareBackup());
     backupOriginal = false;
   };
 
   const enter = async (): Promise<boolean> => {
-    if (disposed || migration.getState().kind !== 'ready') return false;
-    await controller.dispatch({ kind: 'load' });
-    if (disposed || controller.getState().read.kind !== 'ready') return false;
+    if (!localAvailable() || migration.getState().kind !== 'ready') return false;
+    await withSessionRefresh(() => controller.dispatch({ kind: 'load' }));
+    if (!localAvailable() || controller.getState().read.kind !== 'ready') return false;
     disposeMemo();
     disposeMemo = views.mountMemo(doc, {
       getState: controller.getState,
       async dispatch(command) {
-        if (disposed) return { kind: 'blocked', reason: 'disposed' };
+        if (!localAvailable()) return { kind: 'blocked', reason: disposed ? 'disposed' : 'cloud-read-only' };
         if ((upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()) && command.kind !== 'draft') return { kind: 'blocked', reason: 'writing' };
         const result = await withSessionRefresh(() => controller.dispatch(command));
         syncBackup();
@@ -150,16 +154,16 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     mountRecoveryViews();
     if (!disposeInitial && controller.getState().storageVersion === null && views.mountInitial) disposeInitial = views.mountInitial(doc, {
       getState: initial.getState,
-      async dispatch(command) { if (!disposed) await withSessionRefresh(() => initial.dispatch(command)); },
+      async dispatch(command) { if (localAvailable()) await withSessionRefresh(() => initial.dispatch(command)); },
     });
     if (!disposeBackup && views.mountBackup) {
       const original = controller.getState().storageVersion === 2;
       backupOriginal = original;
-      disposeBackup = views.mountBackup(doc, async () => disposed ? { kind: 'failed', reason: 'read-failure' }
+      disposeBackup = views.mountBackup(doc, async () => !localAvailable() ? { kind: 'failed', reason: 'read-failure' }
         : original ? upgrade.prepare() : prepareBackup(), original ? 'v2-original' : 'backup');
       if (original && views.mountUpgrade) disposeUpgrade = views.mountUpgrade(doc, upgrade, () => {
         const state = controller.getState();
-        return state.write.kind !== 'writing' && state.write.kind !== 'unknown' && state.write.kind !== 'rejected'
+        return localAvailable() && state.write.kind !== 'writing' && state.write.kind !== 'unknown' && state.write.kind !== 'rejected'
           && !state.confirmation && !state.unresolved.length
           && (!state.editor || requestNavigation(state.editor, { kind: 'switch-source' }).kind === 'allowed');
       }, async () => {
@@ -173,14 +177,28 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
 
   const migrationPort: typeof migration = {
     getState: migration.getState,
-    async inspect() { if (!disposed) await withSessionRefresh(() => migration.inspect()); },
+    async inspect() { if (localAvailable()) await withSessionRefresh(() => migration.inspect()); },
     cancel(token) { if (!disposed) migration.cancel(token); },
-    async confirm(token) { if (!disposed) await withSessionRefresh(() => migration.confirm(token)); },
+    async confirm(token) { if (localAvailable()) await withSessionRefresh(() => migration.confirm(token)); },
   };
   views.mountMigration(doc, migrationPort, enter);
+  // cloud読取結果をlocalへ流し込まず、local操作UIを止めてドラフトを保持する。
+  const heldInert = new Map<HTMLElement, boolean>();
   sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
+    setCloudSelected(selected) {
+      for (const id of ['memo-app', 'migration-view']) {
+        const node = doc.getElementById(id); if (!node) continue;
+        if (selected) {
+          // 音声結果の旧epochも無効にしてから、停止ボタンを含むlocal UIを抑止する。
+          if (!heldInert.has(node)) { if (id === 'memo-app') disposeMemo.stopVoice?.(); heldInert.set(node, node.inert); }
+          node.inert = true;
+        }
+        else if (heldInert.has(node)) { node.inert = heldInert.get(node)!; heldInert.delete(node); }
+      }
+    },
     isBusy: () => disposed || upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()
-      || migration.getState().kind === 'running' || controller.getState().write.kind === 'writing' }) : undefined;
+      || ['inspecting', 'running'].includes(migration.getState().kind)
+      || controller.getState().read.kind === 'loading' || controller.getState().write.kind === 'writing' }, connectedCloud) : undefined;
   return Object.freeze({
     controller,
     migration,
