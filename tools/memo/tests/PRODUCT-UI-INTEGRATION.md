@@ -203,4 +203,19 @@ changeStateと既存createIdを注入したhostだけ、現在有効なsnapshot�
 
 AI Gate：既存C03/C04/C05・合成sender・生成製品HTMLを共有するChromiumに19ケース追加（計109件）。確認/キャンセル、要求構成、changeState単独注入、成功/競合/拒否/通信例外/unverified/不正応答/削除済みreceipt、二重操作とbusy終了拒否、Auth/世代/target/snapshot変更後の旧応答、別userを含む古い確認ボタン、秘密値非露出/local write/fetch0を確認する。全Vitest 56ファイル/1719件、typecheck、diff検査PASS。
 
-未接続：cloud復元/完全削除/タグ変更/一括操作、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存changeStateによる単件復元のfake製品接続（別承認）。実通信/Human Gate/cleanupは行わない。
+第6単位時点の未接続だったcloud復元は、次の第7単位で接続する。実通信/Human Gate/cleanupは行わない。
+
+## Q04 Step 4 第7単位：ゴミ箱内cloudメモ1件の復元
+
+第6単位の単件changeState経路をtrash/restoreの2 actionで共通化する。汎用mutation層や別状態機械は追加しない。現在のsnapshot詳細では、通常メモに「ゴミ箱へ移動」、ゴミ箱メモに「復元」だけを表示する。復元も操作確認/キャンセルを経由し、古い確認ボタンは既存token/leaseで拒否する。
+
+- C04/RPCに定義済みの正式action `restore` を使う。memo ID・expectedRevision・createId由来requestId・actionを開始時に凍結し、既存C04 changeStateへ一度だけ渡す。UIでrevisionを進めたり、復元UUIDを生成したりしない（バックアップからの新規単件復元とは別操作）。
+- 要求/返却結果の保持、busy、UNKNOWN停止、離脱確認、Auth/context/C05/snapshot現在性、disposeの判定はPR #89と共通。成功は復元要求の適用確認だけ。snapshot全体を開始時に失効させ、明示再読取を案内する。deletedAtの直接変更・一覧への楽観移動・自動load/retry/pollingなし。
+- conflict/rejected/UNKNOWNは成功にしない。不明時は元要求/C04結果を保持し、新しいcloud edit/create/changeStateを開始しない。save/resolve流用・専用resolve新設なし。UNKNOWNは未実行の証明にしない。明示切替/logoutは既存C05 unknown離脱確認へ委譲する。local controller/Storageへの書込・fallbackなし。
+- 失効/世代更新/別user/target変更/失効snapshotの旧応答を現在の復元成功にしない。処理中の二重操作/切替/logout/disposeは既存busyで拒否、不明のdisposeはpending。内部ID/revision/requestId/owner・raw例外をDOM/URL/consoleへ出さない。通常entry/build拒否/CSP/Permitは変更しない。
+
+AI Gateは既存fixtureの状態変更応答と確認helperを共通化し、復元固有の表示・cancel/要求構成/createId・要求成功/明示再読取、conflict/rejected/UNKNOWN・unknown離脱cancel、busy二重操作/終了拒否、送信後Auth/世代/target/snapshot変更、別userの古い確認、秘密値非露出/local write/fetch0を10ケース追加検証した（製品Chromium計119件）。キャンセル/画面変更で外れたボタンは同じsnapshotでもDOM所属検査で拒否する。unverified/不正応答/削除済みreceiptや古いtoken/disposeの共通契約は既存trash回帰を再利用する。全Vitest 56ファイル/1729件、typecheck、diff検査PASS。
+
+既存Playwright E2E 83件もPASS。product buildは製品Chromiumのセットアップで実行し、通常のAuth/cloud混入拒否を維持する。
+
+未接続：完全削除/ゴミ箱一括削除/cloudタグ変更、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04による単件完全削除のfake製品接続（別承認）。

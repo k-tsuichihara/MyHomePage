@@ -1,5 +1,7 @@
 # Q04 実行記録（サニタイズ済み）
 
+Step 4第7単位のAI Gate：ゴミ箱内cloudメモ1件の復元を既存C04 changeStateへfake製品接続。PR #89の要求保持/離脱/busy/現在性を共有し、要求構成・操作確認・成功/競合/拒否/UNKNOWN・旧応答拒否をoffline Chromiumで検証する。成功は要求単位のみでsnapshotは失効、明示再読取を案内する。実通信/DB操作/cleanupは0。既実施DB試験は再実行せず、Q04全体進行中・single-rpc未認定を維持する。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第7単位を参照。
+
 Step 4第6単位のAI Gate：通常cloudメモ1件のゴミ箱移動を既存C04 changeStateへfake製品接続した。操作確認、要求構成、成功/競合/拒否/UNKNOWN、旧応答/二重操作拒否を製品Chromiumで確認。成功は要求単位のみ、snapshot全体を失効させ明示再読取を案内する。UNKNOWNは元要求/C04結果を保持し独自resolve・自動再送なし。実通信/DB操作/cleanupは0。第5単位までの未接続記述は履歴として保持する。Q04全体は進行中、single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)を参照。
 
 記録日：2026-11-14（Asia/Tokyo）。情報源はオーナーの実施報告と、提示されたrunner最終JSON。AIによる再接続・実行・非公開runsの独立照合ではない。実行時刻・実run識別子はここでは記載しない。

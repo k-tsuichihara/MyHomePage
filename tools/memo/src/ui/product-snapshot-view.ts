@@ -4,7 +4,7 @@ import { uuidKey } from '../read-primitives';
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
 export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean,
-  trash?: (memo: Memo, valid: () => boolean) => boolean) {
+  changeState?: (memo: Memo, action: 'trash' | 'restore', valid: () => boolean) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
@@ -37,15 +37,24 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       const valid = active!.valid;
       if (edit(selected, tagIds, valid)) clear();
     }));
-    if (trash && memo.deletedAt === null) root.append(button('ゴミ箱へ移動', () => {
-      if (!current(token)) return;
-      root.replaceChildren(text('p', 'このメモをゴミ箱へ移動しますか。'),
-        button('確認してゴミ箱へ移動', () => {
-          const latest = current(token), selected = latest?.memos[index]; if (!selected || selected.deletedAt !== null) return;
+    const action = memo.deletedAt === null ? 'trash' : 'restore';
+    const label = action === 'trash' ? 'ゴミ箱へ移動' : '復元';
+    if (changeState) {
+      const start = button(label, () => {
+        if (!root.contains(start) || !current(token)) return;
+        const confirm = button(`確認して${label}`, () => {
+          // 同じsnapshotでも、キャンセル/別詳細への移動で外れた確認は再利用しない。
+          if (!root.contains(confirm)) return;
+          const latest = current(token), selected = latest?.memos[index];
+          if (!selected || (action === 'trash' ? selected.deletedAt !== null : selected.deletedAt === null)) return;
           const valid = active!.valid;
-          if (trash(selected, valid)) clear();
-        }), button('移動をキャンセル', () => detail(index, token)));
-    }));
+          if (changeState(selected, action, valid)) clear();
+        });
+        root.replaceChildren(text('p', `このメモを${label}しますか。`), confirm,
+          button(action === 'trash' ? '移動をキャンセル' : '復元をキャンセル', () => detail(index, token)));
+      });
+      root.append(start);
+    }
   };
   const list = (token: object) => {
     const value = current(token); if (!value) return;
