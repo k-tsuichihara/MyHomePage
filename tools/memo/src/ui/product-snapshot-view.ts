@@ -8,7 +8,8 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   changeState?: (memo: Memo, action: 'trash' | 'restore', valid: () => boolean) => boolean,
   deletePermanently?: (memo: Memo, valid: () => boolean) => boolean,
   emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean,
-  tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean }) {
+  tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean },
+  deleteTag?: (tag: Tag, valid: () => boolean) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
@@ -74,6 +75,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       root.append(start);
     }
   };
+  const hasTag = (value: MemoData, tag: Tag) => value.tags.some(row => uuidKey(row.id) === uuidKey(tag.id) && row.revision === tag.revision && row.name === tag.name);
   const editTag = (tag: Tag | null, token: object) => {
     if (!current(token) || !tagEditor?.canStart()) return;
     const form = doc.createElement('form');
@@ -83,7 +85,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     const submit = () => {
       if (!root.contains(form) || !tagEditor?.canStart()) return;
       const value = current(token); if (!value) return;
-      if (tag && !value.tags.some(row => uuidKey(row.id) === uuidKey(tag.id) && row.revision === tag.revision && row.name === tag.name)) { clear(); return; }
+      if (tag && !hasTag(value, tag)) { clear(); return; }
       if (tagEditor.save(tag, input.value, active!.valid)) clear();
     };
     form.onsubmit = event => { event.preventDefault(); submit(); };
@@ -103,14 +105,34 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       row.append(button(memo.title, () => detail(index, token))); rows.append(row);
     });
     root.append(rows); root.hidden = false;
-    if (tagEditor) {
-      const create = button('タグを作成', () => { if (root.contains(create)) editTag(null, token); });
-      root.append(create);
+    if (tagEditor || deleteTag) {
+      if (tagEditor) {
+        const create = button('タグを作成', () => { if (root.contains(create)) editTag(null, token); });
+        root.append(create);
+      }
       const tags = doc.createElement('ul'); tags.setAttribute('aria-label', 'クラウドタグ一覧');
       value.tags.forEach(tag => {
         const row = doc.createElement('li'); row.append(text('p', tag.name));
-        const rename = button('名前を変更', () => { if (root.contains(rename)) editTag(tag, token); });
-        row.append(rename); tags.append(row);
+        if (tagEditor) {
+          const rename = button('名前を変更', () => { if (root.contains(rename)) editTag(tag, token); });
+          row.append(rename);
+        }
+        if (deleteTag) {
+          const remove = button('削除', () => {
+            if (!root.contains(remove) || !current(token)) return;
+            const confirm = button('削除する', () => {
+              if (!root.contains(confirm)) return;
+              const latest = current(token); if (!latest) return;
+              if (!hasTag(latest, tag)) { clear(); return; }
+              if (deleteTag(tag, active!.valid)) clear();
+            });
+            root.replaceChildren(text('p', `タグ『${tag.name}』を削除します。`),
+              text('p', 'メモとの関連も解除されます。メモ自体は削除しません。'), confirm,
+              button('タグ削除をキャンセル', () => list(token)));
+          });
+          row.append(remove);
+        }
+        tags.append(row);
       });
       root.append(tags);
     }
