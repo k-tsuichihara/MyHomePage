@@ -155,4 +155,21 @@ AI Gateは既存の製品候補Chromium fixtureへC03 session・C04 controller�
 
 AI Gate：同じ製品候補HTML・C03/C04/C05・合成sender fixtureへ12件追加（Chromium計47件）。複数メモ/ゴミ箱/タグ/HTML風本文、一覧↔詳細、local復帰とdraft/Storage不変、Auth失効/世代更新/logout/disposeと旧ボタン、通知前の期限到達、成功後の再load失敗/未認定/権限拒否/不正応答、同じcloud選択no-opを確認。既存pending load後のlocal/generation/dispose回帰3件も実データ入りの合成snapshotへ更新し、旧結果を表示しないことを確認する。単一RPCの合成成功は実経路single-rpc認定ではない。
 
-未接続：cloud write/編集/新規/削除/復元/タグ変更、実SDK生成/実Auth Storage/実transport、通常entryへの注入・公開配信、実製品Auth/RPC/RLS、single-rpc。次の最小候補は既存C04 save/resolveと編集/navigation契約を使う単件編集・保存のfake製品接続（別承認範囲）。実通信/Human Gateは今回実行しない。
+第3単位時点ではcloud writeは未接続。第4単位の単件編集/save/resolve接続は以下を参照。実通信/Human Gateは実行しない。
+
+## Q04 Step 4 第4単位：既存cloudメモ1件の編集・保存・明示照合
+
+`ProductCloudHost.controller`に既存C04のsave/resolveを任意で注入できる。両APIと既存のcreateId/getContext/isCurrentが揃う場合だけ、正常な現行snapshotの通常メモ詳細に編集ボタンを提供する。ゴミ箱メモ・失効snapshot・旧ボタンからは開始しない。未注入の場合は第3単位の読取専用UI、session/host未注入なら従来local-onlyのまま。
+
+- `product-cloud-editor.ts`は同時に1つのcloud editorを所有する。既存createEditor(source=cloud)/editDraft/beginSave/isDirtyとnavigationのrequest/confirmを再利用し、local controller/Storageとは分離する。タグは取得済み関連を固定し変更UIを作らない。内部ID/revision/requestIdはメモリの要求だけに使い、DOM/URL/ログへ出さない。
+- 入力は保存開始時の既存整形/検証を通し、不変attemptを既存C04 saveへ一度渡す。入力中・保存中の追加編集は消さず、二重保存と保存中の切替/logout/編集終了を抑止する。C05のdirtyと離脱確認にはcloud editorも加え、確認後の編集・保存結果・Auth世代変更で旧確認を拒否する。editor外失敗、migration/復元busy等の既存判定は維持。
+- C04/C01の検証済みsavedだけが、送信rawDraftのbaselineと返却revisionを既存editor接続関数で更新する。独自の競合判定/revision加算はしない。成功表示は「保存要求の成功」であり現在snapshotの証明ではない。編集開始時に旧snapshot表示を破棄し、保存後に楽観的書換・自動loadをしない。現在内容の確認は既存の明示保存先再選択/loadで行う。
+- conflict/rejectedは成功にせずdraft保持。UNKNOWNと送信後stale-responseは不変attemptとC04が発行したpending handleを対応付けて保持する。新しいsave/自動retry/自動resolveは行わず、「保存結果を照合」の明示操作だけで元要求をC04 resolveへ渡す。
+- resolve no-recordは結果不明のまま、未実行証明にしない。savedだけ元attemptを解消し、削除済みreceiptでは削除済みの事実を表示して復元しない。同一userの検証済み再認証後も元pendingに対して明示resolveできる。C04によるowner照合を緩めない。
+- 保存先/Auth世代/編集sessionが古い成功は反映しない。保存中の追加編集と保存先変更を混同しないため、製品選択ticketは実際の選択変更/再loadでのみ失効させ、編集状態の鮮度は既存editor参照で別に検査する。Authの正当性は既存isCurrentに委譲する。
+- cloud draftはタブ内に保持し、失効/別userでは入力欄を空・無効にする。同じuserで再認証した場合のみ再表示する。保存先を明示localへ戻してもlocal draftへ転送しない。cloud pendingが残る間は別メモの編集で上書きしない。
+- `app.dispose()`はcloud save/resolve中にbusy、未解決attempt/pendingが残る場合にpendingを返し、UI/購読/Authを終了しない。既存C04のbusy/pending契約を強制突破しない。実際にappliedで終了した後は旧DOM操作から再送しない。タブ/ブラウザ終了を越えたdraftやpendingの永続化は保証しない。
+
+AI Gate：既存の合成senderにmemo_save/memo_resolve_requestだけを追加し、C03/C04/C05・生成製品HTMLを共有するChromium15件を追加（計62件）。既存1件編集/保存、conflict/permission/UNKNOWN、明示resolve(saved/no-record/削除済みreceipt)、二重送信/保存中離脱、送信中の追加編集保持、Auth失効/世代/target変更後の旧結果、旧snapshot/ゴミ箱編集拒否、dirty logout確認鮮度、再認証後照合、applied dispose後の旧操作拒否、秘密値非露出/local write/fetch0を確認する。editor純粋回帰1件も追加し、local結果との混同と旧session結果を拒否する。
+
+未接続：cloud新規/削除/復元/タグ変更/一括操作、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。通常buildのAuth/cloud/SDK混入拒否・CSP・loopback＋Permitは変更しない。次の最小候補は既存C04 saveによるcloud新規メモ1件のfake製品接続（別承認範囲）。実通信・Human Gate・cleanupは実行しない。

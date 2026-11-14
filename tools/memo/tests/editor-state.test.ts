@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beginSave, confirmResave, createEditor, editDraft, isDirty, settleSave } from '../src/editor-state';
+import { beginSave, confirmResave, createEditor, editDraft, isDirty, settleSave, settleCloudSave } from '../src/editor-state';
 import type { EditorState, SaveAttempt } from '../src/editor-state';
 import { MEMO, TAG, TAG2, NOW, state, token, saveFixture } from './local-save-fixtures';
 
@@ -17,6 +17,17 @@ function saved(attempt: SaveAttempt) {
 }
 const failure = (kind: 'rejected' | 'unknown', reason = 'conflict') => ({ kind, reason,
   writeOutcome: kind === 'rejected' ? 'not-attempted' : 'unverified' });
+
+it('cloud editorはlocal結果を受けず、旧session/別保存先のcloud結果も反映しない', () => {
+  const cloud = createEditor(MEMO, 'cloud-screen', { memo: state().memos[0]!, tagIds: [TAG] }, 'cloud');
+  const begun = start(cloud);
+  expect(begun.attempt.context.source).toBe('cloud');
+  expect(settleSave(begun.state, begun.attempt.context, saved(begun.attempt))).toBe(begun.state);
+  const stopped = { kind: 'stopped', reason: 'auth-not-current' } as const;
+  expect(settleCloudSave(begun.state, { ...begun.attempt.context, sessionId: 'old-screen' }, stopped)).toBe(begun.state);
+  const local = start(editor());
+  expect(settleCloudSave(local.state, local.attempt.context, stopped)).toBe(local.state);
+});
 
 describe('整形前ドラフトと保存済み基準', () => {
   it('既存・新規編集の初期状態はcleanで副作用なし', () => {

@@ -1,6 +1,14 @@
-# ローカル編集・画面遷移の状態契約とテスト方針
+# 編集・画面遷移の状態契約とテスト方針
 
 根拠は[review8統合仕様§1・4・5](../doc/v1.1.0/memo_v1_1_implementation_review8.md)、[ローカル保存契約](LOCAL-SAVE.md)、[追加操作契約](LOCAL-OPERATIONS.md)、[一覧契約](MEMO-QUERY.md)、PR #10の承認事項。正式仕様・既存APIを変更せず、状態と判定だけを純粋関数として提供する。
+
+## Q04 Step 4：cloud単件編集への再利用
+
+以下のlocal契約と既定APIは維持する。`createEditor`の追加引数`source`をcloudにした場合も、ドラフト・dirty・要求整形/固定・ID再利用防止・saving・navigation ticketを同じ関数で扱う。local/cloud間でeditorやattemptを共有しない。`settleSave`はlocalだけを受け付ける。
+
+cloudはC04型を受ける`settleCloudSave/settleCloudResolution`で接続し、LocalSaveResultへ変換しない。C01/C04が検証した保存要求の成功だけでbaseline（送信時rawDraft）と返却されたrevisionを反映し、送信後の追加編集は保持する。成功も現在snapshotの証明ではなく、一覧を書き換えたり自動loadしたりしない。競合/拒否はC04分類からrejectedへ、不明/古い応答はattemptを保持するunknownへ接続する。独自の競合照合・revision加算は行わない。
+
+明示resolveのsavedだけが元attemptの不明を解消し、no-recordは未実行証明にしない。削除済みreceiptは現在メモの保存成功として表示せず、元要求が適用済みで削除済みであることを固定文言で示す。製品UIは不明中の再保存を提供せず、元要求のresolveだけを提供する。編集状態がlocalまたは別session/operationのcloud結果は反映しない。製品接続・終了制約は[製品UI契約](PRODUCT-UI-INTEGRATION.md)を参照。
 
 ## 編集と保存の境界
 
