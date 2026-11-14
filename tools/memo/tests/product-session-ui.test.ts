@@ -62,6 +62,117 @@ async function returnCloud(page: Page) {
   if (await confirm.isVisible()) await confirm.click();
   await page.getByLabel('クラウドのタイトル', { exact: true }).waitFor();
 }
+it.each(['new', 'edit', 'duplicate'])('B3音声を%s cloud editorへ追記し、手入力・明示saveを既存経路で続ける', async kind => {
+  const page = await pageFor('cloud-voice-success');
+  try {
+    await selectCloud(page);
+    if (kind === 'new') await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+    else {
+      await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+      await page.getByRole('button', { name: kind === 'edit' ? 'このクラウドメモを編集' : 'このクラウドメモを複製', exact: true }).click();
+    }
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('手入力');
+    await page.getByRole('button', { name: 'クラウド本文へ音声追記', exact: true }).click();
+    expect(await probe(page, 'fixture.voiceConfig()')).toEqual({ lang: 'ja-JP', continuous: false, interimResults: false });
+    await probe(page, "fixture.voiceResult('認識結果')");
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('手入力認識結果');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('手入力認識結果修正');
+    await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存要求の成功/).waitFor();
+    expect(await probe(page, 'fixture.savedArgs().p_body')).toBe('手入力認識結果修正');
+    expect(await probe(page, 'fixture.savedArgs().p_expected_revision')).toBe(kind === 'edit' ? 1 : null);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('B3新規音声入口は既存clock書式の未保存draftを開始し、dirty離脱確認へ接続する', async () => {
+  const page = await pageFor('cloud-voice-success');
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドに新規音声メモ', exact: true }).click();
+    const expected = await probe(page, "(() => { const d = new Date('2026-11-14T00:00:00.000Z'); const p = n => String(n).padStart(2,'0'); return '音声メモ-'+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'-'+p(d.getHours())+p(d.getMinutes()); })()");
+    expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe(expected);
+    await probe(page, "fixture.voiceResult('新規音声本文')");
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await page.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('新規音声本文');
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['unsupported', 'permission', 'failure', 'limit'])('B3%sは本文を壊さず固定警告だけを表示し手入力を継続できる', async failure => {
+  const page = await pageFor(failure === 'unsupported' ? 'cloud-voice-unsupported' : 'cloud-voice-success');
+  const logs: string[] = []; page.on('console', event => logs.push(event.text())); page.on('pageerror', event => logs.push(event.message));
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+    const before = failure === 'limit' ? 'x'.repeat(10000) : '維持する本文';
+    await page.getByLabel('クラウドの本文', { exact: true }).fill(before);
+    await page.getByRole('button', { name: 'クラウド本文へ音声追記', exact: true }).click();
+    if (failure === 'limit') await probe(page, "fixture.voiceResult('超過')");
+    else if (failure !== 'unsupported') await probe(page, `fixture.voiceError('${failure === 'permission' ? 'not-allowed' : 'network'}')`);
+    await page.getByLabel('クラウド音声入力', { exact: true }).getByText(failure === 'unsupported' ? /対応していません/ : failure === 'limit' ? /上限または入力条件/ : /開始・継続できません/).waitFor();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe(before);
+    await page.getByLabel('クラウドのタイトル', { exact: true }).fill('手入力継続');
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('継続本文');
+    expect(await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).isEnabled()).toBe(true);
+    expect(await page.getByText(/保存できたか不明/).count()).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    for (const secret of ['synthetic-token-private', 'raw-provider-token', '00000000-0000-4000-8000-000000000002']) expect(output).not.toContain(secret);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['generation', 'user', 'target', 'close', 'dispose'])('B3%s後の旧認識結果を現在draftへ適用しない', async change => {
+  const page = await pageFor('cloud-voice-success');
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('元draft');
+    await page.getByRole('button', { name: 'クラウド本文へ音声追記', exact: true }).click();
+    if (change === 'generation') await probe(page, 'fixture.refreshAuth()');
+    else if (change === 'dispose') await probe(page, 'fixture.dispose()');
+    else if (change === 'close') {
+      await page.getByRole('button', { name: 'クラウド編集を閉じる', exact: true }).click();
+      await page.getByRole('button', { name: '変更を破棄して編集を閉じる', exact: true }).click();
+      await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+    } else if (change === 'target') {
+      await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+      await page.getByRole('button', { name: '確認して保存先を変更', exact: true }).click();
+    } else {
+      await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+      await page.getByRole('button', { name: '確認してログアウト', exact: true }).click();
+      await probe(page, 'fixture.differentUser()'); await login(page); await selectCloud(page);
+    }
+    expect(await probe(page, 'fixture.voiceDetached()')).toBe(true);
+    await probe(page, 'fixture.lateVoice()');
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue().catch(() => '')).not.toContain('停止後の旧結果');
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['pending', 'unknown'])('B3%s時も送信済み本文は不変で明示resolveは元要求を使う', async outcome => {
+  const page = await pageFor(`cloud-voice-${outcome}`);
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('保存本文');
+    await page.getByRole('button', { name: 'クラウド本文へ音声追記', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.waitForFunction('fixture.savedArgs() !== null'); const original = await probe(page, 'fixture.savedArgs()');
+    if (outcome === 'pending') {
+      await probe(page, "fixture.voiceResult('保存中の音声')");
+      expect(await probe(page, 'fixture.savedArgs()')).toEqual(original);
+      await probe(page, 'fixture.releaseSave()'); await page.getByText(/保存要求の成功/).waitFor();
+    } else {
+      await page.getByText(/保存できたか不明/).waitFor();
+      await probe(page, "fixture.voiceResult('後続音声')");
+      expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('保存本文後続音声');
+      await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+      await page.getByText(/追加の未保存変更があります/).waitFor();
+      expect(await probe(page, 'fixture.resolvedArgs()')).toEqual(original);
+    }
+    expect(await probe(page, 'fixture.savedArgs()')).toEqual(original);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save', ...(outcome === 'unknown' ? ['memo_resolve_request'] : [])]);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('cloud新規はcreateIdのUUID/空draftから開始し、expectedRevision=nullで1件だけ保存する', async () => {
   const page = await pageFor('cloud-create-success'); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));

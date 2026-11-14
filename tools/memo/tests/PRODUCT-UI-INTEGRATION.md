@@ -1,5 +1,32 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q04 Step 4 B3：cloud音声入力と最終静的棚卸し（現在状態）
+
+Review8 §5の既存`createVoiceInput`をcloud editorへ入力補助として接続する。認識処理・日本語設定・日時タイトル・一回だけの本文追記・入力上限・固定失敗分類は共有し、cloud専用認識器/保存/状態機械は追加しない。
+
+- `VoiceEditorPort`は既存editorの参照とnew/edit/draft操作だけ。local controllerは構造互換のまま、cloudは既存editor/auth/working/closeTicketを読み替える。RPC/save操作はポートにない。
+- local音声UIから`createVoiceControls`を抽出し、開始/停止・警告文・外部認識サービス案内・pagehide/dispose処理を共有する。起動時の認識器生成/権限要求なし。新規/既存/複製cloud editorは同じ追記入口を使う。
+- 独立した「クラウドに新規音声メモ」入口は既存voiceのnew→draftで開始し、製品注入clockをDateへ渡す。タイトルは同じ`音声メモ-YYYYMMDD-HHmm`。認識のみでは保存しない。非対応では認識器を作らず、固定警告を表示し通常の新規/手入力を続けられる。
+- 追記直前のdraft.bodyに認識結果を足し、既存normalizeMemoInputで10,000コードポイント等を検証する。超過時は全結果を拒否し、入力済み本文を維持する。権限拒否/認識失敗も既存failed文言だけで、raw event/errorを表示・保存しない。
+- 音声開始時の既存Auth context/selection ticketとvoice coreのepoch/editor sessionを使用し、世代/user/target変更・editor終了/別editor・dispose後はabort/切離しする。閉じる確認中の適用も拒否する。別のgeneration frameworkは作らない。
+- 通常のeditDraftなのでdirty/departure・タグUI・save/resolveは既存契約。保存中の結果は既存voice core同様に停止して適用せず、UNKNOWN後の追記は追加draftだけを変える。凍結要求・pending handle・明示resolveは変更せず、自動保存/再送/resolve/read/local fallbackなし。
+- 製品試験ではnative標準/webkit認識器を無効化し、合成音声時だけfakeを提供する。外部route拒否・実fetch拒否を維持する。実マイク・実認識サービスの受入は未実施。
+
+AI Gate追加15ケース：新規/既存/複製への本文追記・手入力・明示保存、新規音声タイトルとdirty離脱cancel、unsupported/permission/failure/上限、generation/user/target/close→別editor/dispose後の旧結果、保存中要求不変・UNKNOWN後の元要求resolve。既存voice-input単体、local音声・タグ割当・一覧/複製・全回帰を再利用する。最終結果：typecheck、Vitest 56ファイル/1872件（製品Chromium261件）、Playwright E2E83件、product build、git diff --checkはPASS。
+
+### 最終棚卸し（Review8とmain＋本差分）
+
+| 分類 | 対象・根拠 |
+|---|---|
+| A：製品接続済み（AI/fake範囲） | R02 local/v3/移行/backup/restore/recovery/保守候補。注入sessionのlogin/logout/restore表示、明示C05選択と離脱/失効保護、C04 load・全8RPCの既存操作、save/resolve、タグ割当、B1一覧、B2複製、今回B3音声。各既存節と回帰を根拠とし、実製品接続PASSではない |
+| B：fake/offlineで未結線 | **1群：Review8 §1.1 D05のlogin成功・session復元後のcloud選択要求**。現在`product-session-ui.run()`はsession操作→refreshのみで、C05 requestDeparture('cloud')へ接続しない。表示更新のみでは自動選択を実現しない。既存離脱確認を使う配線はAI/fakeで準備可能なので、実Authが必要なCへ移して隠さない。新機能提案ではなく、正式仕様との差分。今回音声の承認範囲へ広げず残す |
+| C：実接続/実環境受入 | 実SDK/session永続化/製品senderの生成・配信接続、実Auth/製品RPC・RLS/権限/失効/応答出所、実マイク/権限UI/認識精度、Q05/実ユーザーデータR03/公開R04〜R05。接続のrepository準備は今後も先にAI Gateで行い、実操作だけを個別承認へ渡す。single-rpc未認定をfake成功で昇格しない |
+| D：v1.1.0対象外 | 同期/upload/download/merge、音声履歴/録音保存/波形/言語選択、複製履歴/bulk、汎用cache/diagnostics/framework |
+
+**B3はAI完了候補、ただし最終棚卸しB=1のためfake/offline製品接続フェーズはまだ閉じない。** 前回B2の「既知残件は音声のみ」は当時の候補で、本節が現在状態の正本。次の最小候補は上記D05のC05既存離脱経路への配線とfake検証。今回その実装・次フェーズ・Human Gateは開始しない。B=0を前提とする次フェーズ詳細計画も確定しない。C03/C04/C05/Q04全体は進行中、実製品接続/受入は未実施、single-rpc未認定。既存DB PASSは再実行・再監査しない。
+
+single-rpcの現行ゲートは変更しない。実senderがunverifiedのままならC01/C04は成功を認めないため、cloud機能の公開に必要な成功判定を「残余リスク」で代替できない。localのみ先行公開へ範囲を変える場合は別のオーナー判断であり、本PRでは決めない。
+
 ## Q04 Step 4 B2：cloud詳細の複製（現在状態）
 
 Review8 §5とlocalの既存`createDuplicateEditor`を再利用し、通常cloudメモ詳細に独立した「このクラウドメモを複製」を接続する。ゴミ箱には提供しない。確認ダイアログ・即時保存・追加read・複製専用RPCはない。

@@ -1,5 +1,7 @@
 # メモツール v1.1.0 リリース進捗管理
 
+Q04 Step 4 B3：既存voice-input/音声UIをcloud新規・既存・複製editorへ共有接続。日本語/本文追記/同一clockタイトル/上限拒否/手動保存・失効後の旧結果遮断をfake検証する。音声はAI完了候補。ただし最終棚卸しでReview8 §1.1 D05のlogin成功/session復元後cloud選択がhostへ未結線と判明したため、**B=1、fake/offlineフェーズは閉じない**。次候補は既存C05離脱経路への配線で、今回未着手。C03〜C05/Q04全体は進行中、実製品接続/受入・single-rpc未完了。実通信/DB操作/cleanupは0。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)B3最終棚卸しを正本とし、以下の残件数は履歴として区別する。
+
 Q04 Step 4 B2：通常cloudメモ詳細の独立した複製操作を、既存createDuplicateEditorとcloud新規editor/save/resolveへfake製品接続。title/body/tagIdsだけを未保存の新規draftへ渡し、pin/元ID/revision等は引き継がない。複製時のwrite/追加read/local writeは0。B2はAI完了候補、既知のfake/offline未結線はB3 cloud音声入力のみの候補。C03〜C05/Q04全体は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)B2節を現在状態の正本とし、以下の残件数は履歴として区別する。
 
 Q04 Step 4 B1：cloud一覧へ既存queryMemos/countTagUsageとListContextの表示文脈を接続。文字検索/タグOR＋文字AND/正式並替/pin安定順/使用件数、同snapshotのdetail往復条件・scroll保持をまとめてfake製品検証する。通常とゴミ箱は分離し、新snapshot/所有境界で状態を破棄する。表示変更のRPC/local writeは0。B1はAI完了候補、fake/offline既知残件はB2 cloud複製・B3 cloud音声の2群。C03〜C05/Q04全体は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)B1節を正本とし、以下のB=3記述は履歴と区別する。

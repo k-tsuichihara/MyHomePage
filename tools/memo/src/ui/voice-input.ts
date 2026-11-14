@@ -1,10 +1,10 @@
 import { createVoiceInput } from '../voice-input';
-import type { VoiceRecognition, VoiceStatus } from '../voice-input';
+import type { VoiceRecognition, VoiceStatus, VoiceEditorPort } from '../voice-input';
 import type { createLocalMemoController } from '../local-memo-controller';
 import type { VoiceEditBridge } from './memo-preview';
 
 /** 製品候補だけの音声操作。起動時は認識器を生成せず、権限要求もしない。 */
-export function mountVoiceInput(doc: Document, controller: ReturnType<typeof createLocalMemoController>, bridge: VoiceEditBridge) {
+export function createVoiceControls(doc: Document, controller: VoiceEditorPort, bridge: VoiceEditBridge, now?: () => Date) {
   const win = doc.defaultView! as Window & { SpeechRecognition?: new () => VoiceRecognition; webkitSpeechRecognition?: new () => VoiceRecognition };
   const Native = win.SpeechRecognition ?? win.webkitSpeechRecognition;
   const section = doc.createElement('section'), status = doc.createElement('p'); status.setAttribute('role', 'status');
@@ -14,17 +14,25 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
     'invalid-input': '認識結果が上限または入力条件を超えたため追記しません。手入力を続けてください。', stopped: '音声入力を停止しました。入力は保持しています。',
   };
   const stop = doc.createElement('button'); stop.type = 'button'; stop.textContent = '音声入力を停止';
-  const voice = createVoiceInput(controller, Native ? () => new Native() : undefined, value => { status.textContent = messages[value]; stop.disabled = value !== 'listening'; }, undefined,
+  const voice = createVoiceInput(controller, Native ? () => new Native() : undefined, value => { status.textContent = messages[value]; stop.disabled = value !== 'listening'; }, now,
     (session, text, isCurrent) => bridge.append?.(session, text, isCurrent) ?? Promise.resolve(false));
   stop.disabled = true; stop.onclick = () => voice.stop();
+  const notice = doc.createElement('p'); notice.textContent = '音声入力はブラウザの認識サービスを利用します。音声が外部サービスへ送信される場合があります。アプリは録音を保存しません。開始はボタン操作時だけです。';
+  section.append(notice, stop, status);
+  const pagehide = () => voice.stop(); win.addEventListener('pagehide', pagehide);
+  return { section, start: () => voice.start(), stop: () => voice.stop(), dispose() {
+    voice.dispose(); win.removeEventListener('pagehide', pagehide); stop.onclick = null; section.remove();
+  } };
+}
+
+export function mountVoiceInput(doc: Document, controller: ReturnType<typeof createLocalMemoController>, bridge: VoiceEditBridge) {
+  const voice = createVoiceControls(doc, controller, bridge);
   const buttons: HTMLButtonElement[] = [];
   for (const [id, label] of [['list-view', '新規音声メモ'], ['detail-view', '音声で本文へ追記'], ['editor-view', '音声で本文へ追記']]) {
     const button = doc.createElement('button'); button.type = 'button'; button.textContent = label!;
     button.onclick = () => { void voice.start(); }; doc.getElementById(id!)!.append(button); buttons.push(button);
   }
-  const notice = doc.createElement('p'); notice.textContent = '音声入力はブラウザの認識サービスを利用します。音声が外部サービスへ送信される場合があります。アプリは録音を保存しません。開始はボタン操作時だけです。';
-  section.append(notice, stop, status); doc.getElementById('memo-app')!.append(section);
-  const pagehide = () => voice.stop(); win.addEventListener('pagehide', pagehide);
-  return Object.assign(() => { voice.dispose(); win.removeEventListener('pagehide', pagehide); buttons.forEach(button => button.remove()); section.remove(); },
+  doc.getElementById('memo-app')!.append(voice.section);
+  return Object.assign(() => { voice.dispose(); buttons.forEach(button => button.remove()); },
     { stop: () => voice.stop() });
 }
