@@ -287,4 +287,22 @@ AI Gateは既存fixture/Chromium/C03/C04/C05/タグ一覧を再利用し削除�
 
 AI Gate結果：typecheck、全Vitest 56ファイル/1800件（製品Chromium190件を含む）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。
 
-未接続：既存changeStateのpin/unpin製品操作、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04 changeStateによる単件pin/unpinのfake製品接続（別承認）。実環境操作/Human Gateの前にAIだけで進められる製品接続を優先する。実通信/DB操作/cleanupは行わない。
+第11単位時点の未接続だったpin/unpinは以下の第12単位で接続する。
+
+## Q04 Step 4 第12単位：cloud通常メモ1件のpin/unpin
+
+PR #89/#90のchangeState接続へ正式action `pin` / `unpin`を追加する。snapshotの正式field `pinnedAt` がnullなら「ピン留め」、非nullなら「ピン留め解除」を通常メモ詳細に表示する。追加確認なしの明示クリックだけで実行する。正式SQLはpin/unpin/trashを通常メモに限定しているため、ゴミ箱にはpin/unpinを表示しない。local仕様は参考だけとしlocal controllerへ流さない。
+
+- 既存C04 `changeState(context,id,action,{expectedRevision,requestId})` → `memo_change_state(p_id,p_expected_revision,p_request_id,p_action)`の4引数。ID/revision/actionとcreateId由来requestId1個を開始時に凍結する。既存SQLの要求台帳はuser/requestId/action/対象/期待revisionに結び付き、応答は過去要求の行の場合もある。専用resolveなし。台帳があることを理由に自動再送しない。
+- 開始時は既存C03/C05 owner/generation/選択、snapshot token/lease、通常メモ状態、捕捉ID/revision/pinnedAtを検査する。旧ボタンはDOM所属でも拒否する。同IDの新snapshotへ自動差替えせず、pin→unpinやrevisionを読み替えて送信しない。
+- 既存adapterが所有者・対象ID・revision+1・lastRequestId・pinnedAt/deletedAtを検証したchangedだけを要求成功として扱う。削除済みreceiptを現在のpin成功にしない。開始時にsnapshot全体を失効し、明示再読取を案内。pinnedAtの楽観更新・自動load/retry/pollingなし。並び順の新仕様は追加しない。
+- conflict/rejected/UNKNOWN/stale-responseは既存分類のまま。UNKNOWNは元actionを含む要求/C04結果を保持して新cloud write（タグ操作も含む）を停止し、未実行/未pin/未解除とは断定しない。revision更新・action反転再送、独自照合/resolve、local fallbackなし。
+- 既存busy/uncertain operation/C05 unknown離脱確認を共有し、送信中の二重操作/他write/切替/logout/disposeはbusy、不明のdisposeはpending。Auth失効/世代/別user/target/snapshot変更後の旧応答を現在成功へ反映しない。別状態機械・frameworkなし。内部ID/requestId/owner/token/raw例外はDOM/URL/consoleへ出さない。
+
+AI Gateは既存changeState fixture/Chromiumを再利用しpin/unpin固有17ケースを追加する。両状態のボタンとゴミ箱非表示、確認なしの4引数/createId1回、返却pin状態/成功・snapshot失効、conflict/rejected/UNKNOWN/不正pin応答、元action保持・新メモ/タグwrite停止・unknown離脱cancel、busy/二重送信/終了拒否、送信後Auth/世代/target/snapshot変更、旧pin状態/revision/別userでactionを読み替えないこと、local write/fetch0・秘密値非露出を検証する。unverified/削除済みreceipt等の共通changeState行列は既存trash/restore回帰を再利用する。
+
+AI Gate結果：typecheck、全Vitest 56ファイル/1817件（製品Chromium207件を含む）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。初回のunpin試験失敗はfixtureが初期pinned_atをnull固定にしていたことが原因で、合成状態を修正した後に追加17件と全回帰を確認した。
+
+次単位として残るfake/offline製品機能は **cloudメモ編集時のタグ割当変更**。既存editor-stateのDraft.tagIds、editDraft、beginSaveの凍結要求とC04 save/resolveはタグID集合を既に扱い、既存snapshotにはタグ一覧/関連も含まれる。一方、現在のproduct-cloud-editorは編集開始時のtagIdsを維持するだけでタグ変更UIを持たない。次はこの境界を再利用するUI接続を別承認範囲として検討する。今回はタグ割当コードを変更しない。
+
+C03/C04/C05・Q04 Step 4全体は進行中。実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定は未完了。実通信/DB操作/cleanup/Human Gateは行わない。

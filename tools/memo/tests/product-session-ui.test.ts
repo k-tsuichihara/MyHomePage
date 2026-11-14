@@ -979,6 +979,118 @@ async function prepareDeleteCloudTag(page: Page) {
   await tags.getByRole('button', { name: '削除', exact: true }).click();
   await page.getByRole('button', { name: '削除する', exact: true }).evaluate(node => Object.assign(window, { oldDeleteTag: node }));
 }
+async function openCloudPin(page: Page, action: 'pin' | 'unpin') {
+  await selectCloud(page);
+  await page.getByRole('button', { name: 'タグを作成', exact: true }).evaluate(node => Object.assign(window, { oldPinTagCreate: node }));
+  await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+  await page.getByRole('button', { name: action === 'pin' ? 'ピン留め' : 'ピン留め解除', exact: true }).evaluate(node => Object.assign(window, { oldPin: node }));
+}
+it.each(['pin', 'unpin'] as const)('cloud %sは通常メモのpinnedAtから操作を選び、確認なしで正式4引数を一度だけ送る', async action => {
+  const page = await pageFor(`cloud-${action}-success`); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    const local = await probe(page, 'fixture.state()'); await selectCloud(page);
+    await page.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
+    expect(await page.getByRole('button', { name: 'ピン留め', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'ピン留め解除', exact: true }).count()).toBe(0);
+    await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+    expect(await page.getByRole('button', { name: action === 'pin' ? 'ピン留め解除' : 'ピン留め', exact: true }).count()).toBe(0);
+    const count = Number(await probe(page, 'fixture.generatedIds.length'));
+    const button = page.getByRole('button', { name: action === 'pin' ? 'ピン留め' : 'ピン留め解除', exact: true });
+    await button.evaluate(node => Object.assign(window, { oldPin: node })); await button.click();
+    await page.getByText(/ピン留め(解除)?要求の成功を確認/).waitFor();
+    const ids = await probe(page, 'fixture.generatedIds.slice()') as string[];
+    expect(ids.length).toBe(count + 1);
+    expect(await probe(page, 'fixture.stateArgs()')).toEqual({ p_id: '00000000-0000-4000-8000-000000000101',
+      p_expected_revision: 1, p_request_id: ids[count], p_action: action });
+    expect(await probe(page, 'fixture.stateResult().result.value.memo.pinnedAt !== null')).toBe(action === 'pin');
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await page.locator('#product-cloud-trash-state').textContent()).toContain('明示再読取が必要');
+    await probe(page, 'window.oldPin.click()');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_change_state']);
+    expect(await probe(page, 'fixture.state()')).toEqual(local); expect(await probe(page, 'fixture.stored()')).toEqual([]);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    for (const secret of [...ids, '00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000002',
+      'synthetic-password', 'synthetic-token-private', 'raw-provider-token']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it.each([['pin', 'conflict'], ['unpin', 'rejected'], ['pin', 'unknown'], ['unpin', 'unknown'], ['pin', 'invalid-pin'], ['unpin', 'invalid-pin']] as const)('%s %sを成功/未実行にせず、同じactionの不明操作を保持する', async (action, outcome) => {
+  const page = await pageFor(`cloud-${action}-${outcome}`); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    await openCloudPin(page, action); await probe(page, 'window.oldPin.click()');
+    await page.waitForFunction('fixture.calls.stateCompleted === 1');
+    const status = await page.locator('#product-cloud-trash-state').textContent();
+    expect(status).not.toContain('要求の成功'); expect(status).not.toContain('未実行');
+    if (outcome === 'conflict') expect(status).toContain('競合');
+    else if (outcome === 'rejected') expect(status).toContain('拒否');
+    else {
+      expect(status).toContain('UNKNOWN'); expect(await probe(page, 'fixture.dispose()')).toBe('pending');
+      expect(await probe(page, 'fixture.stateResult().operation.action')).toBe(action);
+      await probe(page, 'window.oldPinTagCreate.click()');
+      expect(await page.getByLabel('クラウドのタグ名', { exact: true }).count()).toBe(0);
+      const fresh = page.getByRole('button', { name: 'クラウドに新規メモ', exact: true });
+      expect(await fresh.isDisabled()).toBe(true); await fresh.dispatchEvent('click');
+      await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+      await page.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+      expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    }
+    const args = await probe(page, 'fixture.stateArgs()'); await probe(page, 'window.oldPin.click()');
+    expect(await probe(page, 'fixture.stateArgs()')).toEqual(args); expect(await probe(page, 'fixture.generatedIds.length')).toBe(1);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_change_state']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    for (const secret of ['synthetic-password', 'raw-provider-token', 'synthetic-token-private']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it('pin処理中の二重送信/タグwrite/切替/logout/disposeを既存busyで抑止する', async () => {
+  const page = await pageFor('cloud-pin-pending');
+  try {
+    await openCloudPin(page, 'pin'); await probe(page, 'window.oldPin.click()'); await page.waitForFunction('fixture.rpcNames.length === 2');
+    await probe(page, 'window.oldPin.click(); window.oldPinTagCreate.click()');
+    await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).dispatchEvent('click');
+    expect(await probe(page, 'fixture.dispose()')).toBe('busy'); expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    await probe(page, 'fixture.releaseState()'); await page.getByText(/ピン留め要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.dispose()')).toBe('applied'); await probe(page, 'window.oldPin.click()');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_change_state']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['expired', 'generation', 'target', 'snapshot'])('pin/unpin送信後%s変更では旧応答を現在成功にしない', async change => {
+  const action = change === 'generation' || change === 'snapshot' ? 'unpin' : 'pin';
+  const page = await pageFor(`cloud-${action}-pending`);
+  try {
+    await openCloudPin(page, action); await probe(page, 'window.oldPin.click()'); await page.waitForFunction('fixture.rpcNames.length === 2');
+    await probe(page, change === 'expired' ? 'fixture.expired()' : change === 'generation' ? 'fixture.refreshAuth()' : change === 'target' ? 'fixture.forceLocal()' : 'fixture.invalidateSnapshot()');
+    await probe(page, 'fixture.releaseState()'); await page.waitForFunction('fixture.calls.stateCompleted === 1');
+    expect(await page.locator('#product-cloud-trash-state').textContent()).not.toContain('要求の成功');
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_change_state']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each([['pin', 'state'], ['unpin', 'state'], ['pin', 'revision'], ['unpin', 'user']] as const)('旧%sボタンは%s変更後にaction/revisionを読み替えて送信しない', async (action, change) => {
+  const page = await pageFor(`cloud-${action}-success`);
+  try {
+    await openCloudPin(page, action);
+    if (change === 'user') { await probe(page, 'fixture.externalLogout()'); await probe(page, 'fixture.differentUser()'); await login(page); }
+    else {
+      await probe(page, `fixture.changePin('${change}')`);
+      await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click(); await selectCloud(page);
+      await page.waitForFunction('fixture.calls.readCompleted === 2');
+      await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
+      if (change === 'state') expect(await page.getByRole('button', { name: action === 'pin' ? 'ピン留め解除' : 'ピン留め', exact: true }).count()).toBe(1);
+    }
+    await probe(page, 'window.oldPin.click()'); expect(await probe(page, 'fixture.generatedIds.length')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(change === 'user' ? ['memo_load_snapshot'] : ['memo_load_snapshot', 'memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('cloudタグ単件削除は対象名を一度確認し、cancel無送信・正式2引数だけで成功する', async () => {
   const page = await pageFor('cloud-tag-delete-success'); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));

@@ -1,5 +1,7 @@
 # メモツール v1.1.0 リリース進捗管理
 
+Q04 Step 4第12単位：既存changeStateでcloud通常メモ単件pin/unpinをfake製品接続。pinnedAtから明示ボタンを選び、固定ID/revision/requestId/actionの正式4引数だけを使用する。trash/restoreと既存busy/UNKNOWN/離脱境界を共有し、snapshotを失効して明示再読取を案内。fake/offline製品残機能はcloudメモ編集時のタグ割当変更。C03〜C05/Q04 Step 4は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第12単位を正本とし、以下のpin未接続記述は過去の履歴と区別する。
+
 Q04 Step 4第11単位：既存C04 deleteTagによるcloudタグ単件削除をfake製品接続。対象ID/名前/revisionを一段確認し、正式RPCのp_id/p_expected_revisionだけを送る。関連メモrevision更新・関連解除は既存SQLの責務でUIに追加しない。requestId/ledger/resolveなし。既存busy/uncertain/離脱契約を共有しUNKNOWNは保持、新cloud writeを停止する。C03〜C05/Q04は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第11単位を正本とし、以下のタグ削除未接続記述は履歴として区別する。
 
 Q04 Step 4第10単位：既存C04 saveTagによるcloudタグ単件作成/改名をfake製品接続。新規はcreateId1回/expectedRevision=null、改名はsnapshotのID/revision、正式RPCはp_id/p_name/p_expected_revisionのみ。既存normalizeTagName/adapter返却検証/uncertain operation/離脱契約を再利用し、requestId/ledger/resolveは追加しない。成功は要求単位、snapshotを失効し明示再読取を案内する。C03〜C05/Q04は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第10単位を正本とし、以下のタグ作成/改名未接続記述は履歴として区別する。

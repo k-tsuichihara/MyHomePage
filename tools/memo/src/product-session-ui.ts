@@ -81,7 +81,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   if (anchor) anchor.after(root); else doc.body.prepend(root);
   let closed = false, busy = false, generation = -1, unavailable = false;
   // 不明操作はC04の返却結果ごと保持する。UI独自の再送・照合状態には変換しない。
-  type StateChangeRecord = { readonly request: Readonly<{ context: AuthContext; id: string; expectedRevision: number; requestId: string; action: 'trash' | 'restore' | 'delete-permanently' }>
+  type StateChangeRecord = { readonly request: Readonly<{ context: AuthContext; id: string; expectedRevision: number; requestId: string; action: 'pin' | 'unpin' | 'trash' | 'restore' | 'delete-permanently' }>
     | Readonly<{ context: AuthContext; targets: readonly Readonly<CloudTarget>[]; requestId: string; action: 'empty-trash' }>
     | Readonly<{ context: AuthContext; id: string; name: string; expectedRevision: number | null; action: 'save-tag' }>
     | Readonly<{ context: AuthContext; id: string; name: string; expectedRevision: number; action: 'delete-tag' }>;
@@ -127,7 +127,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const selected = cloud.target.current().target === 'cloud';
     local.setCloudSelected?.(selected);
     source.textContent = selected ? cloudEditor
-      ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ゴミ箱移動・復元' : ''}${cloud.controller.deletePermanently ? '・完全削除' : ''}${cloud.controller.emptyTrash ? '・ゴミ箱一括削除' : ''}${cloud.controller.saveTag ? '・タグ作成/改名' : ''}${cloud.controller.deleteTag ? '・タグ削除' : ''}）`
+      ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ピン留め/解除・ゴミ箱移動・復元' : ''}${cloud.controller.deletePermanently ? '・完全削除' : ''}${cloud.controller.emptyTrash ? '・ゴミ箱一括削除' : ''}${cloud.controller.saveTag ? '・タグ作成/改名' : ''}${cloud.controller.deleteTag ? '・タグ削除' : ''}）`
       : cloud.controller.changeState || cloud.controller.deletePermanently || cloud.controller.emptyTrash || cloud.controller.saveTag || cloud.controller.deleteTag ? '保存先：クラウド（閲覧・注入済み操作）' : '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
     if (selected && (!value || uuidKey(value.userId) !== cloudOwner)) {
       cloudStatus.textContent = '停止：同じユーザーで再認証してください。クラウド選択とドラフトは保持しています。';
@@ -212,7 +212,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         return;
       }
       cloudStatus.textContent = result.kind === 'completed'
-        ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : cloud.controller.saveTag ? 'タグの単件作成・改名ができます。' : cloud.controller.deleteTag ? 'タグの単件削除ができます。' : '書込未接続です。'}`
+        ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ピン留め/解除・ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : cloud.controller.saveTag ? 'タグの単件作成・改名ができます。' : cloud.controller.deleteTag ? 'タグの単件削除ができます。' : '書込未接続です。'}`
           : result.result.kind === 'unknown' || result.result.kind === 'failed' ? 'UNKNOWN：読取結果を確認できません。自動再試行しません。'
           : '停止：クラウド読取は許可されませんでした。'
         : result.kind === 'stale-response' ? '停止：古いクラウド応答を反映しません。'
@@ -315,12 +315,15 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   let unsubscribe = () => {};
   try { unsubscribe = session.subscribe(refresh); } catch { unavailable = true; feedback.textContent = '認証状態を購読できませんでした。'; }
   refresh(); void run('restore');
-  function startStateChange(memo: Memo, action: 'trash' | 'restore' | 'delete-permanently', valid: () => boolean): boolean {
+  function startStateChange(memo: Memo, action: 'pin' | 'unpin' | 'trash' | 'restore' | 'delete-permanently', valid: () => boolean): boolean {
     if (!cloud || !(action === 'delete-permanently' ? cloud.controller.deletePermanently : cloud.controller.changeState)
       || !local.createId || closed || unavailable || busy || pending || isBusy() || loading
-      || stateUncertain() || cloudEditor?.getState() || (action === 'trash' ? memo.deletedAt !== null : memo.deletedAt === null) || !valid()) return false;
+      || stateUncertain() || cloudEditor?.getState()
+      || (action === 'restore' || action === 'delete-permanently' ? memo.deletedAt === null : memo.deletedAt !== null)
+      || (action === 'pin' && memo.pinnedAt !== null) || (action === 'unpin' && memo.pinnedAt === null) || !valid()) return false;
     const auth = cloudContext(); if (!auth) return false;
-    const label = action === 'trash' ? 'ゴミ箱への移動' : action === 'restore' ? '復元' : '完全削除';
+    const label = action === 'trash' ? 'ゴミ箱への移動' : action === 'restore' ? '復元'
+      : action === 'pin' ? 'ピン留め' : action === 'unpin' ? 'ピン留め解除' : '完全削除';
     let request: StateChangeRecord['request'];
     try { request = Object.freeze({ context: auth, id: memo.id, expectedRevision: memo.revision, requestId: local.createId(), action }); }
     catch { stateStatus.textContent = `停止：要求を作れません。${label}は開始していません。`; return false; }

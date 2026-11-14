@@ -5,7 +5,7 @@ import type { CloudTarget } from '../cloud-rpc-types';
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
 export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean,
-  changeState?: (memo: Memo, action: 'trash' | 'restore', valid: () => boolean) => boolean,
+  changeState?: (memo: Memo, action: 'pin' | 'unpin' | 'trash' | 'restore', valid: () => boolean) => boolean,
   deletePermanently?: (memo: Memo, valid: () => boolean) => boolean,
   emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean,
   tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean },
@@ -45,6 +45,17 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     const action = memo.deletedAt === null ? 'trash' : 'restore';
     const label = action === 'trash' ? 'ゴミ箱へ移動' : '復元';
     if (changeState) {
+      if (memo.deletedAt === null) {
+        const pinAction = memo.pinnedAt === null ? 'pin' : 'unpin';
+        const pin = button(pinAction === 'pin' ? 'ピン留め' : 'ピン留め解除', () => {
+          if (!root.contains(pin)) return;
+          const selected = current(token)?.memos[index];
+          if (!selected || selected.deletedAt !== null || uuidKey(selected.id) !== uuidKey(memo.id)
+            || selected.revision !== memo.revision || selected.pinnedAt !== memo.pinnedAt) return;
+          if (changeState(selected, pinAction, active!.valid)) clear();
+        });
+        root.append(pin);
+      }
       const start = button(label, () => {
         if (!root.contains(start) || !current(token)) return;
         const confirm = button(`確認して${label}`, () => {
