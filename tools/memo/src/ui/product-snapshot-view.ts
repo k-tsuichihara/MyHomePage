@@ -4,7 +4,8 @@ import { uuidKey } from '../read-primitives';
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
 export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean,
-  changeState?: (memo: Memo, action: 'trash' | 'restore', valid: () => boolean) => boolean) {
+  changeState?: (memo: Memo, action: 'trash' | 'restore', valid: () => boolean) => boolean,
+  deletePermanently?: (memo: Memo, valid: () => boolean) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
@@ -52,6 +53,20 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         });
         root.replaceChildren(text('p', `このメモを${label}しますか。`), confirm,
           button(action === 'trash' ? '移動をキャンセル' : '復元をキャンセル', () => detail(index, token)));
+      });
+      root.append(start);
+    }
+    if (deletePermanently && memo.deletedAt !== null) {
+      const start = button('完全削除', () => {
+        if (!root.contains(start) || !current(token)) return;
+        const confirm = button('完全に削除', () => {
+          if (!root.contains(confirm)) return;
+          const selected = current(token)?.memos[index];
+          if (!selected || selected.deletedAt === null) return;
+          if (deletePermanently(selected, active!.valid)) clear();
+        });
+        root.replaceChildren(text('p', 'このメモを完全に削除します。元に戻せません。'), confirm,
+          button('完全削除をキャンセル', () => detail(index, token)));
       });
       root.append(start);
     }

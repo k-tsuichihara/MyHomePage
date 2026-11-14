@@ -1,5 +1,7 @@
 # メモツール v1.1.0 リリース進捗管理
 
+Q04 Step 4第8単位：ゴミ箱内cloudメモ1件の完全削除を既存C04 deletePermanentlyへfake製品接続。不可逆確認後のみ実行し、RPC引数はp_id/p_expected_revisionの2つだけ。既存C04内部requestIdをRPCへ送らず、ledger/resolveを新設しない。要求成功だけを表示しsnapshotを失効、UNKNOWNは保持して新cloud writeを停止。C03〜C05/Q04は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。詳細は[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第8単位。以下の完全削除未接続記述は第7単位以前の履歴として区別する。
+
 Q04 Step 4第7単位：ゴミ箱内cloudメモ1件の復元を既存changeStateの正式action `restore` へfake製品接続。PR #89のtrash経路と要求保持/busy/UNKNOWN/旧応答遮断を共通化し、操作確認後だけ実行する。成功は要求単位のみ、snapshotは失効し明示再読取を案内する。local write/実通信/DB操作/cleanupは0。C03〜C05/Q04は進行中、single-rpc未認定。接続範囲の正本は[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第7単位。以下の第6単位以前の復元未接続記述は履歴として区別する。
 
 Q04 Step 4第6単位：通常cloudメモ1件のゴミ箱移動を既存C04 changeStateへfake製品接続済み。操作確認・busy/離脱抑止・旧応答拒否・UNKNOWN保持を既存C03/C04/C05へ委譲する。snapshotは楽観更新せず失効し、明示再読取を案内。製品Chromium109件を含む全1719件/typecheck/diff検査PASS。実通信・DB操作・cleanupは0。C03〜C05/Q04全体は進行中、通常entry/実製品受入・残りwrite・single-rpcは未完了。以下の第5単位時点の状態変更未接続記述は本追記で更新する。詳細は[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第6単位を参照。
