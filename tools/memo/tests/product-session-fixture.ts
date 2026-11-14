@@ -13,7 +13,8 @@ const operationMode = mode.replace(/^cloud-create/, 'cloud-edit').replace(/^clou
 const id = mode === 'cloud-casing' ? '00000000-0000-4000-8000-00000000abcd' : '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
 const value = { user: { id }, access_token: 'synthetic-token-private', expires_at: 200 };
-let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data' || (mode.startsWith('cloud') && !mode.endsWith('-signed-out')) ? value : null;
+let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data'
+  || (mode.startsWith('cloud') && !mode.endsWith('-signed-out') && (!mode.startsWith('cloud-d05') || mode.includes('-restore'))) ? value : null;
 let emit!: (event: string, session: unknown) => void;
 const calls = { login: 0, logout: 0, restore: 0, unsubscribe: 0, listenerUnsubscribe: 0, dispose: 0, writes: 0, fetch: 0,
   readCompleted: 0, saveCompleted: 0, resolveCompleted: 0, stateCompleted: 0, cloudDispose: 0 };
@@ -40,6 +41,8 @@ let resolvedArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
 let stateArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
 let stateResult: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult | CloudEmptyTrashResult | CloudSaveTagResult | CloudDeleteTagResult> | null = null;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
+let releaseAuthCompletion: (() => void) | undefined;
+let releaseInitialization: (() => void) | undefined, initializationLocks = 0;
 let holdWrite = false;
 let failReads = false, failWrites = false;
 let snapshotMode: 'success' | 'failure' | 'unverified' | 'permission' | 'invalid' = 'success';
@@ -84,11 +87,16 @@ const snapshot = () => {
   return result;
 };
 const api: MemoAuthApi = {
-  getSession: async () => { calls.restore++; return { data: { session: current }, error: null }; },
+  getSession: async () => { calls.restore++;
+    if (mode.includes('-restore-local-cancelled') && calls.restore === 1) await new Promise<void>(resolve => { releaseAuthCompletion = resolve; });
+    if (mode === 'cloud-d05-restore-failed') throw new Error('raw-provider-token');
+    if (mode === 'cloud-d05-restore-blocked') return { data: { session: null }, error: { message: 'raw-provider-token' } };
+    if (mode === 'cloud-d05-restore-signed-out') return { data: { session: null }, error: null };
+    return { data: { session: current }, error: null }; },
   getUser: async () => ({ data: { user: { id: value.user.id } }, error: null }),
   async signInWithPassword() {
     calls.login++;
-    if (mode === 'pending') await new Promise<void>(resolve => { releaseLogin = resolve; });
+    if (mode === 'pending' || mode.startsWith('cloud-d05-login-pending')) await new Promise<void>(resolve => { releaseLogin = resolve; });
     if (mode === 'throw') throw new Error('synthetic-email@example.invalid synthetic-password raw-provider-token');
     current = value; return { data: { session: current }, error: null };
   },
@@ -213,6 +221,11 @@ const cloudPort = {
 };
 let notify: ((state: MemoAuthState) => void) | undefined;
 const injected = { ...session,
+  async login(email: string, password: string) {
+    const result = await session.login(email, password);
+    if (mode === 'cloud-d05-completion-pending') await new Promise<void>(resolve => { releaseAuthCompletion = resolve; });
+    return result;
+  },
   subscribe(listener: (state: MemoAuthState) => void) {
     if (mode === 'subscription-throw') throw new Error('private-subscription-error');
     notify = listener; const unsubscribe = session.subscribe(listener);
@@ -221,6 +234,8 @@ const injected = { ...session,
   dispose() { calls.dispose++; session.dispose(); },
 };
 const values = new Map<string, string>();
+if (mode.includes('-local-confirmation') || mode.includes('-local-cancelled') || mode.includes('-local-pending')) values.set('myhomepage.memo.items.v1', '[]');
+if (mode.includes('-local-stopped')) values.set('myhomepage.memo.items.v1', 'invalid');
 if (mode.startsWith('migration')) values.set('myhomepage.memo.items.v1', '[]');
 if (mode === 'migration-recover') values.set('myhomepage.memo.data.v2', JSON.stringify(createPendingMigration('[]', () => crypto.randomUUID())));
 if (mode === 'restore-data') values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 3,
@@ -229,6 +244,9 @@ const app = createProductLocalApp(document, {
   storage: { getItem: key => { if (failReads) throw new Error('fake-read-error'); return values.get(key) ?? null; },
     setItem: (key, data) => { calls.writes++; values.set(key, data); if (failWrites) throw new Error('fake-write-error'); } },
   locks: { async request(_name, _options, callback) {
+    initializationLocks++;
+    if (mode.includes('-local-pending') && initializationLocks === 1) await new Promise<void>(resolve => { releaseInitialization = resolve; });
+    if (mode.includes('-local-load-failed') && initializationLocks === 2) failReads = true;
     if (holdWrite) await new Promise<void>(resolve => { releaseWrite = resolve; });
     return callback();
   } },
@@ -266,6 +284,8 @@ Object.assign(window, { fixture: {
   stale: () => notify?.({ phase: 'signed-out', generation: 0, userId: null, reauthenticateUserId: null, expiresAt: null, reason: 'none' }),
   emit: () => emit('SIGNED_IN', current),
   releaseLogin: () => releaseLogin?.(), holdWrite: () => { holdWrite = true; },
+  releaseAuthCompletion: () => releaseAuthCompletion?.(),
+  releaseInitialization: () => releaseInitialization?.(),
   releaseWrite: () => { holdWrite = false; releaseWrite?.(); },
   dispose: app.dispose,
   stored: () => [...values.entries()],

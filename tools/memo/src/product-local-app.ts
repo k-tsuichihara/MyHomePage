@@ -72,6 +72,8 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let disposeRestore: (() => void) | undefined, disposeRecovery: (() => void) | undefined;
   let disposeInitial: (() => void) | undefined;
   let sessionUi: ReturnType<typeof mountProductSession> | undefined;
+  // local通常画面の成功ではなく、診断＋必要なentry試行が進行中でないことを通知する。
+  let localInitializationSettled = false;
   // 各既存controllerが持つbusy状態の変化をAuth UIにも反映する。
   async function withSessionRefresh<T>(start: () => Promise<T>): Promise<T> {
     try {
@@ -177,14 +179,21 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
 
   const migrationPort: typeof migration = {
     getState: migration.getState,
-    async inspect() { if (localAvailable()) await withSessionRefresh(() => migration.inspect()); },
+    async inspect() { if (localAvailable()) {
+      localInitializationSettled = false;
+      await withSessionRefresh(() => migration.inspect());
+    } },
     cancel(token) { if (!disposed) migration.cancel(token); },
-    async confirm(token) { if (localAvailable()) await withSessionRefresh(() => migration.confirm(token)); },
+    async confirm(token) { if (localAvailable()) {
+      localInitializationSettled = false;
+      await withSessionRefresh(() => migration.confirm(token));
+    } },
   };
-  views.mountMigration(doc, migrationPort, enter);
+  views.mountMigration(doc, migrationPort, enter, () => { localInitializationSettled = true; sessionUi?.refresh(); });
   // cloud読取結果をlocalへ流し込まず、local操作UIを止めてドラフトを保持する。
   const heldInert = new Map<HTMLElement, boolean>();
   sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
+    isReady: () => localInitializationSettled,
     createId: deps.createId, now: () => new Date(deps.now()),
     setCloudSelected(selected) {
       for (const id of ['memo-app', 'migration-view']) {
