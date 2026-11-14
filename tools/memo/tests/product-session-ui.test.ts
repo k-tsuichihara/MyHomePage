@@ -962,6 +962,123 @@ async function sendStateChange(page: Page, action: 'trash' | 'restore' | 'delete
   await prepareStateChange(page, action);
   await page.getByRole('button', { name: action === 'trash' ? '確認してゴミ箱へ移動' : action === 'restore' ? '確認して復元' : '完全に削除', exact: true }).click();
 }
+async function prepareEmptyTrash(page: Page) {
+  await selectCloud(page); await page.getByRole('button', { name: 'ゴミ箱を空にする', exact: true }).click();
+  await page.getByRole('button', { name: 'すべて完全に削除', exact: true }).evaluate(node => Object.assign(window, { oldEmpty: node }));
+}
+it('一括完全削除はゴミ箱2件の集合だけを確認・固定し、正式2引数で一度だけ送信する', async () => {
+  const page = await pageFor('cloud-empty-success'); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    const local = await probe(page, 'fixture.state()'); await prepareEmptyTrash(page);
+    await page.getByText('ゴミ箱内のメモ2件を完全に削除します。元に戻せません。', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '一括削除をキャンセル', exact: true }).click();
+    await probe(page, 'window.oldEmpty.click()');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    await page.getByRole('button', { name: 'ゴミ箱を空にする', exact: true }).click();
+    const count = Number(await probe(page, 'fixture.generatedIds.length'));
+    await page.getByRole('button', { name: 'すべて完全に削除', exact: true }).click();
+    await page.getByText(/一括完全削除要求の成功を確認/).waitFor();
+    expect(await page.locator('#product-cloud-trash-state').textContent()).toContain('削除件数2件');
+    expect(await probe(page, 'fixture.stateArgs()')).toEqual({ p_ids: ['00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000104'], p_revisions: [1, 3] });
+    const ids = await probe(page, 'fixture.generatedIds.slice()') as string[]; expect(ids.length).toBe(count + 1);
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_empty_trash']);
+    expect(await probe(page, 'fixture.state()')).toEqual(local); expect(await probe(page, 'fixture.stored()')).toEqual([]);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    for (const secret of [...ids, '00000000-0000-4000-8000-000000000102', '00000000-0000-4000-8000-000000000104',
+      '00000000-0000-4000-8000-000000000002', 'synthetic-email@example.invalid', 'synthetic-password', 'synthetic-token-private']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it('ゴミ箱0件では一括削除入口もRPCも生成しない', async () => {
+  const page = await pageFor('cloud-empty-zero');
+  try {
+    await selectCloud(page); await page.getByText('ゴミ箱は空です。', { exact: true }).waitFor();
+    expect(await page.getByRole('button', { name: 'ゴミ箱を空にする', exact: true }).count()).toBe(0);
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['conflict', 'revision', 'rejected', 'unknown', 'count', 'unverified', 'invalid'])('一括削除%sは成功/未削除にせず、元集合と不明操作を保持して再送しない', async outcome => {
+  const page = await pageFor(`cloud-empty-${outcome}`); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    await prepareEmptyTrash(page); const count = Number(await probe(page, 'fixture.generatedIds.length'));
+    await page.getByRole('button', { name: 'すべて完全に削除', exact: true }).click();
+    await page.waitForFunction('fixture.calls.stateCompleted === 1');
+    const status = await page.locator('#product-cloud-trash-state').textContent();
+    expect(status).not.toContain('要求の成功'); expect(status).not.toContain('未削除');
+    if (outcome === 'conflict' || outcome === 'revision') expect(status).toContain('競合');
+    else if (outcome === 'rejected') expect(status).toContain('拒否');
+    else {
+      expect(status).toContain('UNKNOWN'); expect(await probe(page, 'fixture.dispose()')).toBe('pending');
+      expect(await probe(page, 'fixture.stateResult().operation.targets')).toEqual([
+        { id: '00000000-0000-4000-8000-000000000102', revision: 1 }, { id: '00000000-0000-4000-8000-000000000104', revision: 3 }]);
+      expect(await probe(page, 'fixture.stateResult().operation.requestId')).toBe(await probe(page, `fixture.generatedIds[${count}]`));
+      const fresh = page.getByRole('button', { name: 'クラウドに新規メモ', exact: true });
+      expect(await fresh.isDisabled()).toBe(true); await fresh.dispatchEvent('click');
+      await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+      await page.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+      expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    }
+    await probe(page, 'window.oldEmpty.click()');
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(count + 1);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_empty_trash']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    for (const secret of ['synthetic-password', 'raw-provider-token', 'synthetic-token-private']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it('一括削除中の二重送信/他write/切替/logout/disposeを抑止し、元対象を差し替えない', async () => {
+  const page = await pageFor('cloud-empty-pending');
+  try {
+    await prepareEmptyTrash(page); await page.getByRole('button', { name: 'すべて完全に削除', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 2'); const args = await probe(page, 'fixture.stateArgs()');
+    await probe(page, 'fixture.changeTrashSet(); window.oldEmpty.click()');
+    await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).dispatchEvent('click');
+    expect(await probe(page, 'fixture.dispose()')).toBe('busy'); expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    await probe(page, 'fixture.releaseState()'); await page.getByText(/一括完全削除要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.stateArgs()')).toEqual(args);
+    expect(await probe(page, 'fixture.dispose()')).toBe('applied'); await probe(page, 'window.oldEmpty.click()');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_empty_trash']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['expired', 'generation', 'target', 'snapshot'])('一括削除送信後%s変更では旧応答を現在成功へ反映しない', async change => {
+  const page = await pageFor('cloud-empty-pending');
+  try {
+    await prepareEmptyTrash(page); await page.getByRole('button', { name: 'すべて完全に削除', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 2');
+    await probe(page, change === 'expired' ? 'fixture.expired()' : change === 'generation' ? 'fixture.refreshAuth()' : change === 'target' ? 'fixture.forceLocal()' : 'fixture.invalidateSnapshot()');
+    await probe(page, 'fixture.releaseState()'); await page.waitForFunction('fixture.calls.stateCompleted === 1');
+    expect(await page.locator('#product-cloud-trash-state').textContent()).not.toContain('要求の成功');
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_empty_trash']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['generation', 'user', 'targets'])('一括削除確認後%s変更では旧集合の確認を実行できない', async change => {
+  const page = await pageFor('cloud-empty-success');
+  try {
+    await prepareEmptyTrash(page); const count = await probe(page, 'fixture.generatedIds.length');
+    if (change === 'user') { await probe(page, 'fixture.externalLogout()'); await probe(page, 'fixture.differentUser()'); await login(page); }
+    else if (change === 'generation') await probe(page, 'fixture.refreshAuth()');
+    else {
+      await probe(page, 'fixture.changeTrashSet()');
+      await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+      await selectCloud(page); await page.getByText('ゴミ箱は空です。', { exact: true }).waitFor();
+    }
+    await probe(page, 'window.oldEmpty.click()');
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(count);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(change === 'targets' ? ['memo_load_snapshot', 'memo_load_snapshot'] : ['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('完全削除はゴミ箱だけで明示確認し、正式な2引数で一度だけ送信する', async () => {
   const page = await pageFor('cloud-delete-success'); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));

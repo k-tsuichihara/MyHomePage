@@ -1,5 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
+Step 4第9単位：既存emptyTrashをcloudゴミ箱全件の固定集合へfake製品接続。0件無送信・件数付き不可逆確認・正式2配列・既存削除件数検証・UNKNOWN保持を利用する。ledger/resolve・自動再送・実通信/DB操作/cleanupなし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第9単位を現在の接続範囲の正本とする。以下の一括削除未接続は以前の履歴。残りタグ変更・実製品接続/受入・single-rpcは未完了。
+
 Step 4第8単位：既存C04単件完全削除をfake製品UIへ接続。不可逆確認・正式2引数・要求単位の成功/UNKNOWN停止・snapshot失効を既存境界で検証する。削除requestIdをRPCへ追加せず、専用ledger/resolve・自動再送なし。実通信/DB操作/cleanupは0。以下の完全削除未接続記述は過去時点の履歴と区別する。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第8単位を参照。実製品受入・残り一括削除/タグ変更・single-rpcは未完了。
 
 Step 4第7単位：既存C04 changeStateへ単件復元（正式action `restore`）をfake製品接続。trashとの共通要求保持/現在性/busy/UNKNOWN/離脱契約を再利用し、操作確認後に一度だけ送信する。snapshotの楽観変更・自動load/retry/独自resolveなし。実通信/DB操作/cleanupは0。残りwriteは完全削除/一括削除/タグ変更、実製品接続・受入とsingle-rpcは未検証。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第7単位を参照し、以下は以前の接続状態の履歴と区別する。

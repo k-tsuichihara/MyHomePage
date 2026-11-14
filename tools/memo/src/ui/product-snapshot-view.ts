@@ -1,11 +1,13 @@
 import type { MemoData, Memo } from '../types';
 import { uuidKey } from '../read-primitives';
+import type { CloudTarget } from '../cloud-rpc-types';
 
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
 export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean,
   changeState?: (memo: Memo, action: 'trash' | 'restore', valid: () => boolean) => boolean,
-  deletePermanently?: (memo: Memo, valid: () => boolean) => boolean) {
+  deletePermanently?: (memo: Memo, valid: () => boolean) => boolean,
+  emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
@@ -82,6 +84,25 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       row.append(button(memo.title, () => detail(index, token))); rows.append(row);
     });
     root.append(rows); root.hidden = false;
+    if (emptyTrash) {
+      const targets = Object.freeze(value.memos.filter(memo => memo.deletedAt !== null)
+        .map(memo => Object.freeze({ id: memo.id, revision: memo.revision })));
+      if (!targets.length) { root.append(text('p', 'ゴミ箱は空です。')); return; }
+      const start = button('ゴミ箱を空にする', () => {
+        if (!root.contains(start) || !current(token)) return;
+        const confirm = button('すべて完全に削除', () => {
+          if (!root.contains(confirm)) return;
+          const latest = current(token); if (!latest) return;
+          const now = latest.memos.filter(memo => memo.deletedAt !== null);
+          if (now.length !== targets.length || !targets.every((row, index) =>
+            uuidKey(row.id) === uuidKey(now[index]!.id) && row.revision === now[index]!.revision)) { clear(); return; }
+          if (emptyTrash(targets, active!.valid)) clear();
+        });
+        root.replaceChildren(text('p', `ゴミ箱内のメモ${targets.length}件を完全に削除します。元に戻せません。`), confirm,
+          button('一括削除をキャンセル', () => list(token)));
+      });
+      root.append(start);
+    }
   };
   return Object.freeze({
     show(value: MemoData, valid: () => boolean) {
