@@ -9,7 +9,7 @@ import type { VoiceRecognition } from '../src/voice-input';
 
 // 既存製品compositionへ合成session/Storageだけを注入。SDK/実fetchは使わない。
 const mode = (window as unknown as { fixtureMode: string }).fixtureMode;
-const operationMode = mode.replace(/^cloud-create/, 'cloud-edit');
+const operationMode = mode.replace(/^cloud-create/, 'cloud-edit').replace(/^cloud-assign-(edit|create)/, 'cloud-edit');
 const id = mode === 'cloud-casing' ? '00000000-0000-4000-8000-00000000abcd' : '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
 const value = { user: { id }, access_token: 'synthetic-token-private', expires_at: 200 };
@@ -33,6 +33,7 @@ let releaseSave: (() => void) | undefined;
 let releaseResolve: (() => void) | undefined;
 let releaseState: (() => void) | undefined;
 let savedArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
+let resolvedArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
 let stateArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
 let stateResult: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult | CloudEmptyTrashResult | CloudSaveTagResult | CloudDeleteTagResult> | null = null;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
@@ -54,6 +55,11 @@ const snapshot = () => {
   if (mode.startsWith('cloud-empty')) {
     if (mode === 'cloud-empty-zero' || changedTrashSet) result.memos = [memo];
     else result.memos.push({ ...memo, id: '00000000-0000-4000-8000-000000000104', title: 'second trash', deleted_at: '2026-11-14T00:00:00Z', revision: 3 });
+  }
+  if (mode.startsWith('cloud-assign')) {
+    if (mode.endsWith('no-tags')) { result.tags = []; result.memoTags = []; }
+    else result.tags.push({ ...result.tags[0]!, id: '00000000-0000-4000-8000-000000000106', name: 'third candidate' },
+      { ...result.tags[0]!, id: '00000000-0000-4000-8000-000000000105', name: 'second candidate' });
   }
   if (changedTag) result.tags[0] = { ...result.tags[0]!, name: changedTag === 'revision' ? result.tags[0]!.name : 'changed tag', revision: changedTag === 'name' ? result.tags[0]!.revision : 2 };
   return result;
@@ -138,10 +144,12 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
       savedArgs = args;
       if (operationMode.startsWith('cloud-edit-pending')) await new Promise<void>(resolve => { releaseSave = resolve; });
       if (operationMode === 'cloud-edit-conflict' || operationMode === 'cloud-edit-pending-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: args.p_expected_revision === null ? 'previously used memo id' : 'memo revision conflict' } };
+      if (operationMode === 'cloud-edit-missing-tag') return { provenance: 'single-rpc', status: 400, body: { code: '22023', message: 'unknown tag' } };
       if (operationMode === 'cloud-edit-rejected') return { provenance: 'single-rpc', status: 403, body: { code: '42501', message: 'raw-provider-token' } };
       if (operationMode === 'cloud-edit-unknown' || operationMode === 'cloud-edit-no-record' || operationMode === 'cloud-edit-deleted' || operationMode.startsWith('cloud-edit-resolve-pending')) throw new Error('synthetic-password raw-provider-token');
       return { provenance: 'single-rpc', status: 200, body: saved() };
     }
+    resolvedArgs = args;
     if (JSON.stringify(args) !== JSON.stringify(savedArgs)) throw new Error('mismatched-original-request');
     if (operationMode.startsWith('cloud-edit-resolve-pending')) await new Promise<void>(resolve => { releaseResolve = resolve; });
     return { provenance: 'single-rpc', status: 200, body: operationMode === 'cloud-edit-no-record' ? null
@@ -168,10 +176,10 @@ const cloudPort = {
   }, async resolve(...args: Parameters<typeof cloudController.resolve>) {
     try { return await cloudController.resolve(...args); } finally { calls.resolveCompleted++; }
   } } : {}),
-  ...(mode.startsWith('cloud-tag-delete') ? { async deleteTag(...args: Parameters<typeof cloudController.deleteTag>) {
+  ...(mode.startsWith('cloud-tag-delete') || mode.startsWith('cloud-assign') ? { async deleteTag(...args: Parameters<typeof cloudController.deleteTag>) {
     try { const result = await cloudController.deleteTag(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
-  ...(mode.startsWith('cloud-tag') || mode.startsWith('cloud-pin') || mode.startsWith('cloud-unpin') ? { async saveTag(...args: Parameters<typeof cloudController.saveTag>) {
+  ...(mode.startsWith('cloud-tag') || mode.startsWith('cloud-assign') || mode.startsWith('cloud-pin') || mode.startsWith('cloud-unpin') ? { async saveTag(...args: Parameters<typeof cloudController.saveTag>) {
     try { const result = await cloudController.saveTag(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
   ...(mode.startsWith('cloud-empty') ? { async emptyTrash(...args: Parameters<typeof cloudController.emptyTrash>) {
@@ -216,7 +224,7 @@ Object.assign(window, { fixture: {
   invalidateSnapshot: () => targets.setDirty(false),
   differentUser: () => { value.user.id = '00000000-0000-4000-8000-000000000999'; },
   externalLogout: () => session.logout(),
-  savedArgs: () => savedArgs, releaseSave: () => releaseSave?.(),
+  savedArgs: () => savedArgs, resolvedArgs: () => resolvedArgs, releaseSave: () => releaseSave?.(),
   releaseResolve: () => releaseResolve?.(),
   forceLocal: () => { const result = targets.request('local', null, { kind: 'allowed' });
     return result.kind === 'confirmation-required' ? targets.confirm(result, true, null, { kind: 'allowed' }) : result; },

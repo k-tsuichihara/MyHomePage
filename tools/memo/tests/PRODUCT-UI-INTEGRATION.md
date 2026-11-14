@@ -303,6 +303,42 @@ AI Gateは既存changeState fixture/Chromiumを再利用しpin/unpin固有17ケ�
 
 AI Gate結果：typecheck、全Vitest 56ファイル/1817件（製品Chromium207件を含む）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。初回のunpin試験失敗はfixtureが初期pinned_atをnull固定にしていたことが原因で、合成状態を修正した後に追加17件と全回帰を確認した。
 
-次単位として残るfake/offline製品機能は **cloudメモ編集時のタグ割当変更**。既存editor-stateのDraft.tagIds、editDraft、beginSaveの凍結要求とC04 save/resolveはタグID集合を既に扱い、既存snapshotにはタグ一覧/関連も含まれる。一方、現在のproduct-cloud-editorは編集開始時のtagIdsを維持するだけでタグ変更UIを持たない。次はこの境界を再利用するUI接続を別承認範囲として検討する。今回はタグ割当コードを変更しない。
+第12単位時点で残っていたcloudメモ編集時のタグ割当変更は以下の第13単位で接続する。
 
 C03/C04/C05・Q04 Step 4全体は進行中。実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定は未完了。実通信/DB操作/cleanup/Human Gateは行わない。
+
+## Q04 Step 4 第13単位：cloud editorのタグ割当
+
+既存メモはsnapshotのmemoTagsから初期tagIdsを取得し、同じsnapshotのtagsを候補として既存cloud editorへ渡す。新規メモも有効なsnapshotがある場合は同じcheckbox UIを共有し、初期tagIds=[]から選べる。候補未取得での従来の新規編集はタグ変更を提供せず、未取得と0件を区別して案内する。editor内にタグCRUDは追加しない。
+
+- checkboxにはタグ名だけを表示し、IDをvalue/属性/URLへ置かない。IDは編集session固有closure内で保持し、選択/解除は既存editDraftのDraft.tagIdsへ渡す。snapshot/memoTags/localデータは変更しない。順序仕様を追加せず、既存editorの集合比較・ID重複検証、C01のUUIDキーによるソートを使用する。
+- タグ候補は開始時に配列を固定し、開始時snapshot leaseと既存C03 context/保存先view ticketに結び付ける。editor自身のdirty更新で変わるC05状態オブジェクトを、新snapshotへの切替と混同しない。候補が古くなったら名前を消して選択UIを無効化し、再読取後の編集を案内する。別userには旧候補を操作させない。保持中draftのIDを別タグへ読み替えない。
+- 元draftの明示保存と元要求のresolveは従来契約を維持する。古い候補を現在と表示したり自動補正したりせず、残ったIDの存在確認/競合等は既存save/SQLへ委譲する。既存のstale target終端結果回収後に保存再開できる契約を壊さない。
+- 保存時は既存beginSaveがID/title/body/tagIds/expectedRevision/requestIdを同一不変要求にする。正式memo_saveのp_tag_idsへ渡し、追加RPCなし。送信後の選択変更は最新draftだけに反映し、元要求は変えない。resolveは既存C04の元pending handle/要求を使い、現在checkboxや新snapshotを読み直さない。
+- SQLのmemo_saveは同一userに存在しないタグを22023で拒否する。C01はinvalid-argument拒否として返す。成功返却のID/本文/タグ集合/revision等の照合、conflict/rejected/UNKNOWN/no-record/削除済みreceiptの意味は既存C04/editorを正本とし、タグ専用判定やresolve/ledgerを作らない。UNKNOWNを未変更と断定せず自動再送しない。
+- タグ候補を触るだけではRPCなし。タグCRUD側は既存cloudEditor.getState()/busy境界により同時開始を拒否する。保存/照合中の離脱抑止、dirty/rejected/unresolvedの確認、Auth/世代/target/旧view/終了後の結果拒否、local fallback禁止を維持する。秘密値/内部ID/raw例外をDOM/URL/consoleへ出さず、disposeで候補・handlerを解放する。
+
+AI Gateは既存fixture・生成製品HTML・C03/C04/C05・cloud editorを共有する。既存/新規の複数選択、初期memoTags、候補0件、全解除、タグIDソート、送信後draftと元要求の分離、元tagIdsの明示resolve/no-record、conflict/permission/存在しないタグの拒否、Auth/世代/targetの旧応答、世代/別user/再選択後の旧候補、editor中のタグCRUD拒否、local write/fetch0・秘密値非露出を追加検証する。保存中の再loadは既存busyで抑止されるため、再load可能とする新経路は作らない。
+
+AI Gate結果：typecheck、全Vitest 56ファイル/1835件（製品Chromium225件・追加18件）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。stale target終端結果回収後の明示保存を阻害した初期案は、候補の鮮度と保持draftの保存契約を分離して修正し、既存回帰を維持した。保存中に切替/reloadできるとした試験案は既存busy契約と不整合だったため、可能な旧target応答検査と、非busy時の再選択後の候補失効検査に分けた。
+
+### 最終静的棚卸し（main `87e7cd9` + 第13単位候補差分）
+
+今回のタグ割当完了と、v1.1.0全体の製品機能完了は分ける。Review8 §1/§5、現在の製品UI契約と実装を一度照合した結果を以下に固定する。R02のlocal COMPLETEを開き直さず、cloud側だけの未結線を区別する。
+
+| 対象 | 分類 | 根拠・限界 |
+|---|---|---|
+| Auth/login/logout/restore表示・再認証、storage target | A（注入host）/ C（実経路） | PR #84/#85以降のC03/C05回帰。実SDK/Auth Storage生成・実製品受入は別工程 |
+| snapshot load、基本list/detail | A | 既存C04 load→product-snapshot-view。下記B1の一般一覧機能まで実装済みとはしない |
+| create/edit/save/resolve、タグ割当 | A | 同一editor/凍結要求。今回のcheckboxは新規にも共有。成功は要求単位、現在snapshotは明示再読取 |
+| trash/restore/permanent delete/empty trash、tag create/rename/delete、pin/unpin | A | 第6〜第12単位のC04注入回帰。実RPC PASSへ昇格しない |
+| backup/restore/回復、migration/v3導入 | A（local）/ C（実データ受入） | R02 COMPLETEと既存v3/移行/原値退避契約。cloud同期/移行やcloud backupを追加する意味ではない |
+| voice input | A（local）/ B3（cloud）/ C（実認識受入） | product-local-appのlocal controller経路だけにmountし、cloud選択時はstopVoice+inert。cloud editorへは未接続 |
+| B1: cloud一覧の正式共通機能 | B | Review8 §5の文字検索/タグ複数OR絞込/並替/ピン優先/戻り時の表示状態、§1のタグ使用件数。cloud viewはsnapshot順に直接列挙し、memo-query/countTagUsageや一覧状態へ未接続。localは既接続 |
+| B2: cloudメモの複製 | B | Review8 §5の独立複製操作。cloud view/editorには入口なし。既存memo-duplicate/local経路はあるがcloudへ未接続 |
+| B3: cloud音声入力 | B | Review8 §5の本文追記/新規音声メモ。既存voice-input core/local UIはあるがcloud用の編集接続なし |
+| 実Auth/session永続化・実製品sender・RLS/障害/応答出所受入 | C | 通常entryは引き続きlocal-only。実接続の生成/注入準備は承認後も先にAI Gateで行い、人間へ丸投げしない。実測でしか解消できない事項と準備コードを区別する |
+| 実Storage/Web Locks/実データ移行・公開資産切替・実音声の受入 | C | R03以降/Q05等の別工程。現試験で実データ操作・公開を承認しない |
+| 自動同期/転送/fallback、bulk pin・高度タグUI、新規登録/password reset、新ledger/resolve | D | 現行対象外または禁止。今回の残件に追加しない |
+
+**Bは0件ではなく3機能群（B1一覧・表示、B2複製、B3cloud音声）**。localに同機能があるだけではcloud製品接続済みと認定しない。fake/offline製品接続フェーズはまだ閉じず、次の最小候補はB1から既存memo-query/tag-usageを使うcloud一覧の純粋な表示接続（別承認）。本PRから次機能/次PRを勝手に開始しない。C03/C04/C05/Q04 Step 4全体は進行中、single-rpc未認定のまま。既知のHuman Gate通信問題の再調査/追加DB監査は不要。
