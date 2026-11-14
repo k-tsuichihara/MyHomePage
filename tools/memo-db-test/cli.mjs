@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 // Supabaseのdev-sandboxで確認したProject Refだけを設定する。
 // 空のままでは認証情報の入力・通信ともに行わない。
-const DEV_SANDBOX_PROJECT_REF = 'yohoppqflnhhvqypwhfv';
+export const DEV_SANDBOX_PROJECT_REF = 'yohoppqflnhhvqypwhfv';
 
 export async function loadConfig() {
   if (!/^[a-z]{20}$/.test(DEV_SANDBOX_PROJECT_REF)) {
@@ -42,7 +42,7 @@ export async function loadConfig() {
   return { origin: url.origin, key };
 }
 
-export function readPassword() {
+export function readPassword(label = 'パスワード（非表示）: ') {
   return new Promise((resolve, reject) => {
     const input = process.stdin;
     let password = '';
@@ -67,7 +67,7 @@ export function readPassword() {
         } else if (character >= ' ' && character !== '\u001b') password += character;
       }
     };
-    process.stdout.write('パスワード（非表示）: ');
+    process.stdout.write(label);
     input.setEncoding('utf8');
     input.setRawMode(true);
     input.on('data', onData);
