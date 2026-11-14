@@ -1008,6 +1008,69 @@ async function openAssignment(page: Page, kind: 'edit' | 'create' = 'edit') {
 }
 const cloudRows = (page: Page) => page.getByRole('list', { name: 'クラウドの一覧結果', exact: true });
 const cloudTitles = (page: Page) => cloudRows(page).getByRole('button').allTextContents();
+it.each(['success', 'unknown', 'conflict', 'rejected', 'pending'])('B2複製は新規draftへ内容だけを渡し既存save/resolveへ接続する：%s', async outcome => {
+  const page = await pageFor(`cloud-list-${outcome}`); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    await selectCloud(page); await cloudRows(page).getByRole('button', { name: 'Pinned A', exact: true }).click();
+    await page.getByRole('button', { name: 'このクラウドメモを複製', exact: true }).click();
+    expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('Pinned A');
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('needle common');
+    expect(await page.getByRole('checkbox', { name: '赤タグ', exact: true }).isChecked()).toBe(true);
+    expect(await page.getByRole('checkbox', { name: '青タグ', exact: true }).isChecked()).toBe(false);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    await page.getByRole('checkbox', { name: '青タグ', exact: true }).check();
+    await page.getByLabel('クラウドのタイトル', { exact: true }).fill('複製後のタイトル');
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('複製後の本文');
+    await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.waitForFunction('fixture.savedArgs() !== null');
+    const original = await probe(page, 'fixture.savedArgs()') as CloudCall['args'];
+    expect(original.p_id).not.toBe('00000000-0000-4000-8000-000000000201');
+    expect(original.p_expected_revision).toBeNull();
+    expect(original.p_title).toBe('複製後のタイトル'); expect(original.p_body).toBe('複製後の本文');
+    expect(original.p_tag_ids).toEqual(['00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000105']);
+    expect(Object.keys(original).sort()).toEqual(['p_body', 'p_expected_revision', 'p_id', 'p_request_id', 'p_tag_ids', 'p_title']);
+    if (outcome === 'pending' || outcome === 'unknown') {
+      await page.getByLabel('クラウドのタイトル', { exact: true }).fill('後続draft');
+      await page.getByRole('checkbox', { name: '赤タグ', exact: true }).uncheck();
+      expect(await probe(page, 'fixture.savedArgs()')).toEqual(original);
+      if (outcome === 'pending') await probe(page, 'fixture.releaseSave()');
+    }
+    if (outcome === 'unknown') {
+      await page.getByText(/保存できたか不明/).waitFor();
+      expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+      await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+      await page.getByText(/追加の未保存変更があります/).waitFor();
+      expect(await probe(page, 'fixture.resolvedArgs()')).toEqual(original);
+    } else await page.getByText(outcome === 'conflict' ? /競合：/ : outcome === 'rejected' ? /保存は拒否・停止/ : /保存要求の成功/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save', ...(outcome === 'unknown' ? ['memo_resolve_request'] : [])]);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await probe(page, 'fixture.stored()')).toEqual([]);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    expect(output).not.toMatch(/00000000-0000-4000-8000-000000000/);
+    for (const secret of ['synthetic-password', 'synthetic-token-private', 'raw-provider-token', original.p_id, original.p_request_id]) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it.each(['back', 'generation', 'target', 'user', 'dispose'])('B2旧detailの複製を%s後に実行しても新規draftを作らない', async change => {
+  const page = await pageFor('cloud-list-success');
+  try {
+    await selectCloud(page); await cloudRows(page).getByRole('button', { name: 'Pinned A', exact: true }).click();
+    await page.getByRole('button', { name: 'このクラウドメモを複製', exact: true }).evaluate(node => Object.assign(window, { oldDuplicate: node }));
+    if (change === 'back') {
+      await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+      await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
+      await cloudRows(page).getByRole('button', { name: 'Trashed memo', exact: true }).click();
+      expect(await page.getByRole('button', { name: 'このクラウドメモを複製', exact: true }).count()).toBe(0);
+    } else if (change === 'generation') await probe(page, 'fixture.refreshAuth()');
+    else if (change === 'target') await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    else if (change === 'dispose') await probe(page, 'fixture.dispose()');
+    else { await page.getByRole('button', { name: 'ログアウト', exact: true }).click(); await probe(page, 'fixture.differentUser()'); await login(page); await selectCloud(page); }
+    await probe(page, 'window.oldDuplicate.click()');
+    expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue().catch(() => '')).toBe('');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(change === 'user' ? ['memo_load_snapshot', 'memo_load_snapshot'] : ['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('B1検索はタイトル/本文/タグ名を既存queryへ渡し、タグOR＋文字ANDと使用件数を表示する', async () => {
   const page = await pageFor('cloud-list-success'); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));

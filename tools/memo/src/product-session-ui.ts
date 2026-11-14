@@ -76,7 +76,10 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     cloud.controller.emptyTrash && local.createId ? startEmptyTrash : undefined,
     cloud.controller.saveTag && local.createId ? { canStart: () => !closed && !unavailable && !busy && !pending && !isBusy()
       && !loading && !stateUncertain() && !cloudEditor?.getState() && !!cloudContext(), save: startSaveTag } : undefined,
-    cloud.controller.deleteTag ? startDeleteTag : undefined) : undefined;
+    cloud.controller.deleteTag ? startDeleteTag : undefined,
+    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices) =>
+      !isBusy() && !stateUncertain() && !busy && !pending && !loading && !!cloudContext()
+      && (cloudEditor?.duplicate(memo, tags, valid, choices) ?? false) : undefined) : undefined;
   const anchor = doc.getElementById('product-status');
   if (anchor) anchor.after(root); else doc.body.prepend(root);
   let closed = false, busy = false, generation = -1, unavailable = false;

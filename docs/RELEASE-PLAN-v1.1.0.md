@@ -1,5 +1,7 @@
 # メモツール v1.1.0 リリース進捗管理
 
+Q04 Step 4 B2：通常cloudメモ詳細の独立した複製操作を、既存createDuplicateEditorとcloud新規editor/save/resolveへfake製品接続。title/body/tagIdsだけを未保存の新規draftへ渡し、pin/元ID/revision等は引き継がない。複製時のwrite/追加read/local writeは0。B2はAI完了候補、既知のfake/offline未結線はB3 cloud音声入力のみの候補。C03〜C05/Q04全体は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)B2節を現在状態の正本とし、以下の残件数は履歴として区別する。
+
 Q04 Step 4 B1：cloud一覧へ既存queryMemos/countTagUsageとListContextの表示文脈を接続。文字検索/タグOR＋文字AND/正式並替/pin安定順/使用件数、同snapshotのdetail往復条件・scroll保持をまとめてfake製品検証する。通常とゴミ箱は分離し、新snapshot/所有境界で状態を破棄する。表示変更のRPC/local writeは0。B1はAI完了候補、fake/offline既知残件はB2 cloud複製・B3 cloud音声の2群。C03〜C05/Q04全体は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)B1節を正本とし、以下のB=3記述は履歴と区別する。
 
 Q04 Step 4第13単位：cloud editorのタグ割当を既存Draft/editDraft/beginSave/C04 save/resolveへfake製品接続。snapshot tags/memoTagsから候補と初期選択を固定し、新規editorも同じUIを共有する。resolveは元凍結要求tagIdsを使い、追加RPC/自動補正/再送/local writeなし。最終静的棚卸しではB=3機能群（cloud一覧の検索/絞込/並替/ピン優先等、cloud複製、cloud音声）が未接続。fake/offlineフェーズを閉じず、C03〜C05/Q04 Step 4は進行中。実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第13単位のA/B/C/Dを正本とする。

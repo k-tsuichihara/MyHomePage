@@ -31,6 +31,16 @@ it('ゴミ箱を純粋な複製入口でも拒否する', () => {
   const memo = { ...state().memos[0]!, deletedAt: NOW };
   expect(() => createDuplicateEditor('session', { memo, tagIds: [] })).toThrow();
 });
+it('cloud複製も共通draft契約を使い、新規ID・空baseline・revision nullだけを持つ', () => {
+  const source = { memo: { ...state().memos[0]!, pinnedAt: NOW }, tagIds: [TAG] };
+  const editor = createDuplicateEditor('cloud-copy', source, { id: token(300), source: 'cloud' });
+  expect(editor.id).toBe(token(300)); expect(editor.source).toBe('cloud');
+  expect(editor.expectedRevision).toBeNull(); expect(editor.save).toEqual({ kind: 'idle' });
+  expect(editor.baseline).toEqual({ title: '', body: '', tagIds: [] });
+  expect(Object.keys(editor.draft).sort()).toEqual(['body', 'tagIds', 'title']);
+  expect(editor.draft).toEqual({ title: source.memo.title, body: source.memo.body, tagIds: [TAG] });
+  expect(editor.unresolved).toEqual([]); expect(editor.usedRequestIds).toEqual([]); expect(isDirty(editor)).toBe(true);
+});
 it('保存前は書込・永続ID採番0件、明示保存だけ新規作成し元メモを保護', async () => {
   const f = fixture(); const before = f.storage.values.get(NEW_STORAGE_KEY);
   expect(await copy(f)).toEqual({ kind: 'done' });

@@ -1,5 +1,22 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q04 Step 4 B2：cloud詳細の複製（現在状態）
+
+Review8 §5とlocalの既存`createDuplicateEditor`を再利用し、通常cloudメモ詳細に独立した「このクラウドメモを複製」を接続する。ゴミ箱には提供しない。確認ダイアログ・即時保存・追加read・複製専用RPCはない。
+
+- 現在snapshotのIDから元メモを取得し、正式memoTags由来のtagIdsとtitle/bodyだけをコピーする。タグ名からIDを作らない。共通関数は既存createEditorで通常メモを検証し、空baselineの新規editorへeditDraftするため、複製直後からdirtyになる。
+- 共通関数に保存先/新規IDの任意引数を追加するだけでlocalの仮ID契約は変更しない。cloudは既存注入createIdで新規IDとeditor sessionを生成し、expectedRevision=nullとする。元ID/revision/lastRequestId/日時/deletedAt/pinnedAtはdraftへ渡さない。pinは新規saveの既存契約どおりなし。
+- 第13単位のタグ選択UIをそのまま共有し、保存前にtitle/body/tagIdsを変更できる。保存は既存beginSave/C04 memo_saveの正式6引数へ凍結し、requestId/operationIdも既存生成経路へ委譲する。UNKNOWN後は元pending handle/凍結要求の明示resolveだけを使い、元メモ再読取・要求差替え・自動再送はしない。
+- 複製ボタンのDOM所属、snapshot token/valid、元ID/revision/通常状態を検査し、hostの既存Auth/user/generation/target/busy/uncertain境界へ委譲する。別detailや一覧へ戻った後の旧ボタン、失効・user/target変更・dispose後は開始しない。
+- B1の同snapshot一覧往復は変更しない。複製開始後は既存新規editorのdirty/保存中/UNKNOWN離脱契約を使い、複製専用復帰状態を持たない。snapshotは既存編集開始と同じくclearし、保存成功後も明示再読取が必要。
+- cloud draft・条件・結果をlocal controller/Storageへ渡さず、local write/fallbackは0。通常entryのlocal-only build拒否・CSP・Permit境界は変更しない。
+
+AI Gateは製品Chromiumの橋渡し10ケース（成功/UNKNOWN明示resolve/conflict/rejected/送信後draft変更、旧detail/back/generation/target/user/dispose）と共通複製関数のcloud metadata非継承1ケースを追加する。既存の新規save/resolve・departure・タグ割当・B1一覧往復・local複製回帰を再利用し、保存状態機械の全組合せを複製しない。実Supabase/Auth/RPC/DB/SQL通信0件。
+
+最終AI Gate：typecheck、Vitest 56ファイル/1857件（製品Chromium246件、うちB2追加10件）、既存Playwright E2E83件、product build、git diff --checkはPASS。
+
+**B2はAI完了候補、レビュー待ち。既知のfake/offline未結線はB3 cloud音声入力のみの候補。** 以下のB1/第13単位等の残件数は当時の履歴で、本節を現在状態の正本とする。C03/C04/C05/Q04 Step 4全体は進行中、実製品接続/受入・single-rpcは未完了。cloud音声・Human Gate・実環境操作・cleanup・公開には進まない。
+
 R02の最初の実装単位として、公開切替前に製品用composition rootとブラウザ保存境界を整備する。正式根拠はReview8、既存の移行・保存・編集契約、`RELEASE-TRANSITION.md`である。
 
 ## 今回接続する範囲

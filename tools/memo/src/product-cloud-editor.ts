@@ -6,6 +6,7 @@ import type { createCloudController, PendingCloudSave, CloudSaveControlResult, C
 import type { createMemoAuthSession, AuthContext } from './auth-session';
 import type { Memo, Tag } from './types';
 import { uuidKey } from './read-primitives';
+import { createDuplicateEditor } from './memo-duplicate';
 
 /** 単件cloud編集の製品接続。保存/照合の判定はC04、編集/離脱は既存純粋関数へ委譲する。 */
 export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps: {
@@ -149,11 +150,13 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     } catch { if (!disposed) notice = '照合結果は不明です。編集内容を保持し、自動再送しません。'; }
     finally { working = false; if (!disposed) changed(); }
   }
-  function open(initial?: { memo: Memo; tagIds: string[] }, valid: () => boolean = () => true, tags: readonly Tag[] | null = null) {
+  function open(initial?: { memo: Memo; tagIds: string[] }, valid: () => boolean = () => true, tags: readonly Tag[] | null = null, duplicate = false) {
     if (disposed || editor || working || !valid() || !deps.selected()) return false;
     try {
       const context = deps.auth.getContext(); if (!context || !deps.auth.isCurrent(context)) return false;
-      editor = createEditor(initial?.memo.id ?? deps.createId(), deps.createId(), initial, 'cloud');
+      editor = duplicate && initial
+        ? createDuplicateEditor(deps.createId(), initial, { id: deps.createId(), source: 'cloud' })
+        : createEditor(initial?.memo.id ?? deps.createId(), deps.createId(), initial, 'cloud');
       candidates = tags === null ? null : Object.freeze([...tags]); candidateContext = context; candidateView = deps.viewKey();
       tagInputs = []; tagField.replaceChildren();
       const legend = doc.createElement('legend'); legend.textContent = 'クラウドのタグ'; tagField.append(legend);
@@ -175,6 +178,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   return Object.freeze({
     start: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[] = []) => open({ memo, tagIds }, valid, tags),
     startNew: (choices: { tags: readonly Tag[]; valid: () => boolean } | null = null) => open(undefined, choices?.valid, choices?.tags ?? null),
+    duplicate: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[]) => open({ memo, tagIds }, valid, tags, true),
     getState: () => editor,
     isBusy: () => working,
     refresh: render,
