@@ -30,6 +30,16 @@ let releaseRead: (() => void) | undefined;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
 let holdWrite = false;
 let failReads = false, failWrites = false;
+let snapshotMode: 'success' | 'failure' | 'unverified' | 'permission' | 'invalid' = 'success';
+const snapshot = () => {
+  const memoId = '00000000-0000-4000-8000-000000000101', tagId = '00000000-0000-4000-8000-000000000103';
+  const memo = { id: memoId, user_id: value.user.id, title: 'クラウドの合成メモ', body: '<b>読取専用の本文</b>',
+    created_at: '2026-11-14T00:00:00Z', updated_at: '2026-11-14T00:00:00Z', pinned_at: null, deleted_at: null,
+    revision: 1, last_request_id: null };
+  return { memos: [memo, { ...memo, id: '00000000-0000-4000-8000-000000000102', title: 'ゴミ箱の合成メモ', deleted_at: '2026-11-14T00:00:00Z' }],
+    tags: [{ id: tagId, user_id: value.user.id, name: '既存クラウドタグ', created_at: '2026-11-14T00:00:00Z', revision: 1 }],
+    memoTags: [{ memo_id: memoId, tag_id: tagId, user_id: value.user.id }] };
+};
 const api: MemoAuthApi = {
   getSession: async () => { calls.restore++; return { data: { session: current }, error: null }; },
   getUser: async () => ({ data: { user: { id: value.user.id } }, error: null }),
@@ -47,10 +57,12 @@ const api: MemoAuthApi = {
 const sender: AuthenticatedRpcSender = async (_bearer, rpc) => {
   rpcNames.push(rpc);
   if (rpc !== 'memo_load_snapshot') throw new Error('write-not-allowed');
-  if (mode === 'cloud-pending') await new Promise<void>(resolve => { releaseRead = resolve; });
-  if (mode === 'cloud-failure') throw new Error('synthetic-email@example.invalid synthetic-password raw-provider-token');
-  return { provenance: mode === 'cloud-unverified' ? 'unverified' : 'single-rpc', status: 200,
-    body: mode === 'cloud-permission' ? null : { memos: [], tags: [], memoTags: [] } };
+  if (mode === 'cloud-pending' || mode === 'cloud-snapshot-pending') await new Promise<void>(resolve => { releaseRead = resolve; });
+  if (mode === 'cloud-failure' || snapshotMode === 'failure') throw new Error('synthetic-email@example.invalid synthetic-password raw-provider-token');
+  return { provenance: mode === 'cloud-unverified' || snapshotMode === 'unverified' ? 'unverified' : 'single-rpc', status: 200,
+    body: mode === 'cloud-permission' || snapshotMode === 'permission' ? null
+      : snapshotMode === 'invalid' ? { message: 'raw-provider-token', user_id: id }
+      : mode.startsWith('cloud-snapshot') ? snapshot() : { memos: [], tags: [], memoTags: [] } };
 };
 const session = createMemoAuthSession(api, () => clock, sender);
 const targets = createStorageTargetController();
@@ -88,6 +100,8 @@ const app = createProductLocalApp(document, {
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
+  snapshotMode: (next: typeof snapshotMode) => { snapshotMode = next; },
+  expireSilently: () => { clock = 200_000; },
   voiceCalls,
   lateVoice: () => lateVoiceResult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: '停止後の旧結果' } }] }),
   voiceDetached: () => latestVoice?.onresult === null,
