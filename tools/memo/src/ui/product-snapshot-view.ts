@@ -1,4 +1,4 @@
-import type { MemoData, Memo } from '../types';
+import type { MemoData, Memo, Tag } from '../types';
 import { uuidKey } from '../read-primitives';
 import type { CloudTarget } from '../cloud-rpc-types';
 
@@ -7,7 +7,8 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean,
   changeState?: (memo: Memo, action: 'trash' | 'restore', valid: () => boolean) => boolean,
   deletePermanently?: (memo: Memo, valid: () => boolean) => boolean,
-  emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean) {
+  emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean,
+  tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean }) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
@@ -73,6 +74,24 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       root.append(start);
     }
   };
+  const editTag = (tag: Tag | null, token: object) => {
+    if (!current(token) || !tagEditor?.canStart()) return;
+    const form = doc.createElement('form');
+    const label = doc.createElement('label'); label.textContent = 'クラウドのタグ名';
+    const input = doc.createElement('input'); input.type = 'text'; input.value = tag?.name ?? ''; label.append(input);
+    const save = button(tag ? '変更' : '作成', () => submit());
+    const submit = () => {
+      if (!root.contains(form) || !tagEditor?.canStart()) return;
+      const value = current(token); if (!value) return;
+      if (tag && !value.tags.some(row => uuidKey(row.id) === uuidKey(tag.id) && row.revision === tag.revision && row.name === tag.name)) { clear(); return; }
+      if (tagEditor.save(tag, input.value, active!.valid)) clear();
+    };
+    form.onsubmit = event => { event.preventDefault(); submit(); };
+    form.append(text('h2', tag ? 'クラウドタグの改名' : 'クラウドタグの作成'));
+    if (tag) form.append(text('p', `現在のタグ名：${tag.name}`));
+    form.append(label, save, button('タグ編集をキャンセル', () => list(token)));
+    root.replaceChildren(form); input.focus();
+  };
   const list = (token: object) => {
     const value = current(token); if (!value) return;
     root.replaceChildren(text('h2', 'クラウドメモ一覧（読取専用）'));
@@ -84,6 +103,17 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       row.append(button(memo.title, () => detail(index, token))); rows.append(row);
     });
     root.append(rows); root.hidden = false;
+    if (tagEditor) {
+      const create = button('タグを作成', () => { if (root.contains(create)) editTag(null, token); });
+      root.append(create);
+      const tags = doc.createElement('ul'); tags.setAttribute('aria-label', 'クラウドタグ一覧');
+      value.tags.forEach(tag => {
+        const row = doc.createElement('li'); row.append(text('p', tag.name));
+        const rename = button('名前を変更', () => { if (root.contains(rename)) editTag(tag, token); });
+        row.append(rename); tags.append(row);
+      });
+      root.append(tags);
+    }
     if (emptyTrash) {
       const targets = Object.freeze(value.memos.filter(memo => memo.deletedAt !== null)
         .map(memo => Object.freeze({ id: memo.id, revision: memo.revision })));

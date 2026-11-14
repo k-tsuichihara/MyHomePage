@@ -1,5 +1,7 @@
 # メモツール v1.1.0 リリース進捗管理
 
+Q04 Step 4第10単位：既存C04 saveTagによるcloudタグ単件作成/改名をfake製品接続。新規はcreateId1回/expectedRevision=null、改名はsnapshotのID/revision、正式RPCはp_id/p_name/p_expected_revisionのみ。既存normalizeTagName/adapter返却検証/uncertain operation/離脱契約を再利用し、requestId/ledger/resolveは追加しない。成功は要求単位、snapshotを失効し明示再読取を案内する。C03〜C05/Q04は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第10単位を正本とし、以下のタグ作成/改名未接続記述は履歴として区別する。
+
 Q04 Step 4第9単位：既存C04 emptyTrashによるcloudゴミ箱一括完全削除をfake製品接続。件数付き一段確認後、固定したゴミ箱ID/revision集合だけを正式RPCのp_ids/p_revisionsへ渡す。requestIdは既存C04内部用、RPC追加/ledger/resolve新設なし。既存adapterの要求件数一致検証を使用し、UNKNOWNは保持して新cloud writeを停止。snapshotは失効し明示再読取を案内する。C03〜C05/Q04は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第9単位を正本とし、以下の一括削除未接続記述は過去の履歴と区別する。
 
 Q04 Step 4第8単位：ゴミ箱内cloudメモ1件の完全削除を既存C04 deletePermanentlyへfake製品接続。不可逆確認後のみ実行し、RPC引数はp_id/p_expected_revisionの2つだけ。既存C04内部requestIdをRPCへ送らず、ledger/resolveを新設しない。要求成功だけを表示しsnapshotを失効、UNKNOWNは保持して新cloud writeを停止。C03〜C05/Q04は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。詳細は[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第8単位。以下の完全削除未接続記述は第7単位以前の履歴として区別する。

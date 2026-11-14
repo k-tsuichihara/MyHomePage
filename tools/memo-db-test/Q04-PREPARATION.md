@@ -1,5 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
+Step 4第10単位：既存C04 saveTagによるcloudタグ作成/改名をfake製品接続。正式3引数・既存入力正規化/返却検証・UNKNOWN停止を再利用する。requestId/ledger/resolve新設、local転送、自動再送、実通信/DB操作/cleanupなし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第10単位を参照し、以下のタグ作成/改名未接続は履歴と区別する。残りタグ削除・実製品接続/受入・single-rpcは未完了。
+
 Step 4第9単位：既存emptyTrashをcloudゴミ箱全件の固定集合へfake製品接続。0件無送信・件数付き不可逆確認・正式2配列・既存削除件数検証・UNKNOWN保持を利用する。ledger/resolve・自動再送・実通信/DB操作/cleanupなし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第9単位を現在の接続範囲の正本とする。以下の一括削除未接続は以前の履歴。残りタグ変更・実製品接続/受入・single-rpcは未完了。
 
 Step 4第8単位：既存C04単件完全削除をfake製品UIへ接続。不可逆確認・正式2引数・要求単位の成功/UNKNOWN停止・snapshot失効を既存境界で検証する。削除requestIdをRPCへ追加せず、専用ledger/resolve・自動再送なし。実通信/DB操作/cleanupは0。以下の完全削除未接続記述は過去時点の履歴と区別する。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第8単位を参照。実製品受入・残り一括削除/タグ変更・single-rpcは未完了。

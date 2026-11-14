@@ -966,6 +966,158 @@ async function prepareEmptyTrash(page: Page) {
   await selectCloud(page); await page.getByRole('button', { name: 'ゴミ箱を空にする', exact: true }).click();
   await page.getByRole('button', { name: 'すべて完全に削除', exact: true }).evaluate(node => Object.assign(window, { oldEmpty: node }));
 }
+async function prepareCloudTag(page: Page, kind: 'create' | 'rename') {
+  await selectCloud(page);
+  if (kind === 'create') await page.getByRole('button', { name: 'タグを作成', exact: true }).click();
+  else await page.getByRole('list', { name: 'クラウドタグ一覧', exact: true }).getByRole('button', { name: '名前を変更', exact: true }).click();
+  await page.getByRole('button', { name: kind === 'create' ? '作成' : '変更', exact: true }).evaluate(node => Object.assign(window, { oldTagSubmit: node }));
+}
+it.each(['create', 'rename'] as const)('cloudタグ%sは正式3引数だけを送り、要求成功後にsnapshotを失効する', async kind => {
+  const page = await pageFor('cloud-tag-success'); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    const local = await probe(page, 'fixture.state()');
+    expect(await page.getByRole('button', { name: 'タグを作成', exact: true }).count()).toBe(0);
+    await prepareCloudTag(page, kind);
+    if (kind === 'rename') {
+      expect(await page.getByLabel('クラウドのタグ名', { exact: true }).inputValue()).toBe('既存クラウドタグ');
+      await page.getByText('現在のタグ名：既存クラウドタグ', { exact: true }).waitFor();
+    }
+    const count = Number(await probe(page, 'fixture.generatedIds.length'));
+    await page.getByLabel('クラウドのタグ名', { exact: true }).fill('　 新しいタグ😀  ');
+    await page.getByRole('button', { name: kind === 'create' ? '作成' : '変更', exact: true }).click();
+    await page.getByText(/タグ(作成|改名)要求の成功を確認/).waitFor();
+    const ids = await probe(page, 'fixture.generatedIds.slice()') as string[];
+    expect(await probe(page, 'fixture.stateArgs()')).toEqual({ p_id: kind === 'create' ? ids[count] : '00000000-0000-4000-8000-000000000103',
+      p_name: '新しいタグ😀', p_expected_revision: kind === 'create' ? null : 1 });
+    expect(ids.length).toBe(count + (kind === 'create' ? 1 : 0));
+    expect(await probe(page, 'fixture.stateResult().result.value.revision')).toBe(kind === 'create' ? 1 : 2);
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    await probe(page, 'window.oldTagSubmit.click()');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save_tag']);
+    expect(await probe(page, 'fixture.state()')).toEqual(local); expect(await probe(page, 'fixture.stored()')).toEqual([]);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    for (const secret of [...ids, '00000000-0000-4000-8000-000000000103', '00000000-0000-4000-8000-000000000002',
+      'synthetic-password', 'synthetic-token-private', 'raw-provider-token']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it.each(['create', 'rename'] as const)('cloudタグ%sは既存validatorで空白/31文字を拒否しcancelは無送信、30コードポイントは保存可能', async kind => {
+  const page = await pageFor('cloud-tag-success');
+  try {
+    await prepareCloudTag(page, kind); const count = await probe(page, 'fixture.generatedIds.length');
+    for (const name of ['', '　 ', '😀'.repeat(31)]) {
+      await page.getByLabel('クラウドのタグ名', { exact: true }).fill(name);
+      await page.getByRole('button', { name: kind === 'create' ? '作成' : '変更', exact: true }).click();
+      await page.getByText(/タグ名を確認してください/).waitFor();
+      expect(await probe(page, 'fixture.generatedIds.length')).toBe(count);
+      expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    }
+    await page.getByRole('button', { name: 'タグ編集をキャンセル', exact: true }).click();
+    await probe(page, 'window.oldTagSubmit.click()');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    if (kind === 'create') await page.getByRole('button', { name: 'タグを作成', exact: true }).click();
+    else await page.getByRole('list', { name: 'クラウドタグ一覧', exact: true }).getByRole('button', { name: '名前を変更', exact: true }).click();
+    await page.getByLabel('クラウドのタグ名', { exact: true }).fill('😀'.repeat(30));
+    await page.getByRole('button', { name: kind === 'create' ? '作成' : '変更', exact: true }).click();
+    await page.getByText(/タグ(作成|改名)要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.stateArgs().p_name')).toBe('😀'.repeat(30));
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['duplicate', 'conflict', 'rejected', 'unknown', 'unverified', 'invalid-id', 'invalid-name', 'invalid-revision'])('cloudタグ%sを成功/未保存へ昇格せず再送しない', async outcome => {
+  const page = await pageFor(`cloud-tag-${outcome}`); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    const kind = outcome === 'conflict' || outcome === 'invalid-revision' ? 'rename' : 'create';
+    await prepareCloudTag(page, kind); const count = Number(await probe(page, 'fixture.generatedIds.length'));
+    await page.getByLabel('クラウドのタグ名', { exact: true }).fill('変更後タグ');
+    await page.getByRole('button', { name: kind === 'create' ? '作成' : '変更', exact: true }).click();
+    await page.waitForFunction('fixture.calls.stateCompleted === 1');
+    const status = await page.locator('#product-cloud-trash-state').textContent();
+    expect(status).not.toContain('要求の成功'); expect(status).not.toContain('保存されていません');
+    if (outcome === 'conflict') expect(status).toContain('競合');
+    else if (outcome === 'duplicate' || outcome === 'rejected') expect(status).toContain('拒否');
+    else {
+      expect(status).toContain('UNKNOWN'); expect(await probe(page, 'fixture.dispose()')).toBe('pending');
+      expect(await probe(page, 'fixture.stateResult().operation.name')).toBe('変更後タグ');
+      const fresh = page.getByRole('button', { name: 'クラウドに新規メモ', exact: true });
+      expect(await fresh.isDisabled()).toBe(true); await fresh.dispatchEvent('click');
+      await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+      await page.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+      expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    }
+    await probe(page, 'window.oldTagSubmit.click()');
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(count + (kind === 'create' ? 1 : 0));
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save_tag']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    for (const secret of ['synthetic-password', 'raw-provider-token', 'synthetic-token-private']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it.each(['create', 'rename'] as const)('cloudタグ%s送信中は二重送信/他write/切替/logout/disposeを抑止する', async kind => {
+  const page = await pageFor('cloud-tag-pending');
+  try {
+    await prepareCloudTag(page, kind); await page.getByLabel('クラウドのタグ名', { exact: true }).fill('変更タグ');
+    await page.getByRole('button', { name: kind === 'create' ? '作成' : '変更', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 2');
+    await probe(page, 'window.oldTagSubmit.click()');
+    await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).dispatchEvent('click');
+    expect(await probe(page, 'fixture.dispose()')).toBe('busy'); expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    await probe(page, 'fixture.releaseState()'); await page.getByText(/タグ(作成|改名)要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.dispose()')).toBe('applied'); await probe(page, 'window.oldTagSubmit.click()');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save_tag']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['expired', 'generation', 'target', 'snapshot'])('cloudタグ送信後%s変更の旧応答を現在成功にしない', async change => {
+  const page = await pageFor('cloud-tag-pending');
+  try {
+    await prepareCloudTag(page, change === 'expired' || change === 'target' ? 'create' : 'rename');
+    await page.getByLabel('クラウドのタグ名', { exact: true }).fill('変更タグ'); await probe(page, 'window.oldTagSubmit.click()');
+    await page.waitForFunction('fixture.rpcNames.length === 2');
+    await probe(page, change === 'expired' ? 'fixture.expired()' : change === 'generation' ? 'fixture.refreshAuth()' : change === 'target' ? 'fixture.forceLocal()' : 'fixture.invalidateSnapshot()');
+    await probe(page, 'fixture.releaseState()'); await page.waitForFunction('fixture.calls.stateCompleted === 1');
+    expect(await page.locator('#product-cloud-trash-state').textContent()).not.toContain('要求の成功');
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save_tag']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('同IDのタグが再読取で改名/revision更新されても、旧フォームを新タグへ付け替えない', async () => {
+  const page = await pageFor('cloud-tag-success');
+  try {
+    await prepareCloudTag(page, 'rename'); await page.getByLabel('クラウドのタグ名', { exact: true }).fill('旧フォームの入力');
+    await probe(page, 'fixture.changeTag()');
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click(); await selectCloud(page);
+    await page.getByRole('list', { name: 'クラウドタグ一覧', exact: true }).getByText('changed tag', { exact: true }).waitFor();
+    await probe(page, 'window.oldTagSubmit.click()');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_load_snapshot']);
+    await page.getByRole('list', { name: 'クラウドタグ一覧', exact: true }).getByRole('button', { name: '名前を変更', exact: true }).click();
+    expect(await page.getByLabel('クラウドのタグ名', { exact: true }).inputValue()).toBe('changed tag');
+    await page.getByLabel('クラウドのタグ名', { exact: true }).fill('明示した新しい変更');
+    await page.getByRole('button', { name: '変更', exact: true }).click(); await page.getByText(/タグ改名要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.stateArgs()')).toEqual({ p_id: '00000000-0000-4000-8000-000000000103', p_name: '明示した新しい変更', p_expected_revision: 2 });
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(0);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['generation', 'user', 'snapshot'])('改名入力後%s変更では旧タグ/revisionへ送信できない', async change => {
+  const page = await pageFor('cloud-tag-success');
+  try {
+    await prepareCloudTag(page, 'rename'); await page.getByLabel('クラウドのタグ名', { exact: true }).fill('変更タグ');
+    if (change === 'user') { await probe(page, 'fixture.externalLogout()'); await probe(page, 'fixture.differentUser()'); await login(page); }
+    else if (change === 'generation') await probe(page, 'fixture.refreshAuth()');
+    else await probe(page, 'fixture.invalidateSnapshot()');
+    await probe(page, 'window.oldTagSubmit.click()');
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('一括完全削除はゴミ箱2件の集合だけを確認・固定し、正式2引数で一度だけ送信する', async () => {
   const page = await pageFor('cloud-empty-success'); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
