@@ -4,7 +4,7 @@ import type { CloudTarget } from '../cloud-rpc-types';
 
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
 export function mountProductSnapshot(doc: Document, parent: HTMLElement,
-  edit?: (memo: Memo, tagIds: string[], valid: () => boolean) => boolean,
+  edit?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[]) => boolean,
   changeState?: (memo: Memo, action: 'pin' | 'unpin' | 'trash' | 'restore', valid: () => boolean) => boolean,
   deletePermanently?: (memo: Memo, valid: () => boolean) => boolean,
   emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean,
@@ -40,7 +40,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       const latest = current(token), selected = latest?.memos[index]; if (!latest || !selected) return;
       const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
       const valid = active!.valid;
-      if (edit(selected, tagIds, valid)) clear();
+      if (edit(selected, tagIds, valid, latest.tags)) clear();
     }));
     const action = memo.deletedAt === null ? 'trash' : 'restore';
     const label = action === 'trash' ? 'ゴミ箱へ移動' : '復元';
@@ -168,6 +168,10 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     }
   };
   return Object.freeze({
+    tagChoices() {
+      if (!active) return null;
+      const value = current(active.token); return value && active ? { tags: value.tags, valid: active.valid } : null;
+    },
     show(value: MemoData, valid: () => boolean) {
       clear(); if (disposed) return;
       const token = {}; active = { value, valid, token }; list(token);

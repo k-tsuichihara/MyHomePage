@@ -69,8 +69,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   form.append(login, restore, logout); root.append(state, source, form, confirmation, feedback);
   let cloudEditor: ReturnType<typeof mountProductCloudEditor> | undefined;
   const snapshotView = cloud ? mountProductSnapshot(doc, root,
-    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid) =>
-      !isBusy() && !stateUncertain() && !busy && !pending && (cloudEditor?.start(memo, tags, valid) ?? false) : undefined,
+    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices) =>
+      !isBusy() && !stateUncertain() && !busy && !pending && (cloudEditor?.start(memo, tags, valid, choices) ?? false) : undefined,
     cloud.controller.changeState && local.createId ? startStateChange : undefined,
     cloud.controller.deletePermanently && local.createId ? (memo, valid) => startStateChange(memo, 'delete-permanently', valid) : undefined,
     cloud.controller.emptyTrash && local.createId ? startEmptyTrash : undefined,
@@ -294,7 +294,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const onLocal = () => requestDeparture('local'), onCloud = () => requestDeparture('cloud');
   const onNewCloud = () => {
     if (closed || unavailable || busy || pending || isBusy() || loading || stateUncertain() || !cloudContext()) return;
-    if (cloudEditor?.startNew()) {
+    if (cloudEditor?.startNew(snapshotView?.tagChoices() ?? null)) {
       snapshotView?.clear();
       cloudStatus.textContent = '新規メモを編集中です。保存成功前に一覧へ追加しません。';
     }

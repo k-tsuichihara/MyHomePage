@@ -1,5 +1,7 @@
 # メモツール v1.1.0 リリース進捗管理
 
+Q04 Step 4第13単位：cloud editorのタグ割当を既存Draft/editDraft/beginSave/C04 save/resolveへfake製品接続。snapshot tags/memoTagsから候補と初期選択を固定し、新規editorも同じUIを共有する。resolveは元凍結要求tagIdsを使い、追加RPC/自動補正/再送/local writeなし。最終静的棚卸しではB=3機能群（cloud一覧の検索/絞込/並替/ピン優先等、cloud複製、cloud音声）が未接続。fake/offlineフェーズを閉じず、C03〜C05/Q04 Step 4は進行中。実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第13単位のA/B/C/Dを正本とする。
+
 Q04 Step 4第12単位：既存changeStateでcloud通常メモ単件pin/unpinをfake製品接続。pinnedAtから明示ボタンを選び、固定ID/revision/requestId/actionの正式4引数だけを使用する。trash/restoreと既存busy/UNKNOWN/離脱境界を共有し、snapshotを失効して明示再読取を案内。fake/offline製品残機能はcloudメモ編集時のタグ割当変更。C03〜C05/Q04 Step 4は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第12単位を正本とし、以下のpin未接続記述は過去の履歴と区別する。
 
 Q04 Step 4第11単位：既存C04 deleteTagによるcloudタグ単件削除をfake製品接続。対象ID/名前/revisionを一段確認し、正式RPCのp_id/p_expected_revisionだけを送る。関連メモrevision更新・関連解除は既存SQLの責務でUIに追加しない。requestId/ledger/resolveなし。既存busy/uncertain/離脱契約を共有しUNKNOWNは保持、新cloud writeを停止する。C03〜C05/Q04は進行中、実通信/DB操作/cleanupは0、single-rpc未認定。[製品UI契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)第11単位を正本とし、以下のタグ削除未接続記述は履歴として区別する。

@@ -1,5 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
+Step 4第13単位：cloudメモのタグ割当を既存editor/save/resolveへfake接続。凍結tagIdsと元要求照合を維持し、追加RPC/ledger/自動再送なし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)の最終棚卸しではB=3（cloud一覧機能・複製・音声）。まだfake/offlineフェーズを閉じず、人間操作前に未結線のAI作業を優先する。実通信/DB操作/cleanupなし、Q04全体進行中・single-rpc未認定。
+
 Step 4第12単位：既存changeStateで通常メモ単件pin/unpinをfake製品接続。正式4引数・既存台帳/adapter/UNKNOWN追跡を利用し、専用resolve/自動再送なし。fake/offline残機能はcloudメモ編集時のタグ割当変更。実製品接続/受入・single-rpcは未完了、C03〜C05/Q04全体は進行中。実通信/DB操作/cleanupなし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第12単位を参照。
 
 Step 4第11単位：既存deleteTagをcloudタグ一覧の一段確認へfake製品接続。正式2引数・204成功/UNKNOWN保持と既存C03/C04/C05境界を使用する。関連解除はSQLの責務でUI側cascadeなし。requestId/ledger/resolve新設・自動再送・実通信/DB操作/cleanupなし。以下のタグ削除未接続は履歴と区別し、[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第11単位を正本とする。実製品接続/受入・single-rpcは未完了。
