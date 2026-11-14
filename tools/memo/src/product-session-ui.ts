@@ -34,7 +34,7 @@ const phases: Record<MemoAuthState['phase'], string> = {
 
 /** 既存sessionと、任意のC04/C05を接続する。SDK・通信・同期は生成しない。 */
 export function mountProductSession(doc: Document, session: ProductSessionPort,
-  local: { getState(): LocalAppState; isBusy(): boolean; createId?(): string; now?(): Date; setCloudSelected?(selected: boolean): void },
+  local: { getState(): LocalAppState; isBusy(): boolean; isReady?(): boolean; createId?(): string; now?(): Date; setCloudSelected?(selected: boolean): void },
   injectedCloud?: ProductCloudHost) {
   // 同じsessionの現在contextを取得できない場合は従来local-onlyに留める。
   const cloud = session.getContext && session.isCurrent ? injectedCloud : undefined;
@@ -103,6 +103,9 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   let observedEditor: EditorState | null | undefined, selectionTicket = {};
   const isBusy = () => local.isBusy() || !!cloudEditor?.isBusy() || stateRunning;
   let loading = false;
+  let authOperation: { completed: AuthContext | null } | undefined;
+  // 初期local読込中も認証は復元できる。busy終了通知で一度だけ既存離脱経路へ渡す。
+  let selectAfterAuth: (() => void) | undefined;
   const context = () => {
     const value = session.getContext?.();
     return value && session.isCurrent?.(value) ? value : null;
@@ -148,6 +151,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       const current = session.getState();
       if (!Number.isSafeInteger(current.generation) || current.generation < generation) return;
       generation = current.generation;
+      // C03が公開した最初の認証済みcontextを完了に結び付け、後続世代へ読み替えない。
+      if (authOperation && !authOperation.completed && current.phase === 'authenticated') authOperation.completed = context();
       syncSource();
       chooseLocal.disabled = chooseCloud.disabled = busy || !!pending || isBusy();
       newCloud.disabled = !cloudEditor || !!cloudEditor.getState() || stateUncertain() || busy || !!pending || isBusy() || loading
@@ -158,6 +163,9 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       if (current.phase === 'disposed') { unavailable = true; login.disabled = restore.disabled = logout.disabled = true; return; }
       login.disabled = restore.disabled = busy || !!pending || current.phase === 'checking';
       logout.disabled = busy || !!pending || isBusy() || current.phase === 'checking' || current.phase === 'signed-out';
+      if (!busy && !pending && !isBusy() && (local.isReady?.() ?? true) && selectAfterAuth) {
+        const select = selectAfterAuth; selectAfterAuth = undefined; select();
+      }
     } catch {
       unavailable = true;
       snapshotView?.clear();
@@ -170,6 +178,11 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const clearConfirmation = () => { pending = undefined; confirmation.hidden = true; };
   const run = async (operation: 'login' | 'restore' | 'logout') => {
     if (closed || unavailable || busy || pending) return;
+    selectAfterAuth = undefined;
+    const operationAuth = { completed: null as AuthContext | null };
+    const app = local.getState(), editor = cloudEditor?.getState() ?? null, view = selectionTicket;
+    const target = cloud?.target.current().target;
+    const route = (state: LocalAppState) => state.route.kind === 'list' ? 'list' : `${state.route.kind}/${state.route.id}`;
     busy = true; feedback.textContent = '';
     // 呼出し以降、このUIは入力値を継続保持しない。JSメモリ完全消去は保証しない。
     let address = email.value, secret = password.value;
@@ -177,12 +190,24 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     refresh();
     try {
       if (unavailable) return;
+      authOperation = operationAuth;
       const call = operation === 'login' ? session.login(address, secret)
         : operation === 'logout' ? session.logout() : session.restore();
       address = secret = '';
-      await call;
+      const result = await call;
+      const auth = operationAuth.completed ?? context();
+      if (operation !== 'logout' && result === 'applied' && cloud && auth && session.isCurrent?.(auth)) {
+        selectAfterAuth = () => {
+          const current = local.getState();
+          if (closed || unavailable || !session.isCurrent?.(auth) || selectionTicket !== view || cloud.target.current().target !== target
+            || current.editor !== app.editor || current.write !== app.write || current.unresolved !== app.unresolved
+            || current.retainedEditors !== app.retainedEditors || route(current) !== route(app)
+            || (cloudEditor?.getState() ?? null) !== editor) return;
+          requestDeparture('cloud');
+        };
+      }
     } catch { if (!closed) feedback.textContent = '認証操作を完了できませんでした。'; }
-    finally { address = secret = ''; busy = false; refresh(); }
+    finally { address = secret = ''; authOperation = undefined; busy = false; refresh(); }
   };
   const departure = (intent: 'logout' | StorageTarget) => {
     if (isBusy()) return null;
@@ -246,6 +271,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     else if (result.state.target === 'cloud' && from.target !== 'cloud') void readCloud();
   };
   const requestDeparture = (intent: 'logout' | StorageTarget) => {
+    selectAfterAuth = undefined;
     if (closed || busy || pending) return;
     if (intent === 'cloud' && loading) { feedback.textContent = '前の読取処理の終了を待ってください。'; return; }
     refresh();
@@ -420,7 +446,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (stateUncertain()) return 'pending' as const;
     if (cloudEditor?.getState()?.unresolved.length) return 'pending' as const;
     if (cloud && !loading) { const result = cloud.controller.dispose(); if (result !== 'applied') return result; }
-    closed = true; clearConfirmation(); email.value = password.value = '';
+    closed = true; selectAfterAuth = undefined; clearConfirmation(); email.value = password.value = '';
     snapshotView?.dispose();
     cloudEditor?.dispose();
     chooseLocal.removeEventListener('click', onLocal); chooseCloud.removeEventListener('click', onCloud);

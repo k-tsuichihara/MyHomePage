@@ -1,5 +1,31 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q04 Step 4 D05：認証後の保存先選択と最終棚卸し（現在状態）
+
+Review8 §1.1に従い、`product-session-ui.run('login'|'restore')`の`applied`と有効なC03 contextを、既存`requestDeparture('cloud')`へ接続する。C05の`request/confirm`、既存`departure/leaveDecision/onProceed/onCancel`、`applyTarget/readCloud`を使い、dirty/UNKNOWN判定・確認UI・保存先状態機械・RPCを追加しない。
+
+- cleanならcloud選択後に既存C04 loadを1回行う。既に同じcloudを選択している場合は既存C05の同一状態結果に従い追加loadしない。同期・コピー・local fallback・write・retryはない。
+- local/cloudのdirty/rejected/unresolved/UNKNOWN等は既存editor/navigationとappDepartureReasonへ委譲する。確認cancelは現在保存先と編集状態を保持し、acceptでだけ遷移する。明示logout→localの既存契約は変更しない。
+- signed-out/blocked/failed/busy/staleをcloud成功へ昇格しない。認証通知は選択の独立トリガーにせず、UIが依頼したlogin/restoreの成功だけを対象とする。C03が最初に公開した完了contextを記録し、遅い完了時に後続generation/userへ読み替えずisCurrentで拒否する。
+- 操作開始時のselection ticket、保存先、local/cloud editor、write/unresolved/retainedEditors、画面が変わった場合は旧完了で切り替えない。離脱確認の鮮度は従来どおりC05/既存ticketが検証する。
+- 起動時のAuth復元がlocal初期化より先に終わってもlocal entryを中断しない。compositionが既存enterのUI接続完了を通知し、busy終了/readyのrefreshで保留中の選択意図を一度だけ評価する。polling・Auth再試行・RPC再試行は行わず、明示選択やdisposeで保留を破棄する。
+- cloud host/session context未注入時は既存local-onlyを維持。通常build/CSP/Permitの境界・実SDK/Storage/transport生成は変更しない。
+
+製品試験はD05のlogin/restore成功、dirty確認cancel/accept、editor外rejected/UNKNOWN、restore signed-out/失敗/blocked、完了後generation/user/editor/dispose変更、認証済みlocalからの再login/restoreを15件追加する。既存cloud試験の「認証済みでも初期local」前提はD05に合わせ、local操作は明示local選択後に行う。追加loadを件数から隠さず、同じC04操作やdepartureの全組合せは複製しない。
+
+最終AI Gate：typecheck、Vitest 56ファイル/1887件（製品Chromium276件）、既存Playwright E2E83件、product build、git diff --checkはPASS。成功時のfake通信は既存memo_load_snapshotのみで、認証復元1回に加えloadの既存prepareRpcによるsession照合1回を観測する。独立した診断Auth問い合わせ・新RPC定義・転送・write・自動retryはない。実Supabase/Auth/RPC/DB/SQL通信0件。
+
+### 最終棚卸し：Review8 §1〜§5とmain＋本差分を一度照合
+
+| 分類 | 現在状態 |
+|---|---|
+| A：実装/AI Gate済み | R02 local/v3/移行/原値退避/backup/各restore/recovery/保守候補。注入Auth/session表示・操作、今回D05 login/restore後のC05選択、logout/失効/離脱保護。C04 load/全8RPC操作と保存/resolve、タグ割当、B1一覧、B2複製、B3音声。既存の要求成功単位・明示再読取・no-auto-retry契約を維持 |
+| B：Review8要求済みでfake/offline製品未結線 | **0件**。今回D05で前回B3棚卸しの1群を解消。将来の強化や実接続の準備を、新たな機能未結線として追加しない |
+| C：実接続/実環境受入 | 実SDK/Auth Storage/製品transportの生成・配信接続と実経路受入、実Auth/RPC/RLS/応答出所/失効、実マイク/権限/認識精度、既存R03/Q05/R04/R05。実接続のrepository準備は先にAI Gateで行い、実操作だけを別承認へ渡す。既存DB PASSを再試験せず、製品PASSへ流用もしない |
+| D：v1.1.0対象外 | 同期/upload/download/merge、音声録音/履歴/波形/言語選択、複製履歴/bulk、汎用cache/診断/framework等 |
+
+**B=0 / fake-offline製品接続フェーズ完了候補（レビュー待ち）。** これは注入hostでの製品機能接続のAI範囲であり、通常product entryはlocal-onlyのまま。C03/C04/C05/Q04全体は進行中、実接続/実環境受入は未実施、single-rpc未認定、公開可能とは扱わない。以下のB3以前の残件数は当時の履歴で、本節が現在状態の正本。
+
 ## Q04 Step 4 B3：cloud音声入力と最終静的棚卸し（現在状態）
 
 Review8 §5の既存`createVoiceInput`をcloud editorへ入力補助として接続する。認識処理・日本語設定・日時タイトル・一回だけの本文追記・入力上限・固定失敗分類は共有し、cloud専用認識器/保存/状態機械は追加しない。

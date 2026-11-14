@@ -72,6 +72,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   let disposeRestore: (() => void) | undefined, disposeRecovery: (() => void) | undefined;
   let disposeInitial: (() => void) | undefined;
   let sessionUi: ReturnType<typeof mountProductSession> | undefined;
+  let localUiReady = false;
   // 各既存controllerが持つbusy状態の変化をAuth UIにも反映する。
   async function withSessionRefresh<T>(start: () => Promise<T>): Promise<T> {
     try {
@@ -172,6 +173,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
         return result;
       }, busy => { upgradeBusy = busy; sessionUi?.refresh(); });
     }
+    localUiReady = true; sessionUi?.refresh();
     return true;
   };
 
@@ -185,6 +187,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   // cloud読取結果をlocalへ流し込まず、local操作UIを止めてドラフトを保持する。
   const heldInert = new Map<HTMLElement, boolean>();
   sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
+    isReady: () => localUiReady,
     createId: deps.createId, now: () => new Date(deps.now()),
     setCloudSelected(selected) {
       for (const id of ['memo-app', 'migration-view']) {

@@ -1,5 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
+Step 4 D05：認証操作の成功を既存C05/離脱/読取へfake接続し、正式仕様の最後の未結線を解消する。**B=0、fake/offline製品接続フェーズ完了候補**。通常entryはlocal-only、C03〜C05/Q04全体は進行中、実接続/実環境受入・single-rpcは未完了。実操作やR03/Q05/R04/R05へ進まない。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)D05節を現在の正本とする。
+
 Step 4 B3：既存voice-input/音声UIをcloud editorへ共有接続し、入力補助・手動保存・currentnessをfake検証。音声はAI完了候補、最終棚卸しB=1（D05 login/session復元後のC05 cloud選択配線が未接続）。fake/offlineフェーズ/C03〜C05/Q04全体は未完了で、実製品接続/受入・single-rpcは未検証。実通信/DB操作/cleanupなし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)B3節を現在の正本とし、次候補の実装・Human Gateは今回開始しない。
 
 Step 4 B2：cloud詳細の複製を既存createDuplicateEditorとcloud新規editor/save/resolveへfake接続。title/body/tagIdsだけを渡し、新規ID/expectedRevision=nullで明示保存する。追加read/自動再送/local fallbackなし。AI完了候補、既知のfake/offline残件はB3 cloud音声入力のみの候補。実製品接続/受入・single-rpcは未完了、C03〜C05/Q04全体は進行中。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)B2節を正本とし、以下の残件数は履歴として区別する。
