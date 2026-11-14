@@ -8,12 +8,14 @@ Review8 §1.1に従い、`product-session-ui.run('login'|'restore')`の`applied`
 - local/cloudのdirty/rejected/unresolved/UNKNOWN等は既存editor/navigationとappDepartureReasonへ委譲する。確認cancelは現在保存先と編集状態を保持し、acceptでだけ遷移する。明示logout→localの既存契約は変更しない。
 - signed-out/blocked/failed/busy/staleをcloud成功へ昇格しない。認証通知は選択の独立トリガーにせず、UIが依頼したlogin/restoreの成功だけを対象とする。C03が最初に公開した完了contextを記録し、遅い完了時に後続generation/userへ読み替えずisCurrentで拒否する。
 - 操作開始時のselection ticket、保存先、local/cloud editor、write/unresolved/retainedEditors、画面が変わった場合は旧完了で切り替えない。離脱確認の鮮度は従来どおりC05/既存ticketが検証する。
-- 起動時のAuth復元がlocal初期化より先に終わってもlocal entryを中断しない。compositionが既存enterのUI接続完了を通知し、busy終了/readyのrefreshで保留中の選択意図を一度だけ評価する。polling・Auth再試行・RPC再試行は行わず、明示選択やdisposeで保留を破棄する。
+- 起動時のAuth復元がlocal初期化より先に終わっても進行中のlocal entryを中断しない。移行UIが診断＋必要なentry試行の終了を通知し、busy終了時のrefreshで保留中の選択意図を一度だけ評価する。確認待ち・キャンセル・診断停止・通常load失敗も終了状態であり、local通常画面への進入成功や移行承認をcloud選択の条件にしない。localの停止/確認画面と原値を保持したままcloudを使用できる。polling・Auth再試行・RPC再試行は行わず、明示選択やdisposeで保留を破棄する。
 - cloud host/session context未注入時は既存local-onlyを維持。通常build/CSP/Permitの境界・実SDK/Storage/transport生成は変更しない。
 
 製品試験はD05のlogin/restore成功、dirty確認cancel/accept、editor外rejected/UNKNOWN、restore signed-out/失敗/blocked、完了後generation/user/editor/dispose変更、認証済みlocalからの再login/restoreを15件追加する。既存cloud試験の「認証済みでも初期local」前提はD05に合わせ、local操作は明示local選択後に行う。追加loadを件数から隠さず、同じC04操作やdepartureの全組合せは複製しない。
 
 最終AI Gate：typecheck、Vitest 56ファイル/1887件（製品Chromium276件）、既存Playwright E2E83件、product build、git diff --checkはPASS。成功時のfake通信は既存memo_load_snapshotのみで、認証復元1回に加えloadの既存prepareRpcによるsession照合1回を観測する。独立した診断Auth問い合わせ・新RPC定義・転送・write・自動retryはない。実Supabase/Auth/RPC/DB/SQL通信0件。
+
+レビューP2対応：上記終了通知が当初local entry成功だけに限定されていたため、既存migration previewのfinishから成功/非成功とも通知する形へ修正。compositionは各inspect/confirm開始時に待機へ戻し、進行中の診断・移行・初回loadとの競合を防ぐ。製品Chromiumへ5状態（確認待ち/cancelled/stopped/load-failed/処理中）×login/restoreの10ケースを追加し、進行中RPC0・終了後load1回・local write0・原値不変・localへ戻った際の停止画面継続を検証する。新しい移行判定や自動再試行は追加しない。修正後はtypecheck、Vitest 56ファイル/1897件（製品Chromium286件）、Playwright E2E83件、product build、git diff --checkがPASS。実Supabase/Auth/RPC/DB/SQL通信0件。
 
 ### 最終棚卸し：Review8 §1〜§5とmain＋本差分を一度照合
 

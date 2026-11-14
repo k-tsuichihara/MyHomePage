@@ -42,6 +42,7 @@ let stateArgs: Parameters<AuthenticatedRpcSender>[2] | null = null;
 let stateResult: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult | CloudEmptyTrashResult | CloudSaveTagResult | CloudDeleteTagResult> | null = null;
 let releaseLogin: (() => void) | undefined, releaseWrite: (() => void) | undefined;
 let releaseAuthCompletion: (() => void) | undefined;
+let releaseInitialization: (() => void) | undefined, initializationLocks = 0;
 let holdWrite = false;
 let failReads = false, failWrites = false;
 let snapshotMode: 'success' | 'failure' | 'unverified' | 'permission' | 'invalid' = 'success';
@@ -87,6 +88,7 @@ const snapshot = () => {
 };
 const api: MemoAuthApi = {
   getSession: async () => { calls.restore++;
+    if (mode.includes('-restore-local-cancelled') && calls.restore === 1) await new Promise<void>(resolve => { releaseAuthCompletion = resolve; });
     if (mode === 'cloud-d05-restore-failed') throw new Error('raw-provider-token');
     if (mode === 'cloud-d05-restore-blocked') return { data: { session: null }, error: { message: 'raw-provider-token' } };
     if (mode === 'cloud-d05-restore-signed-out') return { data: { session: null }, error: null };
@@ -232,6 +234,8 @@ const injected = { ...session,
   dispose() { calls.dispose++; session.dispose(); },
 };
 const values = new Map<string, string>();
+if (mode.includes('-local-confirmation') || mode.includes('-local-cancelled') || mode.includes('-local-pending')) values.set('myhomepage.memo.items.v1', '[]');
+if (mode.includes('-local-stopped')) values.set('myhomepage.memo.items.v1', 'invalid');
 if (mode.startsWith('migration')) values.set('myhomepage.memo.items.v1', '[]');
 if (mode === 'migration-recover') values.set('myhomepage.memo.data.v2', JSON.stringify(createPendingMigration('[]', () => crypto.randomUUID())));
 if (mode === 'restore-data') values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 3,
@@ -240,6 +244,9 @@ const app = createProductLocalApp(document, {
   storage: { getItem: key => { if (failReads) throw new Error('fake-read-error'); return values.get(key) ?? null; },
     setItem: (key, data) => { calls.writes++; values.set(key, data); if (failWrites) throw new Error('fake-write-error'); } },
   locks: { async request(_name, _options, callback) {
+    initializationLocks++;
+    if (mode.includes('-local-pending') && initializationLocks === 1) await new Promise<void>(resolve => { releaseInitialization = resolve; });
+    if (mode.includes('-local-load-failed') && initializationLocks === 2) failReads = true;
     if (holdWrite) await new Promise<void>(resolve => { releaseWrite = resolve; });
     return callback();
   } },
@@ -278,6 +285,7 @@ Object.assign(window, { fixture: {
   emit: () => emit('SIGNED_IN', current),
   releaseLogin: () => releaseLogin?.(), holdWrite: () => { holdWrite = true; },
   releaseAuthCompletion: () => releaseAuthCompletion?.(),
+  releaseInitialization: () => releaseInitialization?.(),
   releaseWrite: () => { holdWrite = false; releaseWrite?.(); },
   dispose: app.dispose,
   stored: () => [...values.entries()],

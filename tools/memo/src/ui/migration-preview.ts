@@ -1,7 +1,7 @@
 import type { createLocalMigrationController } from '../local-migration-controller';
 
 /** 移行判断を再実装せず、承認トークンと安全な表示状態だけをDOMへ接続する。 */
-export function mountMigrationPreview(doc: Document, controller: ReturnType<typeof createLocalMigrationController>, enter: () => Promise<boolean>) {
+export function mountMigrationPreview(doc: Document, controller: ReturnType<typeof createLocalMigrationController>, enter: () => Promise<boolean>, settled?: () => void) {
   const element = <T extends HTMLElement>(id: string) => doc.getElementById(id) as T;
   let entered = false, entering = false, entryFailed = false, displayedToken: number | null = null;
   const render = () => {
@@ -17,13 +17,15 @@ export function mountMigrationPreview(doc: Document, controller: ReturnType<type
       : waiting ? '診断・処理中です。完了を待ってください。' : state.kind === 'ready' ? '診断・処理が完了しました。' : '未診断です。';
   };
   const finish = async () => {
-    render();
-    if (controller.getState().kind !== 'ready' || entered || entering) return;
-    // 診断と通常loadは別の読取。後者の成功までは診断画面と回復導線を維持する。
-    entering = true; render();
-    try { entered = await enter(); } catch { entered = false; }
-    entering = false; entryFailed = !entered;
-    element('migration-view').hidden = entered; element('memo-app').hidden = !entered; render();
+    try {
+      render();
+      if (controller.getState().kind !== 'ready' || entered || entering) return;
+      // 診断と通常loadは別の読取。後者の成功までは診断画面と回復導線を維持する。
+      entering = true; render();
+      try { entered = await enter(); } catch { entered = false; }
+      entering = false; entryFailed = !entered;
+      element('migration-view').hidden = entered; element('memo-app').hidden = !entered; render();
+    } finally { settled?.(); }
   };
   const inspect = async () => {
     if (entering || entered) return;

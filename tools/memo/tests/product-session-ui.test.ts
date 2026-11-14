@@ -31,7 +31,7 @@ async function pageFor(mode = 'normal') {
   });
   const page = await context.newPage(); page.setDefaultTimeout(3000);
   await page.goto('https://product.test/tools/memo/memo.html');
-  if (!mode.startsWith('migration')) await page.locator('#memo-app:not([hidden])').waitFor();
+  if (!mode.startsWith('migration') && !mode.includes('-local-')) await page.locator('#memo-app:not([hidden])').waitFor();
   return page;
 }
 const probe = (page: Page, code: string) => page.evaluate(code);
@@ -64,6 +64,39 @@ async function returnCloud(page: Page) {
   if (await confirm.isVisible()) await confirm.click();
   await page.getByLabel('クラウドのタイトル', { exact: true }).waitFor();
 }
+it.each(['login', 'restore'].flatMap(operation => ['confirmation', 'cancelled', 'stopped', 'load-failed', 'pending'].map(state => [operation, state])))('D05 %s成功はlocal %sの終了後も書込なしでcloudを選択する', async (operation, state) => {
+  const page = await pageFor(`cloud-d05-${operation}-local-${state}`);
+  try {
+    if (state === 'cancelled') {
+      await page.locator('#migration-no').click();
+      expect(await probe(page, 'fixture.migration().kind')).toBe('cancelled');
+      if (operation === 'restore') await probe(page, 'fixture.releaseAuthCompletion()');
+    }
+    if (state === 'confirmation') await page.locator('#migration-confirmation:not([hidden])').waitFor();
+    if (state === 'stopped') await page.waitForFunction('fixture.migration().kind === "stopped"');
+    if (state === 'load-failed') await page.getByText(/通常画面の初回読込に失敗/).waitFor();
+    const before = await probe(page, 'fixture.stored()');
+    if (operation === 'login') await login(page);
+    if (state === 'pending') {
+      await page.waitForFunction('fixture.auth().phase === "authenticated"');
+      expect(await probe(page, 'fixture.migration().kind')).toBe('inspecting');
+      expect(await probe(page, 'fixture.target().target')).toBe('local');
+      expect(await probe(page, 'fixture.rpcNames')).toEqual([]);
+      await probe(page, 'fixture.releaseInitialization()');
+    }
+    await page.getByText(/クラウド読取成功/).waitFor();
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    expect(await probe(page, 'fixture.state().read.kind')).toBe(state === 'load-failed' ? 'failed' : 'idle');
+    expect(await probe(page, 'fixture.migration().kind')).toBe(state === 'cancelled' ? 'cancelled' : state === 'stopped' ? 'stopped' : state === 'load-failed' ? 'ready' : 'confirmation');
+    expect(await probe(page, 'fixture.stored()')).toEqual(before);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    expect(await page.locator('#migration-view').isVisible()).toBe(true);
+    expect(await page.locator('#migration-view').evaluate(node => (node as HTMLElement).inert)).toBe(false);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
 it.each(['login', 'restore'])('D05 %s成功は既存C05でcloudを選びloadを1回だけ行う', async operation => {
   const page = await pageFor(`cloud-d05-${operation}`);
   try {
