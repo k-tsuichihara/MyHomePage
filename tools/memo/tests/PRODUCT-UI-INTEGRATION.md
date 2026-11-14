@@ -174,4 +174,19 @@ AI Gate：既存の合成senderにmemo_save/memo_resolve_requestだけを追加�
 
 P2回帰4件追加（Chromium計66件）：画面の鮮度と元要求の確定結果を区別する。stale targetのsave completedは元attemptと検証済み結果を保持し、C04 handleを持たないまま永久停止させない。resolveがhandleを閉じた終端diagnosedも捨てずに保持する。同一userでの再選択後、「保存結果を照合」の明示操作で保持したC04結果を追加通信なしで回収する。回収前に自動成功表示せず、回収後も確認するのは元要求の成否だけ。save成功/競合とresolve saved/削除済みreceiptの4分岐で、draft保持・再送0・local write/fetch0・閉鎖済みhandleへのresolve再送0・dispose復帰を確認する。no-recordは従来どおり生存handleと不明を保持する。
 
-未接続：cloud新規/削除/復元/タグ変更/一括操作、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。通常buildのAuth/cloud/SDK混入拒否・CSP・loopback＋Permitは変更しない。次の最小候補は既存C04 saveによるcloud新規メモ1件のfake製品接続（別承認範囲）。実通信・Human Gate・cleanupは実行しない。
+第4単位時点ではcloud新規は未接続。第5単位の接続範囲は以下を参照。実通信・Human Gate・cleanupは実行しない。
+
+## Q04 Step 4 第5単位：cloud新規メモ1件の作成・保存
+
+save/resolve注入済みのhostだけに「クラウドに新規メモ」を提供する。cloud選択中、現在のC03 contextがC05のAuth generation・選択時ownerと一致し、処理/確認待ちや既存editorがない場合のみ開始する。local/未認証/失効/別user/読取中は開始しない。write host/session未注入なら従来経路のまま。
+
+- 既存cloud editorの開始処理を共通化し、新規の場合だけ既存createIdからメモUUIDを生成する。空title/body/tagIdsとexpectedRevision=nullは既存createEditorに委譲する。メモUUIDは編集開始時に固定し、保存/照合や入力拒否で自動変更しない。requestId/operationIdは従来どおりbeginSaveへの明示保存要求時にcreateIdから渡す。
+- title/bodyが共に空なら既存beginSaveで送信前拒否、本文のみなら既存normalizeMemoInputで「無題」となる。UIに別の入力仕様を作らない。新規専用のeditor/save/resolve/競合/revision/retry状態機械は追加しない。
+- 第4単位と同じC04 save/resolve・editor結果接続・navigation/C05を利用する。新規saveはexpectedRevision=null、成功応答はC01がrevision=1等を検証する。UNKNOWNでは元request/メモUUID/pendingを保持し、別UUIDの新規要求に置き換えない。明示resolve、no-recordの扱い、削除済みreceipt、P2で修正した確定結果回収も共通。
+- 開始時にsnapshot表示を破棄するが、新規メモを楽観追加しない。保存成功後も自動loadなし。確認するのは元要求の適用であり、現在snapshot全体の証明ではない。localへの転送/保存/fallbackは行わない。
+- dirtyでlocal切替/logout/編集終了する場合は既存確認を使用し、cancelで保持する。save/resolve中は二重操作・離脱・disposeをbusyで拒否、不明はpendingを維持。失効時はcloud選択とdraftを保持して入力を空・無効にし、同一userの有効な再認証後のみ再表示/照合する。別userへdraftを引き継がない。
+- 新規UUID/requestId/revision/Auth情報はDOM/属性/URL/ログへ転記しない。通常product entry、C04/Auth/C05本体、build拒否、CSP、loopback＋Permit制約は変更しない。
+
+AI Gateは既存fixture/Chromiumケースを既存編集・新規で共通化し、24ケースを追加（計90件）。createIdの呼出しと固定UUID/expectedRevision=null/tagIds=[]、入力整形、保存成功、conflict/rejected/UNKNOWN、元要求の明示resolve/no-record/削除済みreceipt、二重送信/離脱・dispose抑止、dirty確認、Auth/target変更後の旧応答、stale確定結果回収、同一user再認証と別user拒否、dispose後旧操作、秘密値非露出を確認する。新規作成の追加ケースではlocal write/fetch0、RPCは明示load/save/resolveだけ。fixtureの単件save応答を新規expectedRevision=nullにも対応させ、C01/C04の検証をそのまま通す。
+
+未接続：cloud状態変更/削除/復元/タグ変更/一括操作、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04 changeStateによる単件状態変更のfake製品接続（別承認範囲）。実環境操作/Human Gateへは進まない。

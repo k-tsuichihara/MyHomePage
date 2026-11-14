@@ -4,6 +4,7 @@ import { build } from 'esbuild';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import type { CloudCall } from '../src/cloud-rpc-types';
 
 let browser: Browser, code: string, html: string;
 beforeAll(async () => {
@@ -47,16 +48,170 @@ async function editCloud(page: Page) {
   await page.getByLabel('クラウドのタイトル', { exact: true }).fill('変更したクラウドタイトル');
   await page.getByLabel('クラウドの本文', { exact: true }).fill('変更したクラウド本文');
 }
+async function draftCloud(page: Page, kind: string) {
+  if (kind === 'edit') return editCloud(page);
+  await selectCloud(page); await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+  await page.getByLabel('クラウドのタイトル', { exact: true }).fill('変更したクラウドタイトル');
+  await page.getByLabel('クラウドの本文', { exact: true }).fill('変更したクラウド本文');
+}
 async function returnCloud(page: Page) {
   await selectCloud(page);
   const confirm = page.getByRole('button', { name: '確認して保存先を変更', exact: true });
   if (await confirm.isVisible()) await confirm.click();
   await page.getByLabel('クラウドのタイトル', { exact: true }).waitFor();
 }
-it.each(['cloud-edit-pending', 'cloud-edit-pending-conflict'])('stale targetの%s完了結果を保持し、再選択後の明示回収で未解決を解消する', async mode => {
+it('cloud新規はcreateIdのUUID/空draftから開始し、expectedRevision=nullで1件だけ保存する', async () => {
+  const page = await pageFor('cloud-create-success'); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    const local = await probe(page, 'fixture.state()');
+    const fresh = page.getByRole('button', { name: 'クラウドに新規メモ', exact: true });
+    expect(await fresh.isDisabled()).toBe(true);
+    await selectCloud(page); await page.getByText(/クラウド読取成功/).waitFor();
+    const count = Number(await probe(page, 'fixture.generatedIds.length'));
+    await fresh.click();
+    expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('');
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(count + 2);
+    await fresh.dispatchEvent('click');
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(count + 2);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    await page.getByLabel('クラウドのタイトル', { exact: true }).fill('  新規タイトル  ');
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('新規の本文');
+    expect(await page.locator('#product-cloud-snapshot').isHidden()).toBe(true);
+    await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存要求の成功を確認/).waitFor();
+    const args = await probe(page, 'fixture.savedArgs()') as CloudCall['args'];
+    const ids = await probe(page, 'fixture.generatedIds.slice()') as string[];
+    expect(args.p_id).toBe(ids[count]); expect(args.p_request_id).toBe(ids[count + 3]);
+    expect(args.p_id).not.toBe(args.p_request_id);
+    expect(args.p_expected_revision).toBeNull(); expect(args.p_tag_ids).toEqual([]);
+    expect(args.p_title).toBe('新規タイトル'); expect(args.p_body).toBe('新規の本文');
+    expect(await probe(page, 'fixture.state()')).toEqual(local);
+    expect(await probe(page, 'fixture.stored()')).toEqual([]);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    for (const secret of [...ids, 'synthetic-password', 'synthetic-token-private', 'raw-provider-token', '00000000-0000-4000-8000-000000000002']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it('cloud新規の空title/bodyを既存beginSaveで拒否し、本文だけなら既存の無題整形を使う', async () => {
+  const page = await pageFor('cloud-create-success');
+  try {
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+    const memoId = await probe(page, 'fixture.generatedIds[0]');
+    await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存を開始できません/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('タイトルなしの本文');
+    await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.savedArgs().p_id')).toBe(memoId);
+    expect(await probe(page, 'fixture.savedArgs().p_title')).toBe('無題');
+    expect(await probe(page, 'fixture.savedArgs().p_expected_revision')).toBeNull();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+  } finally { await page.context().close(); }
+});
+it('cloud新規は認証/local選択で開始せず、失効ではdraft保持・入力停止、同じuserでだけ再表示する', async () => {
+  const page = await pageFor('cloud-create-signed-out');
+  try {
+    const fresh = page.getByRole('button', { name: 'クラウドに新規メモ', exact: true });
+    await fresh.dispatchEvent('click'); await selectCloud(page);
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual([]);
+    await login(page); await page.getByText('ログイン済み', { exact: true }).waitFor();
+    await fresh.dispatchEvent('click'); expect(await probe(page, 'fixture.generatedIds.length')).toBe(0);
+    await selectCloud(page); await fresh.click();
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('失効しても保持する新規本文');
+    await probe(page, 'fixture.expired()');
+    await page.waitForFunction('document.querySelector("#product-cloud-editor textarea").disabled');
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('');
+    await fresh.dispatchEvent('click');
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(2);
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    await probe(page, 'fixture.refreshAuth()'); await page.getByText(/認証が更新されました/).waitFor();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('失効しても保持する新規本文');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('cloud新規のdirty編集終了/local切替は既存確認を使い、cancelでは保持する', async () => {
+  const page = await pageFor('cloud-create-success');
+  try {
+    await draftCloud(page, 'create');
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await page.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    await page.getByRole('button', { name: 'クラウド編集を閉じる', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウド編集を続ける', exact: true }).click();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
+    await page.getByRole('button', { name: 'クラウド編集を閉じる', exact: true }).click();
+    await page.getByRole('button', { name: '変更を破棄して編集を閉じる', exact: true }).click();
+    expect(await page.locator('#product-cloud-editor').isHidden()).toBe(true);
+    expect(await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).isEnabled()).toBe(true);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('cloud新規のresolve中も離脱/二重照合を止め、元要求に対応する保存だけを確認する', async () => {
+  const page = await pageFor('cloud-create-resolve-pending');
+  try {
+    await draftCloud(page, 'create'); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存できたか不明/).waitFor();
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 3');
+    for (const name of ['クラウドの保存結果を照合', 'ローカルを選択', 'ログアウト', 'クラウドに新規メモ']) {
+      await page.getByRole('button', { name, exact: true }).dispatchEvent('click');
+    }
+    expect(await probe(page, 'fixture.dispose()')).toBe('busy');
+    expect(await probe(page, 'fixture.calls.logout')).toBe(0);
+    expect(await probe(page, 'fixture.target().target')).toBe('cloud');
+    await probe(page, 'fixture.releaseResolve()'); await page.getByText(/保存要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save', 'memo_resolve_request']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('別userで認証されても元userの新規UNKNOWN draftやpendingは操作できない', async () => {
+  const page = await pageFor('cloud-create-unknown');
+  try {
+    await draftCloud(page, 'create'); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存できたか不明/).waitFor();
+    await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await page.getByRole('button', { name: '確認してログアウト', exact: true }).click();
+    await page.getByText('未ログイン', { exact: true }).waitFor();
+    await probe(page, 'fixture.differentUser()'); await login(page);
+    await page.getByText('ログイン済み', { exact: true }).waitFor();
+    await returnCloud(page);
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('');
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).isDisabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).isDisabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).isDisabled()).toBe(true);
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).dispatchEvent('click');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save', 'memo_load_snapshot']);
+    expect(await probe(page, 'fixture.dispose()')).toBe('pending');
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('空editorでも以前のuserに紐づくcloud選択のまま別userの新規保存を始めない', async () => {
+  const page = await pageFor('cloud-create-success');
+  try {
+    await selectCloud(page); await page.getByText(/クラウド読取成功/).waitFor();
+    await probe(page, 'fixture.externalLogout();');
+    await page.getByText('未ログイン', { exact: true }).waitFor();
+    await probe(page, 'fixture.differentUser()'); await login(page);
+    await page.getByText('ログイン済み', { exact: true }).waitFor();
+    const fresh = page.getByRole('button', { name: 'クラウドに新規メモ', exact: true });
+    expect(await fresh.isDisabled()).toBe(true); await fresh.dispatchEvent('click');
+    expect(await probe(page, 'fixture.generatedIds.length')).toBe(0);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['cloud-edit-pending', 'cloud-edit-pending-conflict', 'cloud-create-pending', 'cloud-create-pending-conflict'])('stale targetの%s完了結果を保持し、再選択後の明示回収で未解決を解消する', async mode => {
   const page = await pageFor(mode);
   try {
-    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await draftCloud(page, mode.includes('create') ? 'create' : 'edit'); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
     await page.waitForFunction('fixture.rpcNames.length === 2');
     await probe(page, 'fixture.forceLocal(); fixture.releaseSave()');
     await page.waitForFunction('fixture.calls.saveCompleted === 1');
@@ -76,10 +231,10 @@ it.each(['cloud-edit-pending', 'cloud-edit-pending-conflict'])('stale targetの%
     expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
   } finally { await page.context().close(); }
 });
-it.each(['cloud-edit-resolve-pending', 'cloud-edit-resolve-pending-deleted'])('stale targetの%s終端結果を保持し、閉鎖済みhandleへ再送せず回収する', async mode => {
+it.each(['cloud-edit-resolve-pending', 'cloud-edit-resolve-pending-deleted', 'cloud-create-resolve-pending', 'cloud-create-resolve-pending-deleted'])('stale targetの%s終端結果を保持し、閉鎖済みhandleへ再送せず回収する', async mode => {
   const page = await pageFor(mode);
   try {
-    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await draftCloud(page, mode.includes('create') ? 'create' : 'edit'); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
     await page.getByText(/保存できたか不明/).waitFor();
     await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
     await page.waitForFunction('fixture.rpcNames.length === 3');
@@ -118,11 +273,11 @@ it('cloud既存1件を編集/保存し、localへ書かず要求の成功だけ�
     expect(output).not.toMatch(/00000000-0000-4000-8000-000000000(?:002|101|102|103)/);
   } finally { await page.context().close(); }
 });
-it.each(['conflict', 'rejected', 'unknown'])('cloud save %sは成功扱いせず編集を保持し、自動再送しない', async outcome => {
-  const page = await pageFor(`cloud-edit-${outcome}`); const logs: string[] = [];
+it.each(['edit', 'create'].flatMap(kind => ['conflict', 'rejected', 'unknown'].map(outcome => [kind, outcome] as const)))('cloud %s save %sは成功扱いせず編集を保持し、自動再送しない', async (kind, outcome) => {
+  const page = await pageFor(`cloud-${kind}-${outcome}`); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
   try {
-    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await draftCloud(page, kind); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
     await page.locator('#product-cloud-editor').getByText(outcome === 'unknown' ? /保存できたか不明/ : outcome === 'conflict' ? /競合/ : /保存は拒否/).waitFor();
     expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('変更したクラウドタイトル');
     expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
@@ -139,10 +294,10 @@ it.each(['conflict', 'rejected', 'unknown'])('cloud save %sは成功扱いせず
     }
   } finally { await page.context().close(); }
 });
-it.each(['unknown', 'no-record', 'deleted'])('結果不明後の明示resolve %sを元要求に結び付けて扱う', async outcome => {
-  const page = await pageFor(`cloud-edit-${outcome}`);
+it.each(['edit', 'create'].flatMap(kind => ['unknown', 'no-record', 'deleted'].map(outcome => [kind, outcome] as const)))('%sの結果不明後の明示resolve %sを元要求に結び付けて扱う', async (kind, outcome) => {
+  const page = await pageFor(`cloud-${kind}-${outcome}`);
   try {
-    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await draftCloud(page, kind); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
     await page.getByText(/保存できたか不明/).waitFor();
     await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
     if (outcome === 'unknown') await page.getByText(/保存要求の成功を確認/).waitFor();
@@ -153,10 +308,10 @@ it.each(['unknown', 'no-record', 'deleted'])('結果不明後の明示resolve %s
     if (outcome !== 'unknown') expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
   } finally { await page.context().close(); }
 });
-it('save中は二重save/保存先変更/logout/disposeを拒否し、追加編集を成功応答で消さない', async () => {
-  const page = await pageFor('cloud-edit-pending');
+it.each(['edit', 'create'])('%s save中は二重save/保存先変更/logout/disposeを拒否し、追加編集を成功応答で消さない', async kind => {
+  const page = await pageFor(`cloud-${kind}-pending`);
   try {
-    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await draftCloud(page, kind); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
     await page.waitForFunction('fixture.rpcNames.length === 2');
     await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).dispatchEvent('click');
     await page.getByRole('button', { name: 'ローカルを選択', exact: true }).dispatchEvent('click');
@@ -172,10 +327,10 @@ it('save中は二重save/保存先変更/logout/disposeを拒否し、追加編�
     expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
   } finally { await page.context().close(); }
 });
-it.each(['expired', 'generation', 'target'])('save中の%s変更で旧成功応答を現在の保存成功にしない', async change => {
-  const page = await pageFor('cloud-edit-pending');
+it.each(['edit', 'create'].flatMap(kind => ['expired', 'generation', 'target'].map(change => [kind, change] as const)))('%s save中の%s変更で旧成功応答を現在の保存成功にしない', async (kind, change) => {
+  const page = await pageFor(`cloud-${kind}-pending`);
   try {
-    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await draftCloud(page, kind); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
     await page.waitForFunction('fixture.rpcNames.length === 2');
     if (change === 'expired') await probe(page, 'fixture.expired()');
     if (change === 'generation') await probe(page, 'fixture.refreshAuth()');
@@ -201,10 +356,10 @@ it('古いsnapshotの編集ボタンから編集を開始できず、ゴミ箱�
     expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
   } finally { await page.context().close(); }
 });
-it('cloud dirty logoutのcancelはdraftとtargetを保持し、確認後の編集は古い確認を失効させる', async () => {
-  const page = await pageFor('cloud-edit-success');
+it.each(['edit', 'create'])('cloud %s dirty logoutのcancelはdraftとtargetを保持し、確認後の編集は古い確認を失効させる', async kind => {
+  const page = await pageFor(`cloud-${kind}-success`);
   try {
-    await editCloud(page);
+    await draftCloud(page, kind);
     await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
     await page.getByRole('button', { name: 'ログアウトをキャンセル', exact: true }).click();
     expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
@@ -217,10 +372,10 @@ it('cloud dirty logoutのcancelはdraftとtargetを保持し、確認後の編�
     expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
   } finally { await page.context().close(); }
 });
-it('UNKNOWNのdraftは同一user再認証後も保持し、明示resolveだけで元要求を照合する', async () => {
-  const page = await pageFor('cloud-edit-unknown');
+it.each(['edit', 'create'])('%s UNKNOWNのdraftは同一user再認証後も保持し、明示resolveだけで元要求を照合する', async kind => {
+  const page = await pageFor(`cloud-${kind}-unknown`);
   try {
-    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await draftCloud(page, kind); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
     await page.getByText(/保存できたか不明/).waitFor();
     await probe(page, 'fixture.refreshAuth()'); await page.getByText(/認証が更新されました/).waitFor();
     expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
@@ -230,13 +385,15 @@ it('UNKNOWNのdraftは同一user再認証後も保持し、明示resolveだけ�
     expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save', 'memo_resolve_request']);
   } finally { await page.context().close(); }
 });
-it('実際にdisposeした後は取り外された編集/saveボタンから通信・UIを再開しない', async () => {
-  const page = await pageFor('cloud-edit-success');
+it.each(['edit', 'create'])('実際にdisposeした後は取り外された%s/saveボタンから通信・UIを再開しない', async kind => {
+  const page = await pageFor(`cloud-${kind}-success`);
   try {
-    await editCloud(page);
+    await draftCloud(page, kind);
     await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).evaluate(node => Object.assign(window, { oldSaveButton: node }));
+    if (kind === 'create') await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).evaluate(node => Object.assign(window, { oldNewButton: node }));
     expect(await probe(page, 'fixture.dispose()')).toBe('applied');
     await probe(page, 'window.oldSaveButton.click()');
+    if (kind === 'create') await probe(page, 'window.oldNewButton.dispatchEvent(new Event("click"))');
     expect(await page.locator('#product-session').count()).toBe(0);
     expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
     expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
@@ -391,6 +548,7 @@ it('C05の初期localからcloud選択し既存C03/C04経路のloadのみ1回、
   try {
     await page.getByText('ログイン済み', { exact: true }).waitFor();
     expect(await probe(page, 'fixture.target().target')).toBe('local');
+    expect(await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).count()).toBe(0);
     expect(await probe(page, 'fixture.rpcNames')).toEqual([]);
     await selectCloud(page);
     await page.getByText(/クラウド読取成功/).waitFor();
@@ -413,6 +571,7 @@ it.each(['cloud-no-session', 'cloud-no-host'])('%sなら従来local-onlyを維�
   const page = await pageFor(mode);
   try {
     expect(await page.getByRole('button', { name: 'クラウドを選択', exact: true }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).count()).toBe(0);
     expect(await probe(page, 'fixture.rpcNames')).toEqual([]);
     await page.locator('#new').click(); await page.locator('#memo-title').fill('local-only'); await page.locator('#save').click();
     await page.waitForFunction('fixture.state().write.kind === "succeeded"');
