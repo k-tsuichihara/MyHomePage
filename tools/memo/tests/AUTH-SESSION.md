@@ -1,5 +1,11 @@
 # C03：Auth・セッション接続契約と試験方針
 
+## Q04 Step 4：製品候補UIへの注入接続（2026-11-14）
+
+既存sessionのgetState/subscribe/restore/login/logout/disposeだけを型として渡す製品UI接続を追加した。Authそのものの判定・SDK・token・Storage境界は変更しない。[製品UI契約](PRODUCT-UI-INTEGRATION.md)を参照。通知は再描画のきっかけに限り、getStateの現在値を再取得し、低いgenerationとdispose後の通知を反映しない。C03のgetContext/isCurrentによる書込認可を置き換えない。
+
+生成済み製品候補HTML＋既存session/合成API＋メモリStorageでChromium11件を追加。実SDK生成、実Storage、実Auth/RPCは使用しない。通常entryはsession未注入でlocal-only、C03は引き続き進行中。loopback＋Permit・SDKパッチ・build安全条件は維持する。実製品のsession復元/refresh/失効/ログアウトは未検証。
+
 C04へはBearer値ではなく、現在の`AuthContext`に結び付いた1回限りのRPC transportを渡す。資格情報は内部で取得し、資格情報取得後と送信直前にも認証世代・所有者・期限を再確認する。状態通知はこの送信許可の代わりにはならない。`src/cloud-rpc-sender.ts`に固定開発origin・8 RPC・引数・timeout・redirect拒否を検証する通信なしsender境界を追加したが、経路出所を証明できないため常に`unverified`を返す。`createMemoSdkAuth()`へのsender注入、実SDK・製品HTTP・本番originへの接続は未実装である。後続の製品composition rootだけが別承認後にsenderをAuth生成時へ注入し、UIへsenderやBearerを公開しない。詳細は[CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md)を参照する。
 
 ## UI非依存の状態購読・ライフサイクル

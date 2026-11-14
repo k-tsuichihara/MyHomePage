@@ -17,6 +17,8 @@ import { mountRestorePreview } from './ui/restore-preview';
 import { mountDeletedRecoveryPreview } from './ui/deleted-recovery-preview';
 import { createInitialRestoreController } from './initial-restore-controller';
 import { mountInitialRestorePreview } from './ui/initial-restore-preview';
+import { mountProductSession } from './product-session-ui';
+import type { ProductSessionPort } from './product-session-ui';
 
 export interface ProductLocalDependencies extends MigrationDependencies {
   readonly now: () => string;
@@ -52,7 +54,7 @@ const defaultViews: ProductLocalViews = {
  * 移行診断がreadyになり通常loadにも成功するまで、メモ操作UIを公開しない。
  */
 export function createProductLocalApp(doc: Document, deps: ProductLocalDependencies,
-  views: ProductLocalViews = defaultViews) {
+  views: ProductLocalViews = defaultViews, session?: ProductSessionPort) {
   const upgrade = createProductV3Upgrade(deps);
   const store = createLocalMemoStore({ storage: upgrade.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
   const controller = createLocalMemoController({ store, createId: deps.createId });
@@ -125,7 +127,10 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       async dispatch(command) {
         if (disposed) return { kind: 'blocked', reason: 'disposed' };
         if ((upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()) && command.kind !== 'draft') return { kind: 'blocked', reason: 'writing' };
-        const result = await controller.dispatch(command);
+        const operation = controller.dispatch(command);
+        sessionUi?.refresh();
+        const result = await operation;
+        sessionUi?.refresh();
         syncBackup();
         if (upgrade.getState() === 'legacy-changed') {
           const status = doc.getElementById('product-status');
@@ -165,12 +170,16 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     async confirm(token) { if (!disposed) await migration.confirm(token); },
   };
   views.mountMigration(doc, migrationPort, enter);
+  const sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
+    isBusy: () => disposed || upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()
+      || controller.getState().write.kind === 'writing' }) : undefined;
   return Object.freeze({
     controller,
     migration,
     dispose() {
       if (disposed) return;
       disposed = true;
+      sessionUi?.dispose();
       disposeMemo();
       disposeBackup?.();
       disposeUpgrade?.(); upgrade.dispose();

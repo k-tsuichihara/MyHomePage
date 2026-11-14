@@ -102,3 +102,19 @@ Chromiumで製品の実entry→通常保存/バックアップ→完全削除→
 AI Gate：製品Chromiumの両キー不在→プレビュー/確認まで無書込→明示初期復元→正常v3、保守候補の表示/操作ボタンなし/無書込を検証。失敗/UNKNOWN/履歴保持/競合等は既存初期復元unit/integrationの全回帰を再利用する。
 
 R02 COMPLETEは製品候補の実装・オフライン確認の範囲であり、公開完了ではない。R03の実データ導入・旧タブ案内、R04の公開構成/本番設定確認、R05の実切替・保守版配信/再開承認、C03〜C05のAuth/cloud製品接続、S04/Q04/Q05の権限/実環境/受入は未完了。旧資産を今回削除せず、公開時の保管・停止先・再開判断は既存RELEASE-TRANSITION契約に従う。
+
+## Q04 Step 4 第1単位：注入sessionの製品候補UI接続
+
+`createProductLocalApp(doc, deps, views, session?)`の第4引数へ既存sessionを注入できる。`product-session-ui.ts`はAuth型だけを参照し、SDK/Storage/fetch/RPCを生成しない。通常の`product-entry.ts`はsessionを渡さないためlocal-onlyのままで、Auth/cloud/SDKのbundle混入拒否は変更しない。R02の追加hardeningではなく、後続の製品Auth接続単位である。
+
+- 注入時だけAuth sectionを作成し、初期restoreを1回要求。ログイン/明示復元/logoutを既存sessionへ委譲し、通知payloadではなく`getState()`の現在値から固定文言を描画する。低いgenerationは反映しない。表示はcloud書込許可ではない。
+- logoutは現在/保持中editorへ既存`requestNavigation`を適用。dirtyだけでなくrejected/unresolved/savingを既存契約へ委譲し、確認時に現在app参照・Auth generation・`confirmNavigation`を再検査する。通常保存や移行/復元の処理中も確定しない。cancelはAuthを呼ばず、local状態・ドラフトを変更しない。続行しても、このlocal-only単位はlocal editorを自動破棄しない。
+- appは注入sessionを所有し、disposeでUI購読解除→session.disposeを一度だけ実行する。共有sessionを二重所有させない。遅い完了・通知やdispose後操作ではDOMを復活させない。非同期終了例外もログへ出さない。実SDK所有物の終了は後続factory接続時に合わせる。
+- email/passwordは入力欄以外のDOM本文/属性/ログ/結果へ転記せず、操作開始時とdispose時に欄を空にする。UIはawait中も資格情報参照を継続保持しない。JavaScriptメモリの完全消去は保証しない。user ID/token/期限/生理由/例外は描画せず、秘密値を生成物へ埋め込まない。
+- 保存先表示は常に「ローカル（クラウド未接続）」。認証成立をcloud利用可能と表示しない。cloud切替・RPC・転送・fallbackなし。正式仕様§1.1のログイン/復元時の切替はC05の次接続単位に残す。
+
+AI Gateは既存製品候補HTMLを生成し、scriptだけを試験用注入entryへ差し替える。既存`createMemoAuthSession`＋合成MemoAuthApi、メモリStorage、実製品composition/default viewsを使い、外部requestはroute拒否。通常entryの安全条件・SRI/資産拒否は既存product-html回帰で維持する。実SDK生成・実Storage・実fetchは使わない。
+
+追加Chromium11件：復元/ログイン/失効案内、古い通知、scope local logout、dirty cancel/状態不変、編集/保存開始/Auth世代変更後の古い確認拒否、clean rejected/unresolvedでの確認、二重操作、購読失敗、解除/dispose/遅い完了、secret非出力、Auth未注入と注入時のlocal保存。既存controller/navigation/Auth回帰を再実装せず、UI/hostの接続を検証する。
+
+未結線：製品SDK生成・Auth専用実Storage/環境設定/通信境界、C04 controller/senderの製品操作接続、C05保存先反映、実Auth/実RPC・single-rpc。loopback＋Permit境界、SDKパッチ、製品build拒否、公開memo.htmlは変更しない。
