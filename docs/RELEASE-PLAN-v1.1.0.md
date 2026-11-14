@@ -6,8 +6,8 @@
 
 ## 現在位置と公開までの推奨順序
 
-- 現在：**STEP 04（S04のrepository準備を先行）**。R02はオーナー判断でCOMPLETEとして閉じ、今回再調査しない。
-- 現在のレビュー対象：**S04最小helper権限整理**。追加GRANTなしのSQL案・静的回帰・Q04引継ぎ条件を準備。次はレビュー後、Q04の適用/実証を個別承認する段階。C03〜C05製品接続へは今回先行しない。
+- 現在：**STEP 04（Q04の実環境検証準備）**。R02はCOMPLETE、S04はPR #79でrepository準備完了。実適用済みとは扱わない。
+- 現在のレビュー対象：**Q04初回読取ケース・S04適用ファイル生成・既存試験の差分対応**。次はPRレビュー後、S04適用とAuth/helper拒否/snapshot確認をそれぞれ個別承認する段階。実操作は未実施。C03〜C05製品接続へは今回先行しない。
 - C03〜C05のUI非依存層は実装済みだが、実Auth・実HTTP・single-rpc認定・製品UI結線は未検証。C05では明示logoutとAuth失効を区別し、離脱可否は既存navigation契約を正本とする。
 - R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、D05確定はPR #49、C03〜C05の通信なし境界はPR #50〜#68で段階的に整備した。今回R02へ着手したが、公開HTML・本番Auth・実ユーザーデータ・Pages公開には接続していない。
 - 未決事項：Q05の正式検証範囲、Q04でのhelper制限の適用/実証、製品接続・公開前ゲート。ACL原本完全性・NOLOGIN用途等のUNKNOWNは保持するが、追加GRANT/完全復元を行わない今回のS04準備の必須条件にはしない。DB・本番操作の承認ではない。
@@ -97,7 +97,7 @@
 | Q01 | 型チェック・Vitest・ビルドの既存回帰基盤 | 完了 | [package.json](../tools/memo/package.json)、試験案内、通信なし基盤、PR #29 | 過去記録は全Vitest1,300件等PASS。今回再実行なし。リリース対象コミットの最終回帰は別確認 |
 | Q02 | 合成メモリUI・ブラウザE2E | 完了 | [ブラウザ契約](../tools/memo/tests/BROWSER-UI.md)、tests/browser/、PR #12以降 | 過去記録83件PASS。実OS日本語IME・実端末受入とは別 |
 | Q03 | 隔離ChromiumのStorage/Web Locks・形式/切替試験 | 完了 | [永続化](../tools/memo/tests/LOCAL-PERSISTENCE.md)、Phase B、[切替設計](../tools/memo/tests/RELEASE-TRANSITION.md)、PR #14・#15・#17・#26 | 過去記録22/16/20件PASS。容量・再起動は記録範囲に限定 |
-| Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 要確認 | RPC契約、通信なし基盤、DB監査記録、[過去DB33試験](../tools/memo-db-test/TEST-SUMMARY-2026-10-25.md)、[S04引継ぎ](../tools/memo/tests/db-audit/S04-MINIMAL-ACL.md) | v1.1.0公開前に必要。S04 SQL案の承認後適用・helper直接拒否・8RPC/CHECK/index正常性、実認証・RLS・障害/競合動作を検証。既存テストを活用し重複を避ける。過去33件や静的回帰を実経路合格へ流用せず、実接続は別承認 |
+| Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 進行中 | [Q04準備/承認順序](../tools/memo-db-test/Q04-PREPARATION.md)、[過去DB33試験](../tools/memo-db-test/TEST-SUMMARY-2026-10-25.md)、[S04引継ぎ](../tools/memo/tests/db-audit/S04-MINIMAL-ACL.md) | S04原文を15s/3s transactionへ包む未適用ファイル生成と、固定dev-sandboxのAuth1/helper拒否8/snapshot1・write0読取ケースをfake検証。実DB/実Auth/RPCは未実施。変更影響のある既存ケースだけを再利用し、過去PASSやDB CLI成功を製品SDK/RLS/single-rpc認定へ昇格させない。実適用・書込・所有者分離・製品経路等は別承認 |
 | Q05 | 実機・IME・主要操作・ドラフト保護・アクセシビリティ等の受入範囲確認 | 要確認 | ブラウザ契約、Phase Bの未検証事項、今回のオーナー合意 | 必要。Windows + Chrome中心を想定し、日本語IME・主要操作・編集中データ保護を重視。Firefox・Safari/WebKit等は後回し。スマホ実機を含む正式検証範囲・対応対象は後日確定し、対象外と断定しない |
 
 ## 7. 本番移行・公開
