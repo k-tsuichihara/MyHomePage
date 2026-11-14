@@ -234,4 +234,21 @@ AI Gate：既存fixture/C03/C04/C05/Chromiumと確認helperを再利用し、削
 
 AI Gate結果：typecheck、全Vitest 56ファイル/1744件（製品Chromium134件を含む）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。追加の15ケース以外も既存回帰を維持した。
 
-未接続：ゴミ箱一括削除/cloudタグ変更、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04によるゴミ箱一括削除のfake製品接続（別承認）。実通信/DB操作/cleanup/Human Gateは行わない。
+第8単位時点の未接続だったゴミ箱一括削除は以下の第9単位で接続する。実通信/DB操作/cleanup/Human Gateは行わない。
+
+## Q04 Step 4 第9単位：cloudゴミ箱の一括完全削除
+
+任意注入の既存C04 `emptyTrash(context,targets,requestId)`を使用する。検証済みsnapshotの一覧に、ゴミ箱メモが存在するときだけ「ゴミ箱を空にする」を表示する。0件は「ゴミ箱は空です」と表示しRPCもrequestIdも生成しない。確認は対象件数と不可逆性を明示する一段だけで、「すべて完全に削除」/キャンセルを提供する。
+
+- 正式RPCは `memo_empty_trash(p_ids uuid[],p_revisions bigint[])`。targetsはゴミ箱メモだけの`{id,revision}[]`で通常メモを含めない。確認対象を凍結し、実行直前に既存token/lease・現在の対象集合/順序/revisionを照合する。不一致は無送信で停止し、新しい集合への自動差替えをしない。キャンセル済み/別画面の旧ボタンはDOM所属で拒否する。
+- 操作開始時に対象配列/各行を再度コピーして凍結し、既存createIdからrequestIdを一度だけ生成して固定する。C04も既存のfreezeTargets/認証付き排他境界で保護する。requestIdはC04内部識別用でRPCへ送らない。DB側の一括削除要求ledger/専用resolveはなく、新設しない。既存save台帳のredactionはSQL側の責務。
+- 成功は既存adapterが来歴・HTTP200・安全整数・非負・要求件数一致を検証した結果だけ。検証済み削除件数を表示するが、固定対象への要求成功の範囲に限定する。snapshot全体を開始時に失効し、明示再読取を案内する。行の楽観削除/最新snapshot推定・自動load/retry/pollingなし。
+- conflict（集合/各revision）・rejectedを成功扱いしない。通信断/不正応答/件数不一致/unverified等は元対象/requestId/C04結果を保持しUNKNOWNとして停止する。不明を未削除と断定せず、再送・新集合生成再送・save/resolve流用・独自照合なし。
+- 既存の単件操作と同じhost busy・結果保持・unknown離脱確認を使う。実行中は二重送信/他write/切替/logout/disposeを拒否。不明中は新cloud edit/create/changeState/delete/emptyTrashを開始せず、disposeはpending。明示切替/logoutは既存C05のunknown確認へ委譲する。新しい一括操作用離脱状態機械は追加しない。
+- Auth失効/世代/別user/target/snapshot変更後の応答を現在成功へ反映しない。local controller/Storageへ渡さずfallbackなし。ID/requestId/owner/資格情報/token/raw例外はDOM/URL/consoleへ出さない。emptyTrash未注入時は従来操作を維持し、通常entry/build拒否/CSP/Permitは変更しない。
+
+AI Gateは既存fixture/Chromium/C03/C04/C05を再利用して17ケース追加。0件/2件、通常メモ除外、件数付き確認/cancel/旧cancel、正式2引数/createId一回/元対象固定、成功件数、集合競合/revision競合/拒否/通信例外/件数不一致/unverified/不正応答、UNKNOWN追跡/新write停止/離脱cancel、busy/二重送信/終了拒否、送信後Auth/世代/target/snapshot変更、別user/古い確認/対象再load変更、local write/fetch0・秘密値非露出を検証する。共通契約は既存単件回帰を再利用する。
+
+AI Gate結果：typecheck、全Vitest 56ファイル/1761件（製品Chromium151件を含む）、既存Playwright E2E83件、product build（製品試験セットアップ）、git diff --checkはすべてPASS。対象変更試験は同じcloud選択での暗黙再loadを期待せず、既存の明示local→cloud再選択を使用する。
+
+未接続：cloudタグ変更、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。次の最小候補は既存C04によるcloudタグ単件作成/改名のfake製品接続（別承認）。

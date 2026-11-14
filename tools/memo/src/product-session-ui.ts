@@ -3,7 +3,8 @@ import type { LocalAppState } from './local-app-state';
 import { appDepartureReason, requestNavigation, confirmNavigation } from './navigation-state';
 import type { LeaveConfirmation } from './navigation-state';
 import type { createStorageTargetController, StorageTarget, StorageTargetDecision, StorageLeaveDecision } from './storage-target-controller';
-import type { createCloudController, CloudUncertainOperationResult, CloudStateResult, CloudDeleteResult } from './cloud-controller';
+import type { createCloudController, CloudUncertainOperationResult, CloudStateResult, CloudDeleteResult, CloudEmptyTrashResult } from './cloud-controller';
+import type { CloudTarget } from './cloud-rpc-types';
 import type { AuthContext } from './auth-session';
 import type { Memo } from './types';
 import { isDirty } from './editor-state';
@@ -18,11 +19,11 @@ export type ProductSessionPort = Pick<ReturnType<typeof createMemoAuthSession>,
   & Partial<Pick<ReturnType<typeof createMemoAuthSession>, 'getContext' | 'isCurrent'>>
   & { dispose(): void | Promise<void> };
 
-/** 生成済みC04/C05を所有する接続。単件save/resolve・trash/restore・完全削除だけを使用する。 */
+/** 生成済みC04/C05を所有する接続。注入済みのメモ操作だけを使用し、transportは受け取らない。 */
 export interface ProductCloudHost {
   readonly target: ReturnType<typeof createStorageTargetController>;
   readonly controller: Pick<ReturnType<typeof createCloudController>, 'load' | 'dispose'>
-    & Partial<Pick<ReturnType<typeof createCloudController>, 'save' | 'resolve' | 'changeState' | 'deletePermanently'>>;
+    & Partial<Pick<ReturnType<typeof createCloudController>, 'save' | 'resolve' | 'changeState' | 'deletePermanently' | 'emptyTrash'>>;
 }
 
 const phases: Record<MemoAuthState['phase'], string> = {
@@ -57,7 +58,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const cloudStatus = doc.createElement('p'); cloudStatus.id = 'product-cloud-state'; cloudStatus.setAttribute('role', 'status');
   if (cloud) root.append(chooseLocal, chooseCloud, cloudStatus);
   const stateStatus = doc.createElement('p'); stateStatus.id = 'product-cloud-trash-state'; stateStatus.setAttribute('role', 'status');
-  if (cloud?.controller.changeState || cloud?.controller.deletePermanently) root.append(stateStatus);
+  if (cloud?.controller.changeState || cloud?.controller.deletePermanently || cloud?.controller.emptyTrash) root.append(stateStatus);
   const feedback = doc.createElement('p'); feedback.setAttribute('role', 'status');
   const confirmation = doc.createElement('div'); confirmation.hidden = true;
   confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'ログアウトの離脱確認');
@@ -70,13 +71,15 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid) =>
       !isBusy() && !stateUncertain() && !busy && !pending && (cloudEditor?.start(memo, tags, valid) ?? false) : undefined,
     cloud.controller.changeState && local.createId ? startStateChange : undefined,
-    cloud.controller.deletePermanently && local.createId ? (memo, valid) => startStateChange(memo, 'delete-permanently', valid) : undefined) : undefined;
+    cloud.controller.deletePermanently && local.createId ? (memo, valid) => startStateChange(memo, 'delete-permanently', valid) : undefined,
+    cloud.controller.emptyTrash && local.createId ? startEmptyTrash : undefined) : undefined;
   const anchor = doc.getElementById('product-status');
   if (anchor) anchor.after(root); else doc.body.prepend(root);
   let closed = false, busy = false, generation = -1, unavailable = false;
   // 不明操作はC04の返却結果ごと保持する。UI独自の再送・照合状態には変換しない。
-  type StateChangeRecord = { readonly request: Readonly<{ context: AuthContext; id: string; expectedRevision: number; requestId: string; action: 'trash' | 'restore' | 'delete-permanently' }>;
-    result: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult> | null };
+  type StateChangeRecord = { readonly request: Readonly<{ context: AuthContext; id: string; expectedRevision: number; requestId: string; action: 'trash' | 'restore' | 'delete-permanently' }>
+    | Readonly<{ context: AuthContext; targets: readonly Readonly<CloudTarget>[]; requestId: string; action: 'empty-trash' }>;
+    result: CloudUncertainOperationResult<CloudStateResult | CloudDeleteResult | CloudEmptyTrashResult> | null };
   let stateRecord: StateChangeRecord | null = null, stateRunning = false;
   const stateUncertain = () => !!stateRecord && (!stateRecord.result || stateRecord.result.kind === 'unresolved'
     || stateRecord.result.kind === 'stale-response' || (stateRecord.result.kind === 'completed'
@@ -118,8 +121,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const selected = cloud.target.current().target === 'cloud';
     local.setCloudSelected?.(selected);
     source.textContent = selected ? cloudEditor
-      ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ゴミ箱移動・復元' : ''}${cloud.controller.deletePermanently ? '・完全削除' : ''}）`
-      : cloud.controller.changeState || cloud.controller.deletePermanently ? '保存先：クラウド（閲覧・注入済み単件操作）' : '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
+      ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ゴミ箱移動・復元' : ''}${cloud.controller.deletePermanently ? '・完全削除' : ''}${cloud.controller.emptyTrash ? '・ゴミ箱一括削除' : ''}）`
+      : cloud.controller.changeState || cloud.controller.deletePermanently || cloud.controller.emptyTrash ? '保存先：クラウド（閲覧・注入済みメモ操作）' : '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
     if (selected && (!value || uuidKey(value.userId) !== cloudOwner)) {
       cloudStatus.textContent = '停止：同じユーザーで再認証してください。クラウド選択とドラフトは保持しています。';
     }
@@ -203,7 +206,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         return;
       }
       cloudStatus.textContent = result.kind === 'completed'
-        ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : '書込未接続です。'}`
+        ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : '書込未接続です。'}`
           : result.result.kind === 'unknown' || result.result.kind === 'failed' ? 'UNKNOWN：読取結果を確認できません。自動再試行しません。'
           : '停止：クラウド読取は許可されませんでした。'
         : result.kind === 'stale-response' ? '停止：古いクラウド応答を反映しません。'
@@ -315,24 +318,41 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     let request: StateChangeRecord['request'];
     try { request = Object.freeze({ context: auth, id: memo.id, expectedRevision: memo.revision, requestId: local.createId(), action }); }
     catch { stateStatus.textContent = `停止：要求を作れません。${label}は開始していません。`; return false; }
+    return runStateRequest(request, valid, label);
+  }
+  function startEmptyTrash(targets: readonly CloudTarget[], valid: () => boolean): boolean {
+    if (!cloud?.controller.emptyTrash || !local.createId || closed || unavailable || busy || pending || isBusy() || loading
+      || stateUncertain() || cloudEditor?.getState() || !valid()) return false;
+    if (!targets.length) { stateStatus.textContent = 'ゴミ箱は空です。'; return false; }
+    const auth = cloudContext(); if (!auth) return false;
+    let request: StateChangeRecord['request'];
+    try { request = Object.freeze({ context: auth, action: 'empty-trash' as const, requestId: local.createId(),
+      targets: Object.freeze(targets.map(row => Object.freeze({ id: row.id, revision: row.revision }))) }); }
+    catch { stateStatus.textContent = '停止：一括完全削除の要求を作れません。開始していません。'; return false; }
+    return runStateRequest(request, valid, '一括完全削除');
+  }
+  // 認証/結果判定はC04に委譲し、既存の単件操作と同じbusy・不明保持・離脱境界を使う。
+  function runStateRequest(request: StateChangeRecord['request'], valid: () => boolean, label: string): boolean {
     const record: StateChangeRecord = { request, result: null }; stateRecord = record; stateRunning = true;
     // 要求開始後の旧snapshotを現在値として扱わず、行だけの楽観更新もしない。
     snapshotView?.clear(); stateStatus.textContent = `${label}の処理中です。離脱・二重送信はできません。`; refresh();
     void (async () => {
       try {
         // 完全削除のrequestIdは既存C04の内部識別用。RPC引数への変換は既存adapterだけが担う。
-        const mutation = { expectedRevision: request.expectedRevision, requestId: request.requestId };
-        const result = request.action === 'delete-permanently'
-          ? await cloud.controller.deletePermanently!(request.context, request.id, mutation)
-          : await cloud.controller.changeState!(request.context, request.id, request.action, mutation);
+        const result = request.action === 'empty-trash'
+          ? await cloud!.controller.emptyTrash!(request.context, request.targets, request.requestId)
+          : request.action === 'delete-permanently'
+            ? await cloud!.controller.deletePermanently!(request.context, request.id, { expectedRevision: request.expectedRevision, requestId: request.requestId })
+            : await cloud!.controller.changeState!(request.context, request.id, request.action, { expectedRevision: request.expectedRevision, requestId: request.requestId });
         record.result = result;
         if (closed || stateRecord !== record) return;
         if (!valid() || !cloudContext() || !session.isCurrent?.(request.context)) {
           stateStatus.textContent = '停止：古い状態変更の応答を現在画面へ反映しません。元要求は保持し、自動再送しません。'; return;
         }
         stateStatus.textContent = result.kind === 'completed'
-          ? result.result.kind === 'ok' ? request.action === 'delete-permanently' || result.result.value?.kind === 'changed'
-            ? `${label}要求の成功を確認しました。現在snapshotの確認には明示再読取が必要です。`
+          ? result.result.kind === 'ok' ? request.action === 'delete-permanently' || request.action === 'empty-trash'
+            || (typeof result.result.value === 'object' && result.result.value?.kind === 'changed')
+            ? `${label}要求の成功を確認しました。${request.action === 'empty-trash' ? `削除件数${result.result.value}件。` : ''}現在snapshotの確認には明示再読取が必要です。`
             : '状態変更要求は適用済みですが、メモは削除済みです。現在状態は明示再読取が必要です。'
           : result.result.kind === 'rejected' ? result.result.reason === 'conflict'
             ? `競合：${label}は拒否されました。自動再送せず、明示再読取が必要です。`
