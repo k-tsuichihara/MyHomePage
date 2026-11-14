@@ -342,3 +342,22 @@ AI Gate結果：typecheck、全Vitest 56ファイル/1835件（製品Chromium225
 | 自動同期/転送/fallback、bulk pin・高度タグUI、新規登録/password reset、新ledger/resolve | D | 現行対象外または禁止。今回の残件に追加しない |
 
 **Bは0件ではなく3機能群（B1一覧・表示、B2複製、B3cloud音声）**。localに同機能があるだけではcloud製品接続済みと認定しない。fake/offline製品接続フェーズはまだ閉じず、次の最小候補はB1から既存memo-query/tag-usageを使うcloud一覧の純粋な表示接続（別承認）。本PRから次機能/次PRを勝手に開始しない。C03/C04/C05/Q04 Step 4全体は進行中、single-rpc未認定のまま。既知のHuman Gate通信問題の再調査/追加DB監査は不要。
+
+## Q04 Step 4 B1：既存一覧仕様のcloud製品接続
+
+第13単位の棚卸しB1を1実装単位で接続する。通常一覧は既存`queryMemos`を呼び、タイトル/本文/タグ名のリアルタイム文字検索、複数タグOR＋文字AND、4種の正式並替、pin優先/pinnedAt降順/同時刻UUIDキー安定順をそのまま表示する。比較・絞込・ソートのcloud専用版を作らない。タグIDはclosure内だけに保持し、名前から生成せず、DOM value/属性/URL/consoleへ出さない。
+
+- 通常一覧とゴミ箱を明示的に分離する。ゴミ箱は既存queryのtrash view（deletedAt降順）を使用し、高度な検索UIを持たず、通常の文字/タグ条件を適用しない。通常へ戻ればそのsnapshot内の通常条件を復帰する。条件変更は表示処理だけでRPCを呼ばない。
+- タグ候補は現在snapshotのtagsだけ。タグ絞込解除はlocal UIと同様にタグ条件だけを解除し、文字条件は検索欄で消す。入力DOMは検索ごとに作り直さず、フォーカス/入力値を保持する。4つの並替値は`updated-desc/updated-asc/created-desc/created-asc`のみ。
+- `countTagUsage`で現在snapshot全体から通常メモの関連だけを集計する。絞込後の件数ではない。ゴミ箱だけで使うタグ・未使用タグは0件。名前と使用件数だけを表示し、統計/保存可否/タグCRUDの新しい判断へ利用しない。CRUDは既存画面のままで検索UIへ複製しない。
+- 一覧保持は既存navigation-stateの`ListContext`（query結果/orderedIds＋scrollTop）と同じ構造を使用する。`prepareLocalList`はlocal形式/load分類専用なのでcloudへ流用せず、その中でも使う純粋queryを直接適用する。通常/ゴミ箱それぞれの文脈をsnapshot寿命内にだけ保持し、detail/確認キャンセルとの往復で条件・scrollTopを復帰する。新Storageや永続化なし。
+- clear/失効/新snapshotでは両文脈を破棄し、新showは通常/初期条件から始める。旧データ・条件を別user/保存先境界へ渡さない。write開始/成功後にも古い一覧は復帰せず、従来どおり明示再読取が必要。新snapshotへの条件持越しも行わない。
+- 検索結果からのdetailは結果配列indexではなく、closure内IDで現在の元snapshotメモを取り直す。既存edit/save/resolve/タグ割当/pin/trash/restore/削除/emptyTrash/タグCRUDへ渡すID/revision/currentnessは元snapshotを正本とし、操作自体は変更しない。一括削除対象も絞込結果ではなくsnapshotの全ゴミ箱のまま。
+- すべての検索/ソート/checkbox/scroll/戻るの旧handlerでtoken/current/DOM所属を検査する。Auth世代更新・user/target変更・load失敗でclearされた一覧を旧DOMから復活させない。表示用文脈はAuth/C04/C05状態機械ではなく、RPC・認可判断・自動reload/cache/sync/retryを追加しない。local controller/Storageへの検索条件・メモ書込/fallbackは0。
+- 専用CSSは製品候補の`#product-cloud-items`スクロール領域2ルールだけ追加し、通常の内容ハッシュ/SRI生成を利用する。公開memo.html・通常entry・build拒否・CSP・Permitは変更しない。
+
+AI Gateは既存memo-query/tag-usage単体を全回帰で再利用する。製品ChromiumにはB1配線11ケースだけ追加し、文字3フィールド・OR/AND/解除・不一致、通常/ゴミ箱分離と使用件数、正式並替値と代表ソート/pin安定順、実候補CSSでのdetail往復scroll、Auth世代/user/targetと旧検索DOM、再load失敗、絞込結果からのedit/pin/trashの正しい対象、local write/fetch0・秘密値非露出を確認する。旧回帰のゴミ箱操作手順は分離されたゴミ箱入口を経由するよう更新する。
+
+最終AI Gate：typecheck、Vitest 56ファイル/1846件（製品Chromium236件、うちB1追加11件）、既存Playwright E2E83件、product build、git diff --checkはPASS。E2E初回は83件の個別成功後にsandbox内のサーバー終了処理が完了しなかったため中断し、設定変更なしの通常権限で83件PASS・終了コード0を確認した。実Supabase/Auth/RPC/DB/SQL通信は0件。
+
+**B1はAI実装/検証の完了候補、レビュー待ち。既知のfake/offline未結線はB2 cloudメモ複製・B3 cloud音声入力の2機能群。** 上の第13単位時点のB=3は履歴とし、本節が現在状態の正本。B2/B3には着手せず次の別承認を待つ。C03/C04/C05/Q04 Step 4全体は進行中、実製品接続/受入・single-rpcは未完了。実Supabase/Auth/RPC/DB/SQL・cleanup・Human Gate・公開は行わない。

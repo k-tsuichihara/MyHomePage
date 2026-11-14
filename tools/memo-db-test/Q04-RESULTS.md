@@ -1,5 +1,7 @@
 # Q04 実行記録（サニタイズ済み）
 
+Step 4 B1のAI Gate：既存queryMemos/countTagUsageでcloud通常一覧の検索/絞込/並替/pin順/件数をfake接続する。同snapshotのdetail往復で条件/scrollを保持し、clear/新snapshotで破棄する。表示操作の追加RPC/local writeは0。B1はAI完了候補、fake/offline残件B2/B3を維持。実通信/DB操作/cleanupは0、過去DB試験再実行なし、Q04全体進行中・single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)B1節を参照。
+
 Step 4第13単位のAI Gate：cloud editorタグ割当を既存save/resolveへfake接続する。snapshot候補を固定し、送信後のdraft変更と元要求tagIdsを分離する。最終棚卸しはA=既存注入接続/local製品候補、B=cloud一覧機能・複製・音声の3群、C=実接続/実環境受入、D=同期等の対象外。fake/offlineフェーズもQ04全体も完了扱いにしない。実通信/DB操作/cleanupは0、過去DB試験再実行なし、single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第13単位を参照。
 
 Step 4第12単位のAI Gate：cloud通常メモの単件pin/unpinを既存C04 changeStateへfake製品接続する。pinnedAtによる表示・正式4引数・元action保持・UNKNOWN/busyを既存境界で検証する。snapshot全体を失効し明示再読取を案内。fake/offline残機能はcloudメモ編集時のタグ割当変更。実通信/DB操作/cleanupは0、過去DB試験は再実行しない。Q04全体進行中・single-rpc未認定。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第12単位を参照。
