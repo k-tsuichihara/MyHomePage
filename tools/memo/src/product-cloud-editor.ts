@@ -1,8 +1,8 @@
-import { beginSave, createEditor, editDraft, isDirty, settleCloudSave, settleCloudResolution, markCloudSaveUnknown } from './editor-state';
+import { beginSave, createEditor, editDraft, isDirty, settleCloudSave, settleCloudResolution, markCloudSaveUnknown, recoverCloudSave } from './editor-state';
 import type { EditorState, SaveAttempt, BeginSaveResult } from './editor-state';
 import { requestNavigation, confirmNavigation } from './navigation-state';
 import type { LeaveConfirmation } from './navigation-state';
-import type { createCloudController, PendingCloudSave } from './cloud-controller';
+import type { createCloudController, PendingCloudSave, CloudSaveControlResult, CloudResolveControlResult } from './cloud-controller';
 import type { createMemoAuthSession } from './auth-session';
 import type { Memo } from './types';
 import { uuidKey } from './read-primitives';
@@ -21,7 +21,9 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     const node = doc.createElement('button'); node.type = 'button'; node.textContent = label; node.onclick = action; return node;
   };
   let editor: EditorState | null = null, owner: string | null = null, working = false, disposed = false;
-  let pending: { handle: PendingCloudSave; attempt: SaveAttempt } | null = null;
+  // C04の生存handle、または元要求の検証済み終端結果を保持する。画面の鮮度とは分ける。
+  type Completion = Extract<CloudSaveControlResult, { kind: 'completed' }> | Extract<CloudResolveControlResult, { kind: 'diagnosed' }>;
+  let pending: { handle?: PendingCloudSave; attempt: SaveAttempt; completion?: Completion } | null = null;
   let closeTicket: LeaveConfirmation | null = null, notice = '';
   const auth = () => {
     try {
@@ -85,6 +87,10 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
       if (disposed || !editor) return;
       if ('pending' in result) pending = { handle: result.pending, attempt };
       const applicable = deps.selected() && deps.viewKey() === view && deps.auth.isCurrent(context);
+      if (!applicable && result.kind === 'completed' && result.result.kind !== 'failed' && result.result.kind !== 'unknown') {
+        pending = { attempt, completion: result };
+        notice = '元要求の確認済み結果を保持しています。保存結果の照合操作で回収できます。追加通信はありません。';
+      }
       editor = settleCloudSave(editor, attempt.context, result, applicable);
       if (applicable && result.kind === 'completed' && result.result.kind === 'ok' && result.result.value.kind === 'previously-applied-deleted') {
         notice = '保存要求は適用済みですが、メモは削除済みです。復元や自動再送は行いません。';
@@ -97,8 +103,24 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     const context = auth(); if (!context) { render(); return; }
     const original = pending, view = deps.viewKey(); working = true; notice = ''; changed();
     try {
+      if (original.completion) {
+        editor = original.completion.kind === 'completed' ? recoverCloudSave(editor, original.attempt, original.completion)
+          : settleCloudResolution(editor, original.attempt, original.completion);
+        if (!editor.unresolved.includes(original.attempt)) pending = null;
+        if (original.completion.result.kind === 'ok' && original.completion.result.value.kind === 'previously-applied-deleted') {
+          notice = '保存要求は適用済みですが、メモは削除済みです。復元や自動再送は行いません。';
+        }
+        return;
+      }
+      if (!original.handle) return;
       const result = await deps.writer.resolve(context, original.handle);
+      if (!disposed && result.kind === 'diagnosed' && !result.pendingActive) {
+        // C04がhandleを閉じた結果は、現在画面へ反映できない場合も捨てない。
+        pending = { attempt: original.attempt, completion: result };
+        notice = '元要求の確認済み結果を保持しています。保存結果の照合操作で回収できます。追加通信はありません。';
+      }
       if (disposed || !editor || !deps.selected() || deps.viewKey() !== view || !deps.auth.isCurrent(context)) return;
+      notice = '';
       editor = settleCloudResolution(editor, original.attempt, result);
       if (result.kind === 'diagnosed' && !result.pendingActive) pending = null;
       if (result.kind === 'diagnosed' && result.result.kind === 'ok' && result.result.value.kind === 'no-record') {

@@ -8,7 +8,9 @@
 
 cloudはC04型を受ける`settleCloudSave/settleCloudResolution`で接続し、LocalSaveResultへ変換しない。C01/C04が検証した保存要求の成功だけでbaseline（送信時rawDraft）と返却されたrevisionを反映し、送信後の追加編集は保持する。成功も現在snapshotの証明ではなく、一覧を書き換えたり自動loadしたりしない。競合/拒否はC04分類からrejectedへ、不明/古い応答はattemptを保持するunknownへ接続する。独自の競合照合・revision加算は行わない。
 
-明示resolveのsavedだけが元attemptの不明を解消し、no-recordは未実行証明にしない。削除済みreceiptは現在メモの保存成功として表示せず、元要求が適用済みで削除済みであることを固定文言で示す。製品UIは不明中の再保存を提供せず、元要求のresolveだけを提供する。編集状態がlocalまたは別session/operationのcloud結果は反映しない。製品接続・終了制約は[製品UI契約](PRODUCT-UI-INTEGRATION.md)を参照。
+C04が未解決handleを返した要求は明示resolveの確定結果で解消し、no-recordは未実行証明にしない。削除済みreceiptは現在メモの保存成功として表示せず、元要求が適用済みで削除済みであることを固定文言で示す。製品UIは不明中の再保存を提供せず、元要求のresolveまたは下記の検証済み結果回収だけを提供する。編集状態がlocalまたは別session/operationのcloud結果は反映しない。製品接続・終了制約は[製品UI契約](PRODUCT-UI-INTEGRATION.md)を参照。
+
+PR #87のP2対応：画面が古くても元要求についてC04がcompleted/終端diagnosedを返した場合、その検証済み結果を元attemptへ保持する。再認証/再選択後の明示回収で、saveのcompletedは`recoverCloudSave`（通常完了と同じ接続判定）、resolveの終端結果は既存`settleCloudResolution`を利用する。再送・新しいRPC・現在snapshotへの昇格はしない。回収した元attemptだけをunresolvedから除き、draftや他attemptは保持する。no-record/不明はこの確定結果回収の対象ではない。
 
 ## 編集と保存の境界
 

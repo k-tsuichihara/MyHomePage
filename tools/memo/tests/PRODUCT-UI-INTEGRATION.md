@@ -172,4 +172,6 @@ AI Gate：同じ製品候補HTML・C03/C04/C05・合成sender fixtureへ12件追
 
 AI Gate：既存の合成senderにmemo_save/memo_resolve_requestだけを追加し、C03/C04/C05・生成製品HTMLを共有するChromium15件を追加（計62件）。既存1件編集/保存、conflict/permission/UNKNOWN、明示resolve(saved/no-record/削除済みreceipt)、二重送信/保存中離脱、送信中の追加編集保持、Auth失効/世代/target変更後の旧結果、旧snapshot/ゴミ箱編集拒否、dirty logout確認鮮度、再認証後照合、applied dispose後の旧操作拒否、秘密値非露出/local write/fetch0を確認する。editor純粋回帰1件も追加し、local結果との混同と旧session結果を拒否する。
 
+P2回帰4件追加（Chromium計66件）：画面の鮮度と元要求の確定結果を区別する。stale targetのsave completedは元attemptと検証済み結果を保持し、C04 handleを持たないまま永久停止させない。resolveがhandleを閉じた終端diagnosedも捨てずに保持する。同一userでの再選択後、「保存結果を照合」の明示操作で保持したC04結果を追加通信なしで回収する。回収前に自動成功表示せず、回収後も確認するのは元要求の成否だけ。save成功/競合とresolve saved/削除済みreceiptの4分岐で、draft保持・再送0・local write/fetch0・閉鎖済みhandleへのresolve再送0・dispose復帰を確認する。no-recordは従来どおり生存handleと不明を保持する。
+
 未接続：cloud新規/削除/復元/タグ変更/一括操作、実SDK/実Auth Storage/実transport、通常entry注入・公開、実製品Auth/RPC/RLS、single-rpc認定。通常buildのAuth/cloud/SDK混入拒否・CSP・loopback＋Permitは変更しない。次の最小候補は既存C04 saveによるcloud新規メモ1件のfake製品接続（別承認範囲）。実通信・Human Gate・cleanupは実行しない。

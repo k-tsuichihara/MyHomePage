@@ -47,6 +47,58 @@ async function editCloud(page: Page) {
   await page.getByLabel('クラウドのタイトル', { exact: true }).fill('変更したクラウドタイトル');
   await page.getByLabel('クラウドの本文', { exact: true }).fill('変更したクラウド本文');
 }
+async function returnCloud(page: Page) {
+  await selectCloud(page);
+  const confirm = page.getByRole('button', { name: '確認して保存先を変更', exact: true });
+  if (await confirm.isVisible()) await confirm.click();
+  await page.getByLabel('クラウドのタイトル', { exact: true }).waitFor();
+}
+it.each(['cloud-edit-pending', 'cloud-edit-pending-conflict'])('stale targetの%s完了結果を保持し、再選択後の明示回収で未解決を解消する', async mode => {
+  const page = await pageFor(mode);
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 2');
+    await probe(page, 'fixture.forceLocal(); fixture.releaseSave()');
+    await page.waitForFunction('fixture.calls.saveCompleted === 1');
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    await returnCloud(page);
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('変更したクラウド本文');
+    expect(await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).isEnabled()).toBe(true);
+    const calls = await probe(page, 'fixture.rpcNames.slice()');
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    await page.getByText(mode.endsWith('conflict') ? /競合：保存は拒否/ : /保存要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(calls);
+    expect(await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).isEnabled()).toBe(true);
+    expect(await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).isDisabled()).toBe(true);
+    if (mode.endsWith('conflict')) expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await probe(page, 'fixture.dispose()')).toBe('applied');
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['cloud-edit-resolve-pending', 'cloud-edit-resolve-pending-deleted'])('stale targetの%s終端結果を保持し、閉鎖済みhandleへ再送せず回収する', async mode => {
+  const page = await pageFor(mode);
+  try {
+    await editCloud(page); await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click();
+    await page.getByText(/保存できたか不明/).waitFor();
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    await page.waitForFunction('fixture.rpcNames.length === 3');
+    await probe(page, 'fixture.forceLocal(); fixture.releaseResolve()');
+    await page.waitForFunction('fixture.calls.resolveCompleted === 1');
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    await returnCloud(page);
+    expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).isEnabled()).toBe(true);
+    const calls = await probe(page, 'fixture.rpcNames.slice()');
+    await page.getByRole('button', { name: 'クラウドの保存結果を照合', exact: true }).click();
+    await page.getByText(mode.endsWith('deleted') ? /メモは削除済み/ : /保存要求の成功を確認/).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(calls);
+    expect(await probe(page, 'fixture.rpcNames.filter(name => name === "memo_resolve_request").length')).toBe(1);
+    if (mode.endsWith('deleted')) expect(await page.getByText(/保存要求の成功/).count()).toBe(0);
+    expect(await probe(page, 'fixture.dispose()')).toBe('applied');
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it('cloud既存1件を編集/保存し、localへ書かず要求の成功だけを表示する', async () => {
   const page = await pageFor('cloud-edit-success'); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
