@@ -2,9 +2,9 @@
 
 ## 用途・実行前提
 
-Q04の現在地は[実行記録](Q04-RESULTS.md)：S04適用成功報告・Q04-READ限定PASSを記録済み、Step 3以降は未承認。[準備・承認順序](Q04-PREPARATION.md)も参照。`q04-prepare.mjs`自体はファイル生成のみ、`q04-read.mjs`はAuth1回・helper拒否8回・snapshot1回専用の読取ケース（write0）。準備時のAI Gateはfake/offlineのみで、オーナーによる実施報告と区別する。
+Q04の現在地は[実行記録](Q04-RESULTS.md)：S04適用成功報告・Q04-READ限定PASS・Step 3ケース13総合PASSを記録済み。残りケース/cleanupは未承認。[準備・承認順序](Q04-PREPARATION.md)の次候補は既存ケース6（未実行）。`q04-prepare.mjs`自体はファイル生成のみ、`q04-read.mjs`はAuth1回・helper拒否8回・snapshot1回専用の読取ケース（write0）。準備時のAI Gateとオーナーによる実施報告を区別する。
 
-過去のPASSや以下の履歴をQ04全体の合格へ転記しない。Step 1/2の再実行・Step 3以降は未承認。完全ACL復旧・NOLOGIN調査を再開しない。読取ケースの安全なJSONだけを共有し、既存runsや設定を公開しない。
+過去のPASSや以下の履歴をQ04全体の合格へ転記しない。完了済みStep 1/2/ケース13の再実行・残りStep 3以降・タグ削除は未承認。完全ACL復旧・NOLOGIN調査を再開しない。結果はサニタイズ済み要約だけを共有し、既存runsや設定を公開しない。
 
 Node.js 22以上の標準機能を使う独立したCLI群です。npm installは不要です。[ルートAGENTS.md](../../AGENTS.md) と各ケースの手順書に従ってください。メモ本体のビルド・ブラウザ試験とは別の資産です。
 

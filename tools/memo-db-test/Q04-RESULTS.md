@@ -30,10 +30,27 @@
 
 今回のJSONにはsnapshot件数・各rowは含まれない。空/非空や内容を推測しない。RLSのA/B所有者分離、直接表DML拒否、残り7 RPCの動作、CHECK/index実書込、障害/競合、製品Auth/session/Storage/ブラウザ経路の検証はこのPASSに含めない。
 
+## Step 3：ケース13 タグ作成・改名・revision競合 — PASS
+
+オーナーが承認済み試験を1回実行し、既存runnerの総合PASSを確認したとの報告。過去のケース13 PASSとは別の、S04変更後の実行結果として追記する。
+
+| 段階 | 報告結果 |
+|---|---|
+| CREATE | PASS、revision=1 |
+| RENAME | PASS、revision=2 |
+| CONFLICT | PASS、revision=2維持 |
+| 総合 | PASS |
+| 残置データ | 新規専用タグ1件、revision=2で保持。削除・cleanupは行わない |
+| 今回の対象外 | 名前重複・関連付きメモへの影響 |
+
+情報源はオーナー報告であり、AIは実結果ファイル・対象タグを読み直していない。実時刻や個別通信数のJSONは未提示のため補完しない（既存runnerの正常経路上限はAuth1/RPC7/書込RPC3）。既存判定器の総合PASSは作成/改名の所有者・日時・revision等、各snapshotの対象外不変、期待競合HTTP409/PT409/固定文一致と不変を要求する。
+
+これによりタグRPCの正常書込時に必要なhelper/CHECK/indexの権限経路が成立した範囲を確認できる。名前重複規則や非ASCII比較、他RPC、RLS分離、製品経路、single-rpcを今回のPASSへ含めない。同じケースを再実行しない。
+
 ## 現在の状態と承認境界
 
-- S04：repository準備完了 + dev-sandbox適用成功報告あり + helper直接拒否確認PASS。正式8 RPC正常性の実証は継続課題。
-- Q04：**進行中**。Step 1/2のみ完了。Step 3以降の実行は未承認。
+- S04：repository準備完了 + dev-sandbox適用成功報告 + helper直接拒否PASS + タグ作成/改名/競合PASS。メモ側の変更後書込は未実証。
+- Q04：**進行中**。Step 1/2およびStep 3のケース13のみ完了。残りケース・cleanupは未承認。Q04全体をPASSへ昇格しない。
 - A17/S05保留、過去の監査PASS、Human Gate専用経路の既知課題は変更しない。
-- 次の推奨単位は[Q04準備書 Step 3の次回承認候補](Q04-PREPARATION.md#step-3の次回承認候補未承認)。新規専用タグ1件でhelper4件の通常経路を確認する既存ケース13を先行候補とする。
+- 次の推奨単位は[Q04準備書の残ケース差分選定](Q04-PREPARATION.md)：既存ケース6のメモ作成/並行更新/照合を1回、新規専用メモ1件だけで行う候補。未承認・未実行。
 - 今回の記録整理中は、追加SQL・Auth/RPC通信・DB操作・再試行を実施していない。過去記録・準備manifestは上書きしない。生成manifestの`applied:false`は生成時の値として保存し、この実施報告と区別する。
