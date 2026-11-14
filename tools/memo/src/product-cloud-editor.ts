@@ -7,12 +7,14 @@ import type { createMemoAuthSession, AuthContext } from './auth-session';
 import type { Memo, Tag } from './types';
 import { uuidKey } from './read-primitives';
 import { createDuplicateEditor } from './memo-duplicate';
+import { createVoiceControls } from './ui/voice-input';
+import { normalizeMemoInput } from './input';
 
 /** 単件cloud編集の製品接続。保存/照合の判定はC04、編集/離脱は既存純粋関数へ委譲する。 */
 export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps: {
   writer: Pick<ReturnType<typeof createCloudController>, 'save' | 'resolve'>;
   auth: Pick<ReturnType<typeof createMemoAuthSession>, 'getContext' | 'isCurrent'>;
-  selected(): boolean; viewKey(): object; createId(): string; changed(): void;
+  selected(): boolean; viewKey(): object; createId(): string; changed(): void; now?: (() => Date) | undefined;
 }) {
   const root = doc.createElement('section'); root.setAttribute('aria-label', 'クラウド単件編集'); root.id = 'product-cloud-editor'; root.hidden = true;
   const title = doc.createElement('input'); title.setAttribute('aria-label', 'クラウドのタイトル');
@@ -35,6 +37,36 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
       return value && deps.selected() && deps.auth.isCurrent(value) && uuidKey(value.userId) === owner ? value : null;
     } catch { return null; }
   };
+  let voiceContext: AuthContext | null = null, voiceView: object | null = null;
+  let voiceChoices: { tags: readonly Tag[]; valid: () => boolean } | null = null;
+  const voiceCurrent = () => {
+    try { return !!voiceContext && deps.auth.isCurrent(voiceContext) && deps.selected() && deps.viewKey() === voiceView; }
+    catch { return false; }
+  };
+  const voice = createVoiceControls(doc, {
+    getState: () => ({ read: { kind: voiceCurrent() ? 'ready' : 'idle' }, write: { kind: working ? 'writing' : 'idle' },
+      confirmation: closeTicket, route: editor ? { kind: 'edit', id: editor.id } : { kind: 'list' }, editor }),
+    async dispatch(command) {
+      if (!voiceCurrent()) return { kind: 'blocked' };
+      if (command.kind === 'new') return { kind: open(undefined, voiceChoices?.valid, voiceChoices?.tags ?? null) ? 'done' : 'blocked' };
+      if (command.kind !== 'draft' || !editor || !auth() || working || closeTicket) return { kind: 'blocked' };
+      editor = editDraft(editor, command.value); changed(); return { kind: 'done' };
+    },
+  }, { append: async (session, text, current) => {
+    if (!current() || !voiceCurrent() || !editor || editor.sessionId !== session || !auth() || working || closeTicket) return false;
+    const next = editor.draft.body + text;
+    try { normalizeMemoInput(editor.draft.title, next); } catch { return false; }
+    editor = editDraft(editor, { ...editor.draft, body: next }); notice = ''; changed(); return true;
+  } }, deps.now);
+  voice.section.setAttribute('aria-label', 'クラウド音声入力');
+  const startVoice = async () => {
+    if (disposed || working || closeTicket || !deps.selected() || (editor && !auth())) return;
+    try {
+      const context = deps.auth.getContext(); if (!context || !deps.auth.isCurrent(context)) return;
+      voiceContext = context; voiceView = deps.viewKey(); await voice.start();
+    } catch { /* Authの元例外を音声UIへ公開しない。 */ }
+  };
+  const voiceStart = button('クラウド本文へ音声追記', startVoice);
   // editor自身のdirty更新とsnapshot切替を混同せず、既存の選択ticket/contextに候補を結び付ける。
   const candidatesCurrent = () => !!editor && !!auth() && !!candidateContext
     && deps.auth.isCurrent(candidateContext) && deps.viewKey() === candidateView;
@@ -53,11 +85,14 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     if (editor && closeTicket && !working && confirmNavigation(editor, closeTicket, true).kind === 'allowed') editor = null;
     closeTicket = null; changed();
   }), button('クラウド編集を続ける', () => { closeTicket = null; render(); }));
-  root.append(title, body, tagField, tagNotice, save, resolve, close, confirmation, status); parent.append(root);
+  root.append(title, body, tagField, tagNotice, voiceStart, save, resolve, close, confirmation, status); parent.append(root, voice.section);
   function render() {
     if (disposed) return;
     root.hidden = !editor || !deps.selected();
+    voice.section.hidden = !deps.selected();
     const available = editor && auth();
+    if (voiceContext && (!editor || !voiceCurrent())) { voice.stop(); voiceContext = null; }
+    voiceStart.disabled = !available || working || !!closeTicket;
     title.value = available ? editor!.draft.title : ''; body.value = available ? editor!.draft.body : '';
     title.disabled = body.disabled = !available;
     const tagsCurrent = candidates !== null && candidatesCurrent();
@@ -178,11 +213,16 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   return Object.freeze({
     start: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[] = []) => open({ memo, tagIds }, valid, tags),
     startNew: (choices: { tags: readonly Tag[]; valid: () => boolean } | null = null) => open(undefined, choices?.valid, choices?.tags ?? null),
+    async startNewVoice(choices: { tags: readonly Tag[]; valid: () => boolean } | null = null) {
+      if (disposed || editor || working || !deps.selected() || (choices && !choices.valid())) return false;
+      voiceChoices = choices;
+      try { await startVoice(); return !!editor; } finally { voiceChoices = null; }
+    },
     duplicate: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[]) => open({ memo, tagIds }, valid, tags, true),
     getState: () => editor,
     isBusy: () => working,
     refresh: render,
-    dispose() { disposed = true; editor = null; pending = null; owner = null; closeTicket = null; notice = '';
+    dispose() { disposed = true; voice.dispose(); voiceContext = null; voiceChoices = null; editor = null; pending = null; owner = null; closeTicket = null; notice = '';
       tagInputs.forEach(({ node }) => { node.onchange = null; }); tagInputs = []; candidates = null; candidateContext = null; candidateView = null;
       tagField.replaceChildren(); tagNotice.textContent = '';
       title.oninput = body.oninput = null; title.value = body.value = ''; root.remove(); },

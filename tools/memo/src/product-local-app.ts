@@ -185,7 +185,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   // cloud読取結果をlocalへ流し込まず、local操作UIを止めてドラフトを保持する。
   const heldInert = new Map<HTMLElement, boolean>();
   sessionUi = session ? mountProductSession(doc, session, { getState: controller.getState,
-    createId: deps.createId,
+    createId: deps.createId, now: () => new Date(deps.now()),
     setCloudSelected(selected) {
       for (const id of ['memo-app', 'migration-view']) {
         const node = doc.getElementById(id); if (!node) continue;

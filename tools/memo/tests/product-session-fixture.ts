@@ -9,7 +9,7 @@ import type { VoiceRecognition } from '../src/voice-input';
 
 // 既存製品compositionへ合成session/Storageだけを注入。SDK/実fetchは使わない。
 const mode = (window as unknown as { fixtureMode: string }).fixtureMode;
-const operationMode = mode.replace(/^cloud-create/, 'cloud-edit').replace(/^cloud-assign-(edit|create)/, 'cloud-edit').replace(/^cloud-list/, 'cloud-edit');
+const operationMode = mode.replace(/^cloud-create/, 'cloud-edit').replace(/^cloud-assign-(edit|create)/, 'cloud-edit').replace(/^cloud-list/, 'cloud-edit').replace(/^cloud-voice-/, 'cloud-edit-');
 const id = mode === 'cloud-casing' ? '00000000-0000-4000-8000-00000000abcd' : '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
 const value = { user: { id }, access_token: 'synthetic-token-private', expires_at: 200 };
@@ -22,7 +22,10 @@ const generatedIds: string[] = [];
 const voiceCalls = { start: 0, abort: 0 };
 let latestVoice: VoiceRecognition | undefined;
 let lateVoiceResult: VoiceRecognition['onresult'];
-if (mode === 'cloud-voice') Object.defineProperty(window, 'SpeechRecognition', { value: class implements VoiceRecognition {
+// 合成音声試験以外もnative認識器へ到達させず、unsupportedを確実に再現する。
+Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: undefined });
+Object.defineProperty(window, 'webkitSpeechRecognition', { configurable: true, value: undefined });
+if (mode === 'cloud-voice' || (mode.startsWith('cloud-voice-') && mode !== 'cloud-voice-unsupported')) Object.defineProperty(window, 'SpeechRecognition', { value: class implements VoiceRecognition {
   lang = ''; continuous = false; interimResults = false;
   onresult: VoiceRecognition['onresult'] = null; onerror = null; onend = null;
   start() { voiceCalls.start++; latestVoice = this; lateVoiceResult = this.onresult; }
@@ -249,6 +252,10 @@ Object.assign(window, { fixture: {
   voiceCalls,
   lateVoice: () => lateVoiceResult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: '停止後の旧結果' } }] }),
   voiceDetached: () => latestVoice?.onresult === null,
+  voiceConfig: () => latestVoice ? { lang: latestVoice.lang, continuous: latestVoice.continuous, interimResults: latestVoice.interimResults } : null,
+  voiceError: (code: string = 'network') => latestVoice?.onerror && Reflect.apply(latestVoice.onerror, null,
+    [{ error: code, message: 'synthetic-token-private raw-provider-token' }]),
+  voiceResult: (text: string) => latestVoice?.onresult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: text } }] }),
   uppercaseAuth: () => { value.user.id = value.user.id.toUpperCase(); value.expires_at++; emit('TOKEN_REFRESHED', value); },
   refreshAuth: () => { value.expires_at++; emit('TOKEN_REFRESHED', value); },
   migration: () => app.migration.getState(),

@@ -1,4 +1,5 @@
-import type { createLocalMemoController } from './local-memo-controller';
+import type { ControllerCommand } from './local-app-state';
+import type { EditorState } from './editor-state';
 import { normalizeMemoInput } from './input';
 
 export interface VoiceRecognition {
@@ -9,11 +10,16 @@ export interface VoiceRecognition {
   start(): void;
   abort(): void;
 }
-type Controller = ReturnType<typeof createLocalMemoController>;
+/** local/cloudで認識処理を共有するための既存editor操作だけのポート。保存操作は含めない。 */
+export interface VoiceEditorPort {
+  getState(): { read: { kind: string }; write: { kind: string }; confirmation: unknown;
+    route: { kind: 'list' } | { kind: 'edit' | 'detail'; id: string }; editor: EditorState | null };
+  dispatch(command: Extract<ControllerCommand, { kind: 'new' | 'edit' | 'draft' }>): Promise<{ kind: string }>;
+}
 export type VoiceStatus = 'idle' | 'listening' | 'unsupported' | 'failed' | 'invalid-input' | 'stopped';
 
 /** 認識は明示開始だけ。結果は現在の編集セッションへ追記し、保存は呼び出さない。 */
-export function createVoiceInput(controller: Controller, factory: (() => VoiceRecognition) | undefined,
+export function createVoiceInput(controller: VoiceEditorPort, factory: (() => VoiceRecognition) | undefined,
   notify: (status: VoiceStatus) => void, now: () => Date = () => new Date(),
   append?: (session: string, text: string, isCurrent: () => boolean) => Promise<boolean>) {
   let recognition: VoiceRecognition | null = null, disposed = false, starting = false, appending = false;

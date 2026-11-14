@@ -1,5 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
+Step 4 B3：既存voice-input/音声UIをcloud editorへ共有接続し、入力補助・手動保存・currentnessをfake検証。音声はAI完了候補、最終棚卸しB=1（D05 login/session復元後のC05 cloud選択配線が未接続）。fake/offlineフェーズ/C03〜C05/Q04全体は未完了で、実製品接続/受入・single-rpcは未検証。実通信/DB操作/cleanupなし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)B3節を現在の正本とし、次候補の実装・Human Gateは今回開始しない。
+
 Step 4 B2：cloud詳細の複製を既存createDuplicateEditorとcloud新規editor/save/resolveへfake接続。title/body/tagIdsだけを渡し、新規ID/expectedRevision=nullで明示保存する。追加read/自動再送/local fallbackなし。AI完了候補、既知のfake/offline残件はB3 cloud音声入力のみの候補。実製品接続/受入・single-rpcは未完了、C03〜C05/Q04全体は進行中。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)B2節を正本とし、以下の残件数は履歴として区別する。
 
 Step 4 B1：既存一覧query/使用件数/一覧文脈をcloud snapshotへfake製品接続。検索・OR/AND・並替・pin順・scroll保持は純粋表示だけでRPCなし。B1はAI完了候補、fake/offline残件はB2複製・B3cloud音声の2群。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)B1節を現在の正本とする。実通信/DB操作/cleanupなし、Q04全体進行中・single-rpc未認定。
