@@ -1,7 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
 基準：PR #79マージ後main `8ef563c`。実DB/SQL/Auth/RPC操作は今回0件。
-現在の実施状態は[Q04実行記録](Q04-RESULTS.md)を正本とする。S04適用成功報告、Q04-READ限定PASS、Step 3ケース13/6の総合PASSを記録済み。**Step 3のS04差分確認は完了候補、追加実試験不要**。Q04全体は進行中、追加実環境操作・cleanupは未承認。以下の未承認/未実施という表現は準備時点の条件として保持し、現在の実施記録と区別する。
+現在の実施状態は[Q04実行記録](Q04-RESULTS.md)を正本とする。S04適用成功報告、Q04-READ限定PASS、Step 3ケース13/6の総合PASSを記録済み。**PR #83レビューPASS・マージ後のオーナー確定により、Step 3のS04差分確認は完了、追加実試験不要**。Q04全体は進行中。現在はStep 4の静的整理・提案のみ、実装/追加実環境操作・cleanupは未承認。以下の未承認/未実施という表現は準備履歴として保持し、現在の実施記録と区別する。
 対象は承認済みdev-sandboxと合成テストユーザーのみ。production、実ユーザーデータ、公開操作は対象外。
 
 ## 1. 再利用と残るUNKNOWN
@@ -131,7 +131,7 @@ S04のための追加実試験候補は**既存ケース6の1単位**に絞る�
 
 ### ケース6完了後の再評価（現在の判断）
 
-**追加のStep 3実試験は、S04差分確認のためには不要。完了候補としてレビューへ渡す。** ケース13/6を含む既実施ケースは再実行しない。
+**追加のStep 3実試験は、S04差分確認のためには不要。PR #83レビューPASS・マージ後にオーナーがこの限定範囲を完了と確定した。** ケース13/6を含む既実施ケースは再実行しない。
 
 | S04の変更リスク | 現在の根拠 | 追加実試験の要否 |
 |---|---|---|
@@ -143,7 +143,36 @@ S04のための追加実試験候補は**既存ケース6の1単位**に絞る�
 
 残るQ04条件は「S04差分の未達」ではなく、製品Auth/session復元・失効・同一ユーザー再認証、cloud controller/sender/UI結線、製品の所有者/RLS/GRANT境界、障害/古い応答/競合時の受入、実経路の応答出所・single-rpcである。過去DB/API PASSと今回CLI PASS、既存offline回帰を根拠として引き継ぐが、未実証の製品実経路を合格へ昇格させない。
 
-この文書更新で後続の製品実装/実通信の承認を取得したことにはしない。次は完了候補レビュー後に製品接続の作業範囲を別に定める。S04差分の追加Human Gate、cleanup、残置タグ/メモ削除は要求しない。新しい診断・監査・試験基盤を追加せず、今回は文書更新と静的照合だけで停止する。
+Step 3完了は後続の製品実装/実通信の承認ではない。製品接続の作業範囲は別に定める。S04差分の追加Human Gate、cleanup、残置タグ/メモ削除は要求しない。新しい診断・監査・試験基盤を追加せず、今回は文書更新と静的照合だけで停止する。
+
+### Step 4静的整理と次の1実装単位（実装前の提案）
+
+基準main：`0cdcbf9`（PR #83マージ後）。DB監査や既存試験は再実行せず、製品接続コードと契約だけを読んだ。
+
+| 対象 | 実装済みの再利用先 | 製品側の未結線 |
+|---|---|---|
+| C03 | `auth-session.ts`のrestore/login/logout/subscribe/getContext/isCurrent/dispose、`auth-sdk.ts`の専用Storage/SDK/safeFetch | 製品UIのログイン/ログアウト/復元/再認証表示、生成・購読解除・終了のhost。実製品Storage/設定の注入も未結線 |
+| C04 | 8 RPC adapter/controller、`prepareRpc()`の1回限定能力、`cloud-rpc-sender.ts` | 製品compositionからの生成、UI操作→controller dispatch、読取結果の画面反映、固定要求/UNKNOWN/明示resolveの製品表示。現在の`mountMemoPreview`はlocal controller型に結合している |
+| C05 | `storage-target-controller.ts`、既存navigation/editorの離脱判定 | Auth状態と保存先要求/確認のhost、local/cloud表示・操作先切替、logoutの確認→Auth処理→local反映、失効時cloud/draft保持、同一ユーザーの検証済みgeneration更新、切替時の古い確認/応答の失効 |
+
+製品entryは`mountProductBrowserLocalApp`だけを呼び、`product-local-app.ts`はlocal store/controller/移行・復元UIを組み立てている。`build-product.mjs`はAuth/cloud/SDK混入を拒否する現在のlocal-only境界を持つ。これは単にimportを追加してよい状態ではない。
+
+`createBrowserMemoAuth`は`requirePersistencePermit`により専用loopbackだけを許可する。一方、製品local境界はHTTPSのmemo.html用。既存試験用Permitを製品へコピーしたり、共通チェックを緩和したりしない。`createMemoSdkAuth`は別途再利用できるため、将来の製品Storage境界はメモ専用Authキーだけに限定して接続する。Auth/RPC設定の同一project整合、SDKパッチ付きbuild、製品配信時の通信境界は後続のAI実装対象であり、実環境値を今取得する理由にはしない。
+
+senderの応答は常に`unverified`で、adapterはこれをload成功/保存確定にしない。この契約を保ったまま、fakeの既存`single-rpc` fixtureで成功表示を、unverified fixtureで停止/UNKNOWN表示を試験できる。fixtureの成功と実経路の認定を混同しない。Human Gate専用runnerは製品compositionではなく、製品へそのまま組み込まない。
+
+**推奨する次の1単位：製品候補UIのAuth表示・操作を、既存sessionの注入で接続する。**
+
+- 既存local app/候補HTMLに、固定文言の認証状態・ログイン/ログアウト・同一ユーザー再認証案内を接続。既存sessionを注入し、restore/login/logout/subscribeを再利用する。新しい認証基盤や汎用state machineは作らない。
+- UIは表示用通知を使い、認証済み表示をcloud書込許可にしない。logoutは既存requestNavigation/confirmNavigationでsaving/dirty/rejected/unresolvedを判定してからAuthへ進む。確認cancelでは画面/ドラフトを維持する。
+- app所有の購読・終了を定め、二重操作、古い完了通知、dispose後受付、資格情報の継続保持/生例外表示を防ぐ。通常logoutのscope:localは既存Auth側を維持する。
+- この単位では実SDK生成・実Storage接続・実fetch・cloud選択の確定/データ操作には進めない。cloudが使えると表示しながらlocalへ保存する状態を作らない。正式仕様§1.1にあるログイン/復元からの切替要求、C05の確認/反映は次の製品host結線で扱い、同期/転送は追加しない。
+- APIの型だけを参照する注入境界を使い、現在のlocal-only bundleにSDKを混入させない。公開memo.html/Pagesは変更しない。
+- 注入Auth portがない通常入口は現行local-onlyを維持する。既存製品候補のcomposition/UIへfake sessionを注入して確認し、別物のAuth/RPC実装やHuman Gate runnerを新設しない。
+
+AI Gateでは既存Auth fake/session、メモリStorage、製品候補DOM/Chromium fixtureを再利用し、状態表示、復元、明示操作、失敗/失効の固定表示、離脱確認cancel、saving抑止、世代変更、dispose、secret非出力、local保存への回帰なし、外部通信0を検証できる。既存の単体テストを写経せず、UI/host間の新しい結線だけを追加する。今回はこの実装も試験もまだ開始していない。
+
+その後のC04/C05操作先・画面状態接続や製品SDK/Storage/build接続もAI-onlyで準備できる。実Authの復元/refresh/失効/実ログアウト、実製品ブラウザのTLS/HTTP/応答出所、実RPC/RLSの製品経路との整合は実環境でのみ確認できるが、そこへ到達する前に人間の試験操作を求めない。次の1単位は実環境値・秘密入力・新しいHuman Gateを必要としない。
 
 ## 3. 結果・記録・停止
 
