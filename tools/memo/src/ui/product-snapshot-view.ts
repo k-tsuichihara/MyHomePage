@@ -12,7 +12,8 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   deletePermanently?: (memo: Memo, valid: () => boolean) => boolean,
   emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean,
   tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean },
-  deleteTag?: (tag: Tag, valid: () => boolean) => boolean) {
+  deleteTag?: (tag: Tag, valid: () => boolean) => boolean,
+  duplicate?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[]) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
@@ -47,6 +48,16 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     }));
     const action = memo.deletedAt === null ? 'trash' : 'restore';
     const label = action === 'trash' ? 'ゴミ箱へ移動' : '復元';
+    if (duplicate && memo.deletedAt === null) {
+      const copy = button('このクラウドメモを複製', () => {
+        if (!root.contains(copy)) return;
+        const latest = current(token), selected = latest?.memos.find(row => uuidKey(row.id) === uuidKey(id));
+        if (!latest || !selected || selected.deletedAt !== null || selected.revision !== memo.revision) return;
+        const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
+        if (duplicate(selected, tagIds, active!.valid, latest.tags)) clear();
+      });
+      root.append(copy);
+    }
     if (changeState) {
       if (memo.deletedAt === null) {
         const pinAction = memo.pinnedAt === null ? 'pin' : 'unpin';
