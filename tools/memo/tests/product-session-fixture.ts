@@ -40,12 +40,14 @@ let holdWrite = false;
 let failReads = false, failWrites = false;
 let snapshotMode: 'success' | 'failure' | 'unverified' | 'permission' | 'invalid' = 'success';
 let changedTrashSet = false;
+let changedPin: false | 'state' | 'revision' = false;
 let changedTag: false | 'both' | 'name' | 'revision' = false;
 const snapshot = () => {
   const memoId = '00000000-0000-4000-8000-000000000101', tagId = '00000000-0000-4000-8000-000000000103';
   const memo = { id: memoId, user_id: value.user.id, title: 'クラウドの合成メモ', body: '<b>読取専用の本文</b>',
-    created_at: '2026-11-14T00:00:00Z', updated_at: '2026-11-14T00:00:00Z', pinned_at: null, deleted_at: null,
-    revision: 1, last_request_id: null };
+    created_at: '2026-11-14T00:00:00Z', updated_at: '2026-11-14T00:00:00Z',
+    pinned_at: (changedPin === 'state' ? !mode.startsWith('cloud-unpin') : mode.startsWith('cloud-unpin')) ? '2026-11-14T00:00:00Z' : null,
+    deleted_at: null, revision: changedPin === 'revision' ? 2 : 1, last_request_id: null };
   const result = { memos: [memo, { ...memo, id: '00000000-0000-4000-8000-000000000102', title: 'ゴミ箱の合成メモ', deleted_at: '2026-11-14T00:00:00Z' }],
     tags: [{ id: tagId, user_id: value.user.id, name: '既存クラウドタグ', created_at: '2026-11-14T00:00:00Z', revision: 1 }],
     memoTags: [{ memo_id: memoId, tag_id: tagId, user_id: value.user.id }] };
@@ -70,7 +72,7 @@ const api: MemoAuthApi = {
     current = null; return { error: null }; },
   onAuthStateChange(callback) { emit = callback; return { data: { subscription: { unsubscribe: () => { calls.unsubscribe++; } } } }; },
 };
-const stateMode = mode.replace('cloud-restore', 'cloud-trash').replace('cloud-delete', 'cloud-trash').replace('cloud-empty', 'cloud-trash').replace('cloud-tag', 'cloud-trash');
+const stateMode = mode.replace('cloud-restore', 'cloud-trash').replace('cloud-delete', 'cloud-trash').replace('cloud-empty', 'cloud-trash').replace('cloud-tag', 'cloud-trash').replace('cloud-unpin', 'cloud-trash').replace('cloud-pin', 'cloud-trash');
 const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   rpcNames.push(rpc);
   if (mode.startsWith('cloud-tag-delete') && rpc === 'memo_delete_tag') {
@@ -117,7 +119,7 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   }
   if (stateMode.startsWith('cloud-trash') && rpc === 'memo_change_state') {
     stateArgs = args;
-    if (args.p_action !== (mode.startsWith('cloud-restore') ? 'restore' : 'trash')) throw new Error('unexpected-state-action');
+    if (args.p_action !== (mode.startsWith('cloud-pin') ? 'pin' : mode.startsWith('cloud-unpin') ? 'unpin' : mode.startsWith('cloud-restore') ? 'restore' : 'trash')) throw new Error('unexpected-state-action');
     if (stateMode === 'cloud-trash-pending') await new Promise<void>(resolve => { releaseState = resolve; });
     if (stateMode === 'cloud-trash-unknown') throw new Error('synthetic-password raw-provider-token');
     if (stateMode === 'cloud-trash-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: 'revision conflict' } };
@@ -125,7 +127,8 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
     if (stateMode === 'cloud-trash-deleted') return { provenance: 'single-rpc', status: 500, body: { code: 'P0002', message: 'previously applied, memo deleted' } };
     return { provenance: stateMode === 'cloud-trash-unverified' ? 'unverified' : 'single-rpc', status: 200,
       body: stateMode === 'cloud-trash-invalid' ? { message: 'synthetic-password raw-provider-token' }
-        : { ...snapshot().memos[mode.startsWith('cloud-restore') ? 1 : 0]!, id: args.p_id, deleted_at: args.p_action === 'restore' ? null : '2026-11-14T00:00:00Z',
+        : { ...snapshot().memos[mode.startsWith('cloud-restore') ? 1 : 0]!, id: args.p_id, deleted_at: args.p_action === 'trash' ? '2026-11-14T00:00:00Z' : null,
+          pinned_at: args.p_action === 'pin' ? (mode.endsWith('invalid-pin') ? null : '2026-11-14T00:00:00Z') : args.p_action === 'unpin' ? (mode.endsWith('invalid-pin') ? '2026-11-14T00:00:00Z' : null) : snapshot().memos[0]!.pinned_at,
           revision: Number(args.p_expected_revision) + 1, last_request_id: args.p_request_id } };
   }
   if (operationMode.startsWith('cloud-edit') && (rpc === 'memo_save' || rpc === 'memo_resolve_request')) {
@@ -168,7 +171,7 @@ const cloudPort = {
   ...(mode.startsWith('cloud-tag-delete') ? { async deleteTag(...args: Parameters<typeof cloudController.deleteTag>) {
     try { const result = await cloudController.deleteTag(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
-  ...(mode.startsWith('cloud-tag') ? { async saveTag(...args: Parameters<typeof cloudController.saveTag>) {
+  ...(mode.startsWith('cloud-tag') || mode.startsWith('cloud-pin') || mode.startsWith('cloud-unpin') ? { async saveTag(...args: Parameters<typeof cloudController.saveTag>) {
     try { const result = await cloudController.saveTag(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
   ...(mode.startsWith('cloud-empty') ? { async emptyTrash(...args: Parameters<typeof cloudController.emptyTrash>) {
@@ -208,7 +211,7 @@ const app = createProductLocalApp(document, {
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
-  generatedIds, changeTag: (kind: 'both' | 'name' | 'revision' = 'both') => { changedTag = kind; }, changeTrashSet: () => { changedTrashSet = true; },
+  generatedIds, changePin: (kind: 'state' | 'revision') => { changedPin = kind; }, changeTag: (kind: 'both' | 'name' | 'revision' = 'both') => { changedTag = kind; }, changeTrashSet: () => { changedTrashSet = true; },
   stateArgs: () => stateArgs, stateResult: () => stateResult, releaseState: () => releaseState?.(),
   invalidateSnapshot: () => targets.setDirty(false),
   differentUser: () => { value.user.id = '00000000-0000-4000-8000-000000000999'; },
