@@ -121,4 +121,21 @@ P2回帰として、editorなしのタグ保存rejected/unknownの2件を追加�
 
 追加P2では初回migrationの`running`もlogout抑止に含めた。既存controllerの状態を正本とし、移行・復元・単件回復・初期復元・通常操作の非同期開始/終了（例外終了を含む）でAuth UIを再描画する。v3更新のbusy通知でも再描画し、別の処理状態は複製しない。合成ロック待ちによる旧移行/pending復旧・追加型復元/単件回復・初期復元の診断/確認/cancelの5件を追加（Chromium計18件）し、処理中のlogout拒否と終了後のボタン復帰を確認した。実Storage・実通信は使わない。
 
-未結線：製品SDK生成・Auth専用実Storage/環境設定/通信境界、C04 controller/senderの製品操作接続、C05保存先反映、実Auth/実RPC・single-rpc。loopback＋Permit境界、SDKパッチ、製品build拒否、公開memo.htmlは変更しない。
+第1単位時点の未結線：製品SDK生成・Auth専用実Storage/環境設定/通信境界、C04 controller/senderの製品操作接続、C05保存先反映、実Auth/実RPC・single-rpc。第2単位の接続範囲は以下を参照。loopback＋Permit境界、SDKパッチ、製品build拒否、公開memo.htmlは変更しない。
+
+## Q04 Step 4 第2単位：注入C04 load / C05保存先選択
+
+`createProductLocalApp(doc, deps, views, session, cloud?)`の第5引数に、生成済みの`StorageTargetController`と、同じsessionに結び付けた既存C04 controllerの`load/dispose`だけを注入する。sessionは既存の`getContext/isCurrent`を提供する。同じ所有者のsession/C04と初期localのC05を、このapp専用に生成済みであることが注入側の契約。採用後はappが所有し、外部から保存先を変更したりcontrollerを他操作と共有したりしない。sessionまたはcloud hostが未注入（context APIなしを含む）の場合は従来local-onlyを維持し、未採用のhostは呼び出さない。
+
+- 保存先の正本はC05の`current()`だけ。製品compositionはその値を直接見てlocal操作を許可/拒否する。別のtarget状態機械は作らない。
+- 認証成立だけでは切替・RPCを開始しない。この読取接続単位は明示的な保存先選択を扱い、`request/confirm/logout`へ既存navigationの判定を渡す。dirtyは既存`isDirty`、editor外のrejected/unknown/unresolvedは共有`appDepartureReason`、saving等は既存controllerの状態を参照する。確認はapp参照・Auth世代・navigation ticketとC05のrevisionに結び付け、cancelでは変えず、編集/保存開始/認証更新後の旧確認を拒否する。
+- cloudへ変更された場合だけ、現在の`getContext/isCurrent`を通じたcontextを既存C04 `load`へ1回渡す。同じ保存先の再選択や状態通知で再送しない。再読取はlocalへ明示的に戻してから再選択する。処理中の再cloud選択は拒否し、local選択/logoutによる離脱は既存確認後に可能。
+- C04の所有者照合・世代検証・送信能力・C01応答検証を再実装しない。製品表示への反映だけを、選択時のC05状態オブジェクトと現在contextに結び付け、切替前/旧認証世代/終了後の応答を表示しない。Auth通知はgetState再取得の契機であり、RPC認可ではない。
+- 同じuserの検証済みcontext更新は`acceptAuthenticatedGeneration`へ委譲し、cloud選択とdirtyを保持。失効や異なるuserの認証ではcloudのまま同一user再認証を案内し、localへfallbackしない。内部のuser IDは照合にだけ使いDOM/ログへ出さない。再認証で自動loadしない。
+- cloud選択中はlocalメモ/移行UIをinertにし、viewのdispatch・復元/回復・backup準備・upgrade入口でもlocal操作を拒否する。local draftはメモリに保持するがcloudへ渡さない。cloud選択はlocal成功を意味せず、UNKNOWNでもlocalへ書き込まない。明示logoutだけは既存離脱確認後にC05でlocalへ戻し、session.logoutへ委譲する。
+- cloud表示は読取中、成功時のメモ/タグ件数、停止、UNKNOWNの固定文言だけ。raw例外/応答、資格情報、token、user IDを表示しない。cloudのメモ一覧/詳細/編集やwrite RPCはまだ接続しない。
+- disposeでUIのイベント/購読を解除し、sessionを終了。load待機中は結果を捨て、既存C04のbusy契約に従ってPromise終了後にcontrollerをdisposeする（強制終了/追加通信なし）。
+
+AI Gateは既存の製品候補Chromium fixtureへC03 session・C04 controller・C05を注入し、RPC senderだけを合成化する。15件を追加（session関連Chromium計33件）：初期local/明示cloud/load1回、未認証拒否、未注入local、cancel保持、古い確認、saving、editor外失敗、同一user世代更新、失効、logout、切替前/旧世代/終了後応答、二重要求、通信失敗/未認定応答/拒否、secret非露出、local書込fallbackなし。合成応答の`single-rpc`は既存C01成功分岐を試すfixture値であり、実経路の認定ではない。
+
+通常product entryは引き続きsession/hostを生成・注入しない。C04/C05/Authのruntime実装は型参照だけに留め、build混入拒否とCSP、loopback＋Permit境界は維持。実SDK/実Auth Storage/実transport、cloud一覧/詳細・write接続、実製品Auth/RPC/RLS、single-rpc認定は未実施。次は既存snapshotの読取専用一覧/詳細接続をfakeで進められる。実環境操作・Human Gateは別承認であり、今回要求/実行しない。

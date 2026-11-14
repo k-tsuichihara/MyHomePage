@@ -85,5 +85,5 @@ PR #83のレビューPASS・マージ後、オーナーがStep 3の「S04差分�
 - S04：repository準備完了 + dev-sandbox適用成功報告 + helper直接拒否PASS + ケース13/6総合PASS。Step 3のS04差分確認はオーナー確定により完了。
 - Q04：**進行中**。S04差分として次の実試験候補は追加しない。実環境操作・cleanupは未承認。Q04全体をPASSへ昇格しない。
 - A17/S05保留、過去の監査PASS、Human Gate専用経路の既知課題は変更しない。
-- Step 4第1単位として既存session注入による製品候補UIのAuth表示・操作・終了を実装し、fake sessionによるChromium回帰を確認した。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)を参照。実SDK生成・実Storage・cloud保存先・controller/senderの製品接続は未実施。追加の旧DB CLI実行を要求しない。
+- Step 4第1単位のsession注入/Auth UI（PR #84の修正を含む）に続き、第2単位の既存C04 load/C05保存先選択を製品hostへ注入し、fake sender/合成StorageでChromium回帰を確認した。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)を参照。通常entryは未注入local-only。実SDK生成・実Storage・実sender・cloud一覧/詳細/write・実製品経路は未接続。実環境PASSやsingle-rpcへ昇格しない。追加の旧DB CLI実行を要求しない。
 - 今回の記録整理中は、追加SQL・Auth/RPC通信・DB操作・再試行を実施していない。過去記録・準備manifestは上書きしない。生成manifestの`applied:false`は生成時の値として保存し、この実施報告と区別する。
