@@ -6,8 +6,8 @@
 
 ## 現在位置と公開までの推奨順序
 
-- 現在：**STEP 04（Q04限定読取・タグ作成/改名/競合までPASS）**。R02はCOMPLETE、S04のdev-sandbox適用成功、Q04-READ限定PASS、既存ケース13総合PASSをオーナー報告に基づき記録済み。
-- 次の承認候補：**Q04 Step 3の既存メモ作成/並行更新/保存照合ケース6**。新規専用メモ1件、Auth最大1・RPC最大8（write要求3）の範囲を静的準備済み、未承認・未実行。完了済みタグケースを再実行せず、Q04全体は進行中。single-rpc未認定を維持。
+- 現在：**STEP 04（Q04のS04差分確認は完了候補）**。S04適用成功、Q04-READ限定PASS、ケース13/6総合PASSをオーナー報告に基づき記録済み。R02はCOMPLETE。
+- 次：**S04差分確認の完了候補レビューと製品Auth/cloud接続側への残条件引継ぎ**。S04のための追加実試験候補はなし。完了済みケースを再実行せず、Q04全体は進行中、single-rpc未認定を維持。製品実装/実通信/cleanupには今回進まない。
 - C03〜C05のUI非依存層は実装済みだが、実Auth・実HTTP・single-rpc認定・製品UI結線は未検証。C05では明示logoutとAuth失効を区別し、離脱可否は既存navigation契約を正本とする。
 - R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、D05確定はPR #49、C03〜C05の通信なし境界はPR #50〜#68で段階的に整備した。今回R02へ着手したが、公開HTML・本番Auth・実ユーザーデータ・Pages公開には接続していない。
 - 未決事項：Q05の正式検証範囲、Q04でのhelper制限の適用/実証、製品接続・公開前ゲート。ACL原本完全性・NOLOGIN用途等のUNKNOWNは保持するが、追加GRANT/完全復元を行わない今回のS04準備の必須条件にはしない。DB・本番操作の承認ではない。
@@ -87,7 +87,7 @@
 | S01 | A01〜A17のカタログ監査・課題記録 | 完了 | [DB監査記録](../tools/memo/tests/DEV-DB-AUDIT.md)、[チェックリスト](../tools/memo/tests/DEV-DB-AUDIT-CHECKLIST.md)、PR #30・#31 | 手動実施報告の記録。A17やR02解決ではない |
 | S02 | 8RPC本文比較・追加S01〜S06監査の記録 | 完了 | DB監査記録§13・15、PR #32〜#34・#39・#40 | 改行正規化後8本文一致、戻り値型OID一致等。実Auth/RLS/HTTP合格ではない。#37は#38でrevert、復元修正は#39 |
 | S03 | R02 T00〜T05読取監査の取得 | 完了 | [既存手順](../tools/memo/tests/db-audit/R02-PREAPPLY-AUDIT.md)、オーナーの今回の手動報告 | T00:PG17.11/UTF8/on/15s・3s、T01:12関数、T02:20行/4署名/13列、T03:80行欠落等なし、T04:4一致、T05:seed20/UNKNOWNなし。AI独立検証なし |
-| S04 | helper直接EXECUTE制限の最小設計・SQL・静的検証 | 完了 | [現在の最小契約](../tools/memo/tests/db-audit/S04-MINIMAL-ACL.md)、[SQL案](../tools/memo/tests/db-audit/s04-helper-execute.sql)、[Q04実行記録](../tools/memo-db-test/Q04-RESULTS.md)、PR #79 | repository準備範囲COMPLETE。dev-sandbox適用成功報告、Q04-READ直接拒否PASS、ケース13タグ作成/改名/競合PASS。追加GRANT/完全復元なし。メモ側変更後書込は次の候補、製品経路/RLS等はQ04継続。A17はS05保留 |
+| S04 | helper直接EXECUTE制限の最小設計・SQL・静的検証 | 完了 | [現在の最小契約](../tools/memo/tests/db-audit/S04-MINIMAL-ACL.md)、[SQL案](../tools/memo/tests/db-audit/s04-helper-execute.sql)、[Q04実行記録](../tools/memo-db-test/Q04-RESULTS.md)、PR #79 | repository準備COMPLETE。dev-sandbox適用成功報告、直接拒否・ケース13/6総合PASS。Q04 Step 3のS04差分確認は追加実試験不要の完了候補。追加GRANT/完全復元なし。製品経路/RLS等のQ04残条件とは区別。A17はS05保留 |
 | S05 | A17：将来オブジェクトのdefault権限対応 | 保留 | DB監査記録§14、PR #35 | 新規追加予定なしの判断で変更保留。追加前・追加後・本番公開前の権限レビューは残る |
 
 ## 6. テスト・品質確認
@@ -97,7 +97,7 @@
 | Q01 | 型チェック・Vitest・ビルドの既存回帰基盤 | 完了 | [package.json](../tools/memo/package.json)、試験案内、通信なし基盤、PR #29 | 過去記録は全Vitest1,300件等PASS。今回再実行なし。リリース対象コミットの最終回帰は別確認 |
 | Q02 | 合成メモリUI・ブラウザE2E | 完了 | [ブラウザ契約](../tools/memo/tests/BROWSER-UI.md)、tests/browser/、PR #12以降 | 過去記録83件PASS。実OS日本語IME・実端末受入とは別 |
 | Q03 | 隔離ChromiumのStorage/Web Locks・形式/切替試験 | 完了 | [永続化](../tools/memo/tests/LOCAL-PERSISTENCE.md)、Phase B、[切替設計](../tools/memo/tests/RELEASE-TRANSITION.md)、PR #14・#15・#17・#26 | 過去記録22/16/20件PASS。容量・再起動は記録範囲に限定 |
-| Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 進行中 | [実行記録](../tools/memo-db-test/Q04-RESULTS.md)、[準備/承認順序](../tools/memo-db-test/Q04-PREPARATION.md)、[過去DB33試験](../tools/memo-db-test/TEST-SUMMARY-2026-10-25.md) | S04適用成功、Q04-READ限定PASS、ケース13総合PASS（CREATE rev1/RENAME rev2/CONFLICT rev2維持、専用タグ1件残置）。重複名・関連付き影響は今回対象外。次はメモ側差分を既存ケース6へ集約する未承認候補。既存監査/完了ケースの再実行なし、cleanupなし。製品SDK/RLS等・single-rpcは未検証、全体PASSへ昇格しない |
+| Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 進行中 | [実行記録](../tools/memo-db-test/Q04-RESULTS.md)、[準備/承認順序](../tools/memo-db-test/Q04-PREPARATION.md)、[過去DB33試験](../tools/memo-db-test/TEST-SUMMARY-2026-10-25.md) | S04適用成功、Q04-READ限定PASS、ケース13/6総合PASS。ケース6はA200/B409・通信期間重複・最終rev2・状態/要求照合PASS・競合側resolve=null。専用タグ/メモ各1件保持。内部同時実行/未実行証明には昇格しない。S04差分は完了候補、追加実試験不要。製品Auth/session・cloud実経路/所有者/RLS・障害受入・single-rpc等は未検証。全体PASS/cleanup/再実行なし |
 | Q05 | 実機・IME・主要操作・ドラフト保護・アクセシビリティ等の受入範囲確認 | 要確認 | ブラウザ契約、Phase Bの未検証事項、今回のオーナー合意 | 必要。Windows + Chrome中心を想定し、日本語IME・主要操作・編集中データ保護を重視。Firefox・Safari/WebKit等は後回し。スマホ実機を含む正式検証範囲・対応対象は後日確定し、対象外と断定しない |
 
 ## 7. 本番移行・公開
