@@ -1,5 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
+Step 4 B1：既存一覧query/使用件数/一覧文脈をcloud snapshotへfake製品接続。検索・OR/AND・並替・pin順・scroll保持は純粋表示だけでRPCなし。B1はAI完了候補、fake/offline残件はB2複製・B3cloud音声の2群。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)B1節を現在の正本とする。実通信/DB操作/cleanupなし、Q04全体進行中・single-rpc未認定。
+
 Step 4第13単位：cloudメモのタグ割当を既存editor/save/resolveへfake接続。凍結tagIdsと元要求照合を維持し、追加RPC/ledger/自動再送なし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)の最終棚卸しではB=3（cloud一覧機能・複製・音声）。まだfake/offlineフェーズを閉じず、人間操作前に未結線のAI作業を優先する。実通信/DB操作/cleanupなし、Q04全体進行中・single-rpc未認定。
 
 Step 4第12単位：既存changeStateで通常メモ単件pin/unpinをfake製品接続。正式4引数・既存台帳/adapter/UNKNOWN追跡を利用し、専用resolve/自動再送なし。fake/offline残機能はcloudメモ編集時のタグ割当変更。実製品接続/受入・single-rpcは未完了、C03〜C05/Q04全体は進行中。実通信/DB操作/cleanupなし。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)第12単位を参照。

@@ -9,7 +9,7 @@ import type { VoiceRecognition } from '../src/voice-input';
 
 // 既存製品compositionへ合成session/Storageだけを注入。SDK/実fetchは使わない。
 const mode = (window as unknown as { fixtureMode: string }).fixtureMode;
-const operationMode = mode.replace(/^cloud-create/, 'cloud-edit').replace(/^cloud-assign-(edit|create)/, 'cloud-edit');
+const operationMode = mode.replace(/^cloud-create/, 'cloud-edit').replace(/^cloud-assign-(edit|create)/, 'cloud-edit').replace(/^cloud-list/, 'cloud-edit');
 const id = mode === 'cloud-casing' ? '00000000-0000-4000-8000-00000000abcd' : '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
 const value = { user: { id }, access_token: 'synthetic-token-private', expires_at: 200 };
@@ -62,6 +62,22 @@ const snapshot = () => {
       { ...result.tags[0]!, id: '00000000-0000-4000-8000-000000000105', name: 'second candidate' });
   }
   if (changedTag) result.tags[0] = { ...result.tags[0]!, name: changedTag === 'revision' ? result.tags[0]!.name : 'changed tag', revision: changedTag === 'name' ? result.tags[0]!.revision : 2 };
+  if (mode.startsWith('cloud-list')) {
+    const at = (day: string) => `2026-11-${day}T00:00:00Z`;
+    const row = (suffix: string, title: string, body: string, created: string, updated: string, pin: string | null, revision = 1) =>
+      ({ ...memo, id: `00000000-0000-4000-8000-000000000${suffix}`, title, body, created_at: at(created), updated_at: at(updated), pinned_at: pin ? at(pin) : null, revision });
+    result.memos = [row('101', 'Alpha title', 'body-a', '10', '12', null),
+      { ...memo, id: '00000000-0000-4000-8000-000000000102', title: 'Trashed memo', deleted_at: at('14') },
+      row('202', 'Pinned B', 'common', '10', '11', '13'), row('204', 'Delta', 'body-d', '12', '11', null, 2),
+      row('201', 'Pinned A', 'needle common', '10', '11', '13'), row('203', 'Pinned new', 'common', '10', '11', '14'),
+      row('205', 'Echo', 'body-e', '10', '12', null), row('206', 'Needle title', 'body-n', '14', '14', null, 5)];
+    result.tags = [['103', '赤タグ'], ['105', '青タグ'], ['106', '未使用タグ'], ['107', 'ゴミ箱だけタグ']].map(([suffix, name]) =>
+      ({ id: `00000000-0000-4000-8000-000000000${suffix}`, user_id: value.user.id, name: name!, created_at: at('10'), revision: 1 }));
+    result.memoTags = [['101', '103'], ['201', '103'], ['204', '103'], ['202', '105'], ['203', '105'], ['204', '105'], ['206', '105'], ['102', '103'], ['102', '107']].map(([m, t]) =>
+      ({ memo_id: `00000000-0000-4000-8000-000000000${m}`, tag_id: `00000000-0000-4000-8000-000000000${t}`, user_id: value.user.id }));
+    if (mode === 'cloud-list-scroll') for (let index = 0; index < 40; index++) result.memos.push(
+      row(String(400 + index), `Scroll ${String(index).padStart(2, '0')}`, 'scroll body', '10', '10', null));
+  }
   return result;
 };
 const api: MemoAuthApi = {
@@ -78,7 +94,7 @@ const api: MemoAuthApi = {
     current = null; return { error: null }; },
   onAuthStateChange(callback) { emit = callback; return { data: { subscription: { unsubscribe: () => { calls.unsubscribe++; } } } }; },
 };
-const stateMode = mode.replace('cloud-restore', 'cloud-trash').replace('cloud-delete', 'cloud-trash').replace('cloud-empty', 'cloud-trash').replace('cloud-tag', 'cloud-trash').replace('cloud-unpin', 'cloud-trash').replace('cloud-pin', 'cloud-trash');
+const stateMode = mode.replace('cloud-restore', 'cloud-trash').replace('cloud-delete', 'cloud-trash').replace('cloud-empty', 'cloud-trash').replace('cloud-tag', 'cloud-trash').replace('cloud-unpin', 'cloud-trash').replace('cloud-pin', 'cloud-trash').replace('cloud-list', 'cloud-trash');
 const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   rpcNames.push(rpc);
   if (mode.startsWith('cloud-tag-delete') && rpc === 'memo_delete_tag') {
@@ -125,7 +141,7 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   }
   if (stateMode.startsWith('cloud-trash') && rpc === 'memo_change_state') {
     stateArgs = args;
-    if (args.p_action !== (mode.startsWith('cloud-pin') ? 'pin' : mode.startsWith('cloud-unpin') ? 'unpin' : mode.startsWith('cloud-restore') ? 'restore' : 'trash')) throw new Error('unexpected-state-action');
+    if (!mode.startsWith('cloud-list') && args.p_action !== (mode.startsWith('cloud-pin') ? 'pin' : mode.startsWith('cloud-unpin') ? 'unpin' : mode.startsWith('cloud-restore') ? 'restore' : 'trash')) throw new Error('unexpected-state-action');
     if (stateMode === 'cloud-trash-pending') await new Promise<void>(resolve => { releaseState = resolve; });
     if (stateMode === 'cloud-trash-unknown') throw new Error('synthetic-password raw-provider-token');
     if (stateMode === 'cloud-trash-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: 'revision conflict' } };
@@ -133,7 +149,7 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
     if (stateMode === 'cloud-trash-deleted') return { provenance: 'single-rpc', status: 500, body: { code: 'P0002', message: 'previously applied, memo deleted' } };
     return { provenance: stateMode === 'cloud-trash-unverified' ? 'unverified' : 'single-rpc', status: 200,
       body: stateMode === 'cloud-trash-invalid' ? { message: 'synthetic-password raw-provider-token' }
-        : { ...snapshot().memos[mode.startsWith('cloud-restore') ? 1 : 0]!, id: args.p_id, deleted_at: args.p_action === 'trash' ? '2026-11-14T00:00:00Z' : null,
+        : { ...snapshot().memos.find(row => row.id === args.p_id)!, id: args.p_id, deleted_at: args.p_action === 'trash' ? '2026-11-14T00:00:00Z' : null,
           pinned_at: args.p_action === 'pin' ? (mode.endsWith('invalid-pin') ? null : '2026-11-14T00:00:00Z') : args.p_action === 'unpin' ? (mode.endsWith('invalid-pin') ? '2026-11-14T00:00:00Z' : null) : snapshot().memos[0]!.pinned_at,
           revision: Number(args.p_expected_revision) + 1, last_request_id: args.p_request_id } };
   }

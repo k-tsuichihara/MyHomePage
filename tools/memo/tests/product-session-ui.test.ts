@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import type { CloudCall } from '../src/cloud-rpc-types';
 
-let browser: Browser, code: string, html: string;
+let browser: Browser, code: string, html: string, productCss: string;
 beforeAll(async () => {
   code = (await build({ entryPoints: [fileURLToPath(new URL('./product-session-fixture.ts', import.meta.url))],
     bundle: true, write: false, format: 'iife', platform: 'browser' })).outputFiles[0]!.text;
@@ -14,6 +14,7 @@ beforeAll(async () => {
   html = (await readFile(new URL('../.product/site/tools/memo/memo.html', import.meta.url), 'utf8'))
     .replace(/<script type="module"[^>]*><\/script>/, '<script src="/fixture.js"></script>');
   expect(html).toContain('<script src="/fixture.js"></script>');
+  productCss = await readFile(new URL('../css/memo-product.css', import.meta.url), 'utf8');
   browser = await chromium.launch({ headless: true });
 }, 30000);
 afterAll(async () => { await browser?.close(); });
@@ -24,6 +25,7 @@ async function pageFor(mode = 'normal') {
     const url = new URL(route.request().url());
     if (url.origin !== 'https://product.test') return route.abort();
     if (url.pathname === '/fixture.js') return route.fulfill({ contentType: 'text/javascript', body: code });
+    if (mode.startsWith('cloud-list') && /\/memo-product\.[a-f0-9]+\.css$/.test(url.pathname)) return route.fulfill({ contentType: 'text/css', body: productCss });
     if (url.pathname === '/tools/memo/memo.html') return route.fulfill({ contentType: 'text/html', body: html });
     return route.abort();
   });
@@ -345,9 +347,11 @@ it.each(['edit', 'create'].flatMap(kind => ['expired', 'generation', 'target'].m
 it('古いsnapshotの編集ボタンから編集を開始できず、ゴミ箱メモには編集を提供しない', async () => {
   const page = await pageFor('cloud-edit-success');
   try {
-    await selectCloud(page); await page.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
+    await selectCloud(page); await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
+    await page.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
     expect(await page.getByRole('button', { name: 'このクラウドメモを編集', exact: true }).count()).toBe(0);
     await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウド通常一覧', exact: true }).click();
     await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
     await page.getByRole('button', { name: 'このクラウドメモを編集', exact: true }).evaluate(node => Object.assign(window, { oldEditButton: node }));
     await probe(page, 'fixture.refreshAuth()'); await page.getByText(/認証が更新されました/).waitFor();
@@ -409,13 +413,14 @@ it('検証済みsnapshotだけを一覧/詳細/タグとして安全に読み、
     const before = await probe(page, 'fixture.state()');
     await selectCloud(page); await page.getByRole('button', { name: '確認して保存先を変更' }).click();
     await view.getByRole('heading', { name: 'クラウドメモ一覧（読取専用）', exact: true }).waitFor();
-    expect(await view.getByRole('button').count()).toBe(2);
+    expect(await view.getByRole('list', { name: 'クラウドの一覧結果', exact: true }).getByRole('button').count()).toBe(1);
     await view.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
     expect(await view.locator('pre').textContent()).toBe('<b>読取専用の本文</b>');
     expect(await view.locator('b').count()).toBe(0);
     expect(await view.getByText('タグ：既存クラウドタグ', { exact: true }).count()).toBe(1);
     expect(await view.locator('input,textarea,select,form,a').count()).toBe(0);
     await view.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    await view.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
     await view.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
     expect(await view.getByText('ゴミ箱内のメモ（読取専用）', { exact: true }).count()).toBe(1);
     expect(await view.getByText('タグなし', { exact: true }).count()).toBe(1);
@@ -953,6 +958,7 @@ it('logout確認中のAuth世代変化でも古い確認を拒否する', async 
 
 async function prepareStateChange(page: Page, action: 'trash' | 'restore' | 'delete-permanently' = 'trash') {
   await selectCloud(page);
+  if (action !== 'trash') await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
   await page.getByRole('button', { name: action === 'trash' ? 'クラウドの合成メモ' : 'ゴミ箱の合成メモ', exact: true }).click();
   const label = action === 'trash' ? 'ゴミ箱へ移動' : action === 'restore' ? '復元' : '完全削除';
   await page.getByRole('button', { name: label, exact: true }).click();
@@ -1000,6 +1006,150 @@ async function openAssignment(page: Page, kind: 'edit' | 'create' = 'edit') {
   await page.getByLabel('クラウドのタイトル', { exact: true }).fill('タグ割当のタイトル');
   await page.getByLabel('クラウドの本文', { exact: true }).fill('タグ割当の本文');
 }
+const cloudRows = (page: Page) => page.getByRole('list', { name: 'クラウドの一覧結果', exact: true });
+const cloudTitles = (page: Page) => cloudRows(page).getByRole('button').allTextContents();
+it('B1検索はタイトル/本文/タグ名を既存queryへ渡し、タグOR＋文字ANDと使用件数を表示する', async () => {
+  const page = await pageFor('cloud-list-success'); const logs: string[] = [];
+  page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
+  try {
+    const local = await probe(page, 'fixture.state()'); await selectCloud(page);
+    const search = page.getByLabel('クラウドの検索', { exact: true });
+    expect(await cloudTitles(page)).not.toContain('Trashed memo');
+    await search.fill('Alpha'); expect(await cloudTitles(page)).toEqual(['Alpha title']);
+    await search.fill('needle'); expect(await cloudTitles(page)).toEqual(['Pinned A', 'Needle title']);
+    await search.fill('赤タグ'); expect(await cloudTitles(page)).toEqual(['Pinned A', 'Alpha title', 'Delta']);
+    await search.fill('');
+    const red = page.getByRole('checkbox', { name: 'クラウド絞込タグ：赤タグ', exact: true });
+    const blue = page.getByRole('checkbox', { name: 'クラウド絞込タグ：青タグ', exact: true });
+    await red.check(); await blue.check();
+    expect(await cloudTitles(page)).toEqual(['Pinned new', 'Pinned A', 'Pinned B', 'Needle title', 'Alpha title', 'Delta']);
+    await search.fill('needle'); expect(await cloudTitles(page)).toEqual(['Pinned A', 'Needle title']);
+    await blue.uncheck(); expect(await cloudTitles(page)).toEqual(['Pinned A']);
+    await page.getByRole('button', { name: 'クラウドのタグ絞込を解除', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'クラウド絞込タグ：未使用タグ', exact: true }).check();
+    expect(await cloudTitles(page)).toEqual([]);
+    await search.fill(''); await page.getByRole('button', { name: 'クラウドのタグ絞込を解除', exact: true }).click();
+    expect((await cloudTitles(page)).length).toBe(7);
+    for (const label of ['赤タグ（使用 3件）', '青タグ（使用 4件）', '未使用タグ（使用 0件）', 'ゴミ箱だけタグ（使用 0件）']) await page.getByText(label, { exact: true }).waitFor();
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.state()')).toEqual(local); expect(await probe(page, 'fixture.stored()')).toEqual([]);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    const output = (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
+    expect(output).not.toMatch(/00000000-0000-4000-8000-000000000/);
+    for (const secret of ['synthetic-password', 'synthetic-token-private', 'raw-provider-token']) expect(output).not.toContain(secret);
+  } finally { await page.context().close(); }
+});
+it('B1並替は正式4値だけを提供し、pin降順/同時刻ID順を保持して純粋queryの並びを表示する', async () => {
+  const page = await pageFor('cloud-list-success');
+  try {
+    await selectCloud(page);
+    expect(await cloudTitles(page)).toEqual(['Pinned new', 'Pinned A', 'Pinned B', 'Needle title', 'Alpha title', 'Echo', 'Delta']);
+    const sort = page.getByLabel('クラウドの並び順', { exact: true });
+    expect(await sort.locator('option').evaluateAll(nodes => nodes.map(node => (node as HTMLOptionElement).value))).toEqual(['updated-desc', 'updated-asc', 'created-desc', 'created-asc']);
+    await sort.selectOption('created-asc');
+    expect(await cloudTitles(page)).toEqual(['Pinned new', 'Pinned A', 'Pinned B', 'Alpha title', 'Echo', 'Delta', 'Needle title']);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('B1一覧→detail→一覧で検索/並替/スクロールを同じsnapshot内に保持する', async () => {
+  const page = await pageFor('cloud-list-scroll');
+  try {
+    await selectCloud(page); await page.getByLabel('クラウドの検索', { exact: true }).fill('Scroll');
+    await page.getByLabel('クラウドの並び順', { exact: true }).selectOption('created-asc');
+    expect(await cloudRows(page).evaluate(node => getComputedStyle(node).overflowY)).toBe('auto');
+    await cloudRows(page).evaluate(node => { node.scrollTop = 600; });
+    const scroll = await cloudRows(page).evaluate(node => node.scrollTop); expect(scroll).toBeGreaterThan(0);
+    await cloudRows(page).getByRole('button', { name: 'Scroll 10', exact: true }).evaluate(node => (node as HTMLButtonElement).click());
+    await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    expect(await page.getByLabel('クラウドの検索', { exact: true }).inputValue()).toBe('Scroll');
+    expect(await page.getByLabel('クラウドの並び順', { exact: true }).inputValue()).toBe('created-asc');
+    expect(Math.abs(await cloudRows(page).evaluate(node => node.scrollTop) - scroll)).toBeLessThan(2);
+    expect((await cloudTitles(page)).length).toBe(40);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('B1ゴミ箱は通常一覧の条件を適用せず、通常一覧へ戻るとタグと文字条件を復帰する', async () => {
+  const page = await pageFor('cloud-list-success');
+  try {
+    await selectCloud(page); await page.getByLabel('クラウドの検索', { exact: true }).fill('needle');
+    await page.getByRole('checkbox', { name: 'クラウド絞込タグ：赤タグ', exact: true }).check();
+    expect(await cloudTitles(page)).toEqual(['Pinned A']);
+    await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
+    expect(await cloudTitles(page)).toEqual(['Trashed memo']);
+    expect(await page.getByLabel('クラウドの検索', { exact: true }).count()).toBe(0);
+    await cloudRows(page).getByRole('button', { name: 'Trashed memo', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    expect(await cloudTitles(page)).toEqual(['Trashed memo']);
+    await page.getByRole('button', { name: 'クラウド通常一覧', exact: true }).click();
+    expect(await page.getByLabel('クラウドの検索', { exact: true }).inputValue()).toBe('needle');
+    expect(await page.getByRole('checkbox', { name: 'クラウド絞込タグ：赤タグ', exact: true }).isChecked()).toBe(true);
+    expect(await cloudTitles(page)).toEqual(['Pinned A']);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await page.context().close(); }
+});
+it.each(['generation', 'target', 'user'])('B1%s変更で旧一覧/条件を失効させ、新snapshotへ引き継がない', async change => {
+  const page = await pageFor('cloud-list-success'); const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  try {
+    await selectCloud(page); await page.getByLabel('クラウドの検索', { exact: true }).fill('Alpha');
+    await page.getByLabel('クラウドの検索', { exact: true }).evaluate(node => Object.assign(window, { oldListSearch: node }));
+    await cloudRows(page).getByRole('button').first().evaluate(node => Object.assign(window, { oldListRow: node }));
+    if (change === 'generation') await probe(page, 'fixture.refreshAuth()');
+    else if (change === 'target') { await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click(); await selectCloud(page); }
+    else {
+      await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+      await probe(page, 'fixture.differentUser()'); await login(page); await selectCloud(page);
+    }
+    await probe(page, "window.oldListSearch.value = 'stale'; window.oldListSearch.dispatchEvent(new Event('input')); window.oldListRow.click()");
+    if (change === 'generation') expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    else {
+      expect(await page.getByLabel('クラウドの検索', { exact: true }).inputValue()).toBe('');
+      expect((await cloudTitles(page)).length).toBe(7);
+      expect(await page.getByText('クラウドメモ詳細（読取専用）', { exact: true }).count()).toBe(0);
+    }
+    expect(errors).toEqual([]);
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(change === 'generation' ? ['memo_load_snapshot'] : ['memo_load_snapshot', 'memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it('B1再読取失敗でも旧一覧・古い検索DOMから成功データを復活させない', async () => {
+  const page = await pageFor('cloud-list-success');
+  try {
+    await selectCloud(page); await page.getByLabel('クラウドの検索', { exact: true }).fill('Alpha');
+    await page.getByLabel('クラウドの検索', { exact: true }).evaluate(node => Object.assign(window, { oldListSearch: node }));
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await probe(page, "fixture.snapshotMode('failure')"); await selectCloud(page);
+    await page.locator('#product-cloud-state').filter({ hasText: 'UNKNOWN' }).waitFor();
+    await probe(page, "window.oldListSearch.dispatchEvent(new Event('input'))");
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_load_snapshot']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
+it.each(['edit', 'pin', 'trash'])('B1絞込結果から%sしても検索配列の添字ではなく元memo ID/revisionを使用する', async action => {
+  const page = await pageFor('cloud-list-success');
+  try {
+    await selectCloud(page); await page.getByLabel('クラウドの検索', { exact: true }).fill('Delta');
+    await cloudRows(page).getByRole('button', { name: 'Delta', exact: true }).click();
+    if (action === 'edit') {
+      await page.getByRole('button', { name: 'このクラウドメモを編集', exact: true }).click();
+      await page.getByLabel('クラウドのタイトル', { exact: true }).fill('Delta changed');
+      await page.getByRole('button', { name: 'クラウドへ保存', exact: true }).click(); await page.getByText(/保存要求の成功を確認/).waitFor();
+    } else if (action === 'pin') {
+      await page.getByRole('button', { name: 'ピン留め', exact: true }).click(); await page.getByText(/ピン留め要求の成功を確認/).waitFor();
+    } else {
+      await page.getByRole('button', { name: 'ゴミ箱へ移動', exact: true }).click();
+      await page.getByRole('button', { name: '確認してゴミ箱へ移動', exact: true }).click(); await page.getByText(/ゴミ箱への移動要求の成功を確認/).waitFor();
+    }
+    const args = await probe(page, action === 'edit' ? 'fixture.savedArgs()' : 'fixture.stateArgs()') as CloudCall['args'];
+    expect(args.p_id).toBe('00000000-0000-4000-8000-000000000204'); expect(args.p_expected_revision).toBe(2);
+    if (action !== 'edit') expect(args.p_action).toBe(action);
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot', action === 'edit' ? 'memo_save' : 'memo_change_state']);
+    expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await page.context().close(); }
+});
 it.each(['edit', 'create'] as const)('タグ割当%sはsnapshot候補/初期関連を使い、複数選択を既存saveへソート済み集合として渡す', async kind => {
   const page = await pageFor(`cloud-assign-${kind}-success`); const logs: string[] = [];
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
@@ -1146,10 +1296,12 @@ it.each(['pin', 'unpin'] as const)('cloud %sは通常メモのpinnedAtから操�
   page.on('console', item => logs.push(item.text())); page.on('pageerror', error => logs.push(error.message));
   try {
     const local = await probe(page, 'fixture.state()'); await selectCloud(page);
+    await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
     await page.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
     expect(await page.getByRole('button', { name: 'ピン留め', exact: true }).count()).toBe(0);
     expect(await page.getByRole('button', { name: 'ピン留め解除', exact: true }).count()).toBe(0);
     await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウド通常一覧', exact: true }).click();
     await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
     expect(await page.getByRole('button', { name: action === 'pin' ? 'ピン留め解除' : 'ピン留め', exact: true }).count()).toBe(0);
     const count = Number(await probe(page, 'fixture.generatedIds.length'));
@@ -1616,6 +1768,7 @@ it('完全削除はゴミ箱だけで明示確認し、正式な2引数で一度
     await selectCloud(page); await page.getByRole('button', { name: 'クラウドの合成メモ', exact: true }).click();
     expect(await page.getByRole('button', { name: '完全削除', exact: true }).count()).toBe(0);
     await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
     await page.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
     expect(await page.getByRole('button', { name: '復元', exact: true }).count()).toBe(1);
     await page.getByRole('button', { name: '完全削除', exact: true }).click();
@@ -1715,6 +1868,7 @@ it('restoreはゴミ箱詳細だけに表示し、cancel後は無送信、確認
     expect(await page.getByRole('button', { name: '復元', exact: true }).count()).toBe(0);
     expect(await page.getByRole('button', { name: 'ゴミ箱へ移動', exact: true }).count()).toBe(1);
     await page.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
     await page.getByRole('button', { name: 'ゴミ箱の合成メモ', exact: true }).click();
     expect(await page.getByRole('button', { name: 'ゴミ箱へ移動', exact: true }).count()).toBe(0);
     await page.getByRole('button', { name: '復元', exact: true }).click();
