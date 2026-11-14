@@ -1,7 +1,7 @@
 # Q04：公開前の実権限・API確認準備
 
 基準：PR #79マージ後main `8ef563c`。実DB/SQL/Auth/RPC操作は今回0件。
-現在の実施状態は[Q04実行記録](Q04-RESULTS.md)を正本とする。**Step 3のS04差分確認は完了、追加実試験不要**。Q04全体は進行中。Step 4第1〜第3単位のsession/C04 load/C05/snapshotに続き、第4単位で既存cloudメモ1件の編集/save/明示resolveをfake/Chromiumで検証した（[製品契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)）。通常entryは未注入local-only。実SDK生成・実Storage・実通信・cloud新規/削除等の残りwrite・cleanupは未実施/未承認。以下の未承認/未実施表現は準備履歴として現在の記録と区別する。
+現在の実施状態は[Q04実行記録](Q04-RESULTS.md)を正本とする。**Step 3のS04差分確認は完了、追加実試験不要**。Q04全体は進行中。Step 4第1〜第4単位のAuth/load/C05/snapshot/単件編集に続き、第5単位で同じeditorによるcloud新規メモ1件の作成/save/明示resolveをfake/Chromiumで検証した（[製品契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)）。通常entryは未注入local-only。実SDK生成・実Storage・実通信・cloud状態変更/削除等の残りwrite・cleanupは未実施/未承認。以下の未承認/未実施表現は準備履歴として現在の記録と区別する。
 対象は承認済みdev-sandboxと合成テストユーザーのみ。production、実ユーザーデータ、公開操作は対象外。
 
 ## 1. 再利用と残るUNKNOWN

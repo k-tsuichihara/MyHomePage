@@ -12,6 +12,8 @@ C04が未解決handleを返した要求は明示resolveの確定結果で解消�
 
 PR #87のP2対応：画面が古くても元要求についてC04がcompleted/終端diagnosedを返した場合、その検証済み結果を元attemptへ保持する。再認証/再選択後の明示回収で、saveのcompletedは`recoverCloudSave`（通常完了と同じ接続判定）、resolveの終端結果は既存`settleCloudResolution`を利用する。再送・新しいRPC・現在snapshotへの昇格はしない。回収した元attemptだけをunresolvedから除き、draftや他attemptは保持する。no-record/不明はこの確定結果回収の対象ではない。
 
+第5単位の新規cloud作成も同じeditorを使用する。開始時に既存createIdでメモIDを一度だけ生成し、`createEditor(id, sessionId, undefined, 'cloud')`の空title/body/tagIds・expectedRevision=nullをそのまま利用する。入力検証・整形・requestId発行・save/resolve・結果回収・離脱・busy/pendingは既存編集と共通であり、新規専用の状態/競合/retry管理は作らない。不明時にメモIDを自動再発行しない。
+
 ## 編集と保存の境界
 
 - 作成した状態・返却値は入力から独立させ、深く凍結する。状態はこのモジュールの生成関数から取得し、外部データを型キャストして注入しない。状態・ドラフト・要求はタブ内メモリ専用でログ／永続化対象にしない。

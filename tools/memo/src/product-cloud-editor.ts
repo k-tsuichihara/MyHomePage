@@ -63,7 +63,8 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
         : editor!.save.kind === 'rejected' ? editor!.save.reason === 'conflict' ? '競合：保存は拒否されました。編集内容は保持しています。'
           : '保存は拒否・停止されました。編集内容は保持しています。'
         : editor!.save.kind === 'saved' ? `保存要求の成功を確認しました。現在内容は明示再読取で確認してください。${isDirty(editor!) ? '追加の未保存変更があります。' : ''}`
-          : 'クラウドの既存メモを編集しています。タグは変更しません。');
+          : editor!.expectedRevision === null ? 'クラウドの新規メモを編集中です。タグは変更しません。'
+            : 'クラウドの既存メモを編集しています。タグは変更しません。');
   }
   function changed() { render(); deps.changed(); }
   const onInput = () => {
@@ -132,15 +133,17 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     } catch { if (!disposed) notice = '照合結果は不明です。編集内容を保持し、自動再送しません。'; }
     finally { working = false; if (!disposed) changed(); }
   }
+  function open(initial?: { memo: Memo; tagIds: string[] }, valid: () => boolean = () => true) {
+    if (disposed || editor || working || !valid() || !deps.selected()) return false;
+    try {
+      const context = deps.auth.getContext(); if (!context || !deps.auth.isCurrent(context)) return false;
+      editor = createEditor(initial?.memo.id ?? deps.createId(), deps.createId(), initial, 'cloud');
+      owner = uuidKey(context.userId); notice = ''; changed(); return true;
+    } catch { return false; }
+  }
   return Object.freeze({
-    start(memo: Memo, tagIds: string[], valid: () => boolean) {
-      if (disposed || editor || working || !valid() || !deps.selected()) return false;
-      try {
-        const context = deps.auth.getContext(); if (!context || !deps.auth.isCurrent(context)) return false;
-        editor = createEditor(memo.id, deps.createId(), { memo, tagIds }, 'cloud');
-        owner = uuidKey(context.userId); notice = ''; changed(); return true;
-      } catch { return false; }
-    },
+    start: (memo: Memo, tagIds: string[], valid: () => boolean) => open({ memo, tagIds }, valid),
+    startNew: () => open(),
     getState: () => editor,
     isBusy: () => working,
     refresh: render,

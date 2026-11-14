@@ -9,14 +9,16 @@ import type { VoiceRecognition } from '../src/voice-input';
 
 // 既存製品compositionへ合成session/Storageだけを注入。SDK/実fetchは使わない。
 const mode = (window as unknown as { fixtureMode: string }).fixtureMode;
+const operationMode = mode.replace(/^cloud-create/, 'cloud-edit');
 const id = mode === 'cloud-casing' ? '00000000-0000-4000-8000-00000000abcd' : '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
 const value = { user: { id }, access_token: 'synthetic-token-private', expires_at: 200 };
-let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data' || (mode.startsWith('cloud') && mode !== 'cloud-signed-out') ? value : null;
+let current: unknown = mode === 'restore' || mode.startsWith('migration') || mode === 'restore-data' || (mode.startsWith('cloud') && !mode.endsWith('-signed-out')) ? value : null;
 let emit!: (event: string, session: unknown) => void;
 const calls = { login: 0, logout: 0, restore: 0, unsubscribe: 0, listenerUnsubscribe: 0, dispose: 0, writes: 0, fetch: 0,
   readCompleted: 0, saveCompleted: 0, resolveCompleted: 0, cloudDispose: 0 };
 const rpcNames: string[] = [];
+const generatedIds: string[] = [];
 const voiceCalls = { start: 0, abort: 0 };
 let latestVoice: VoiceRecognition | undefined;
 let lateVoiceResult: VoiceRecognition['onresult'];
@@ -59,21 +61,21 @@ const api: MemoAuthApi = {
 };
 const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   rpcNames.push(rpc);
-  if (mode.startsWith('cloud-edit') && (rpc === 'memo_save' || rpc === 'memo_resolve_request')) {
+  if (operationMode.startsWith('cloud-edit') && (rpc === 'memo_save' || rpc === 'memo_resolve_request')) {
     const saved = () => ({ memo: { ...snapshot().memos[0]!, id: args.p_id, title: args.p_title, body: args.p_body,
-      revision: Number(args.p_expected_revision) + 1, last_request_id: args.p_request_id }, tagIds: args.p_tag_ids });
+      revision: args.p_expected_revision === null ? 1 : Number(args.p_expected_revision) + 1, last_request_id: args.p_request_id }, tagIds: args.p_tag_ids });
     if (rpc === 'memo_save') {
       savedArgs = args;
-      if (mode.startsWith('cloud-edit-pending')) await new Promise<void>(resolve => { releaseSave = resolve; });
-      if (mode === 'cloud-edit-conflict' || mode === 'cloud-edit-pending-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: 'memo revision conflict' } };
-      if (mode === 'cloud-edit-rejected') return { provenance: 'single-rpc', status: 403, body: { code: '42501', message: 'raw-provider-token' } };
-      if (mode === 'cloud-edit-unknown' || mode === 'cloud-edit-no-record' || mode === 'cloud-edit-deleted' || mode.startsWith('cloud-edit-resolve-pending')) throw new Error('synthetic-password raw-provider-token');
+      if (operationMode.startsWith('cloud-edit-pending')) await new Promise<void>(resolve => { releaseSave = resolve; });
+      if (operationMode === 'cloud-edit-conflict' || operationMode === 'cloud-edit-pending-conflict') return { provenance: 'single-rpc', status: 409, body: { code: 'PT409', message: args.p_expected_revision === null ? 'previously used memo id' : 'memo revision conflict' } };
+      if (operationMode === 'cloud-edit-rejected') return { provenance: 'single-rpc', status: 403, body: { code: '42501', message: 'raw-provider-token' } };
+      if (operationMode === 'cloud-edit-unknown' || operationMode === 'cloud-edit-no-record' || operationMode === 'cloud-edit-deleted' || operationMode.startsWith('cloud-edit-resolve-pending')) throw new Error('synthetic-password raw-provider-token');
       return { provenance: 'single-rpc', status: 200, body: saved() };
     }
     if (JSON.stringify(args) !== JSON.stringify(savedArgs)) throw new Error('mismatched-original-request');
-    if (mode.startsWith('cloud-edit-resolve-pending')) await new Promise<void>(resolve => { releaseResolve = resolve; });
-    return { provenance: 'single-rpc', status: 200, body: mode === 'cloud-edit-no-record' ? null
-      : mode === 'cloud-edit-deleted' || mode === 'cloud-edit-resolve-pending-deleted' ? { status: 'previously-applied-deleted' } : { status: 'saved', result: saved() } };
+    if (operationMode.startsWith('cloud-edit-resolve-pending')) await new Promise<void>(resolve => { releaseResolve = resolve; });
+    return { provenance: 'single-rpc', status: 200, body: operationMode === 'cloud-edit-no-record' ? null
+      : operationMode === 'cloud-edit-deleted' || operationMode === 'cloud-edit-resolve-pending-deleted' ? { status: 'previously-applied-deleted' } : { status: 'saved', result: saved() } };
   }
   if (rpc !== 'memo_load_snapshot') throw new Error('write-not-allowed');
   if (mode === 'cloud-pending' || mode === 'cloud-snapshot-pending') await new Promise<void>(resolve => { releaseRead = resolve; });
@@ -81,7 +83,7 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
   return { provenance: mode === 'cloud-unverified' || snapshotMode === 'unverified' ? 'unverified' : 'single-rpc', status: 200,
     body: mode === 'cloud-permission' || snapshotMode === 'permission' ? null
       : snapshotMode === 'invalid' ? { message: 'raw-provider-token', user_id: id }
-      : mode.startsWith('cloud-snapshot') || mode.startsWith('cloud-edit') ? snapshot() : { memos: [], tags: [], memoTags: [] } };
+      : mode.startsWith('cloud-snapshot') || operationMode.startsWith('cloud-edit') ? snapshot() : { memos: [], tags: [], memoTags: [] } };
 };
 const session = createMemoAuthSession(api, () => clock, sender);
 const targets = createStorageTargetController();
@@ -91,7 +93,7 @@ const cloudPort = {
     try { return await cloudController.load(context); } finally { calls.readCompleted++; }
   },
   dispose() { calls.cloudDispose++; return cloudController.dispose(); },
-  ...(mode.startsWith('cloud-edit') ? { async save(...args: Parameters<typeof cloudController.save>) {
+  ...(operationMode.startsWith('cloud-edit') ? { async save(...args: Parameters<typeof cloudController.save>) {
     try { return await cloudController.save(...args); } finally { calls.saveCompleted++; }
   }, async resolve(...args: Parameters<typeof cloudController.resolve>) {
     try { return await cloudController.resolve(...args); } finally { calls.resolveCompleted++; }
@@ -118,12 +120,15 @@ const app = createProductLocalApp(document, {
     if (holdWrite) await new Promise<void>(resolve => { releaseWrite = resolve; });
     return callback();
   } },
-  createId: () => crypto.randomUUID(), now: () => '2026-11-14T00:00:00.000Z',
+  createId: () => { const id = crypto.randomUUID(); generatedIds.push(id); return id; }, now: () => '2026-11-14T00:00:00.000Z',
 }, undefined, mode === 'absent' || mode === 'cloud-no-session' ? undefined : injected,
   mode.startsWith('cloud') && mode !== 'cloud-no-host' ? { target: targets, controller: cloudPort } : undefined);
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
+  generatedIds,
+  differentUser: () => { value.user.id = '00000000-0000-4000-8000-000000000999'; },
+  externalLogout: () => session.logout(),
   savedArgs: () => savedArgs, releaseSave: () => releaseSave?.(),
   releaseResolve: () => releaseResolve?.(),
   forceLocal: () => { const result = targets.request('local', null, { kind: 'allowed' });

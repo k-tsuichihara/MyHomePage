@@ -6,8 +6,8 @@
 
 ## 現在位置と公開までの推奨順序
 
-- 現在：**STEP 04 / Q04 Step 4第4単位のcloud既存メモ単件編集・save/resolve**。PR #83で確定したStep 3のS04差分確認は完了。S04適用・Q04-READ・ケース13/6を再実行しない。R02はCOMPLETE。
-- PR #84〜#86のAuth/load/C05・snapshot接続とレビュー修正を引き継ぎ、既存メモ1件の編集/save/明示resolveをfake Chromiumで確認。通常product entryは未注入local-only。実SDK生成・実Storage・実通信・cloud新規/削除/復元/タグ変更は未結線。Q04全体は進行中、single-rpc未認定を維持する。
+- 現在：**STEP 04 / Q04 Step 4第5単位のcloud新規メモ単件作成・save/resolve**。PR #83で確定したStep 3のS04差分確認は完了。S04適用・Q04-READ・ケース13/6を再実行しない。R02はCOMPLETE。
+- PR #84〜#87のAuth/load/C05・snapshot・単件編集とレビュー修正を引き継ぎ、新規メモ1件の作成/save/明示resolveを同じcloud editorでfake Chromium検証。通常entryは未注入local-only。実SDK/実Storage/実通信・cloud状態変更/削除/復元/タグ変更は未結線。Q04全体は進行中、single-rpc未認定を維持する。
 - C03〜C05のUI非依存層は実装済みだが、実Auth・実HTTP・single-rpc認定・製品UI結線は未検証。C05では明示logoutとAuth失効を区別し、離脱可否は既存navigation契約を正本とする。
 - R01は[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)で完了し、D05確定はPR #49、C03〜C05の通信なし境界はPR #50〜#68で段階的に整備した。今回R02へ着手したが、公開HTML・本番Auth・実ユーザーデータ・Pages公開には接続していない。
 - 未決事項：Q05の正式検証範囲、製品Auth/session・cloud実経路・所有者/RLS境界・障害受入・single-rpc認定条件、公開前ゲート。S04適用成功と直接拒否・ケース13/6のPASSは記録済みで、S04差分確認は完了。ACL原本完全性・NOLOGIN用途等のUNKNOWNは保持するが、追加GRANT/完全復元を行わないS04の必須条件には戻さない。DB・本番操作の承認ではない。
@@ -77,8 +77,8 @@
 | C01 | 通信なし8RPCアダプター・厳格応答検証・エラー分類 | 完了 | [RPC契約](../tools/memo/tests/CLOUD-RPC.md)、src/cloud-rpc-adapter.ts、PR #27・#28 | P0002修正含む。single-rpcの実経路認定は未検証 |
 | C02 | 注入HTTP境界・段階ランナー・SQL/TSベクトルの通信なし基盤 | 完了 | [通信なし基盤](../tools/memo/tests/CLOUD-CONNECTION-FOUNDATION.md)、tests/cloud-live/、PR #29 | 偽fetch・offline専用。Auth/実transport接続の完成ではない |
 | C03 | Auth・セッション・ログイン/ログアウト接続 | 進行中 | 統合仕様§1.1、[Auth契約](../tools/memo/tests/AUTH-SESSION.md)、src/auth-session.ts・auth-client.ts・auth-sdk.ts・browser-auth.ts、PR #50〜#53・#60・オーナー承認 | PR #52の最終記録はパッチ23件・隔離Chromium11件PASS。PR #53で表示専用subscribe、解除・非同期通知・期限検出・終端通知を整備。書込許可は引き続きgetContext/isCurrentで判定する。C03の追加タイマー/ポーリングなし、型検査回避・専用ビルドの制約、アプリ単位のログアウト非保証と読書アプリ側の後日確認を維持。Q04 Step 4で既存session注入による製品候補UIの状態表示・login/logout/restore・購読解除・終了を接続し、fake Chromiumで確認。実SDK生成・実Storage・製品RPC senderは未結線、本番Auth・実アカウントも未検証のため進行中。 |
-| C04 | クラウド制御層・実HTTP経路と要求照合のUI接続 | 進行中 | RPC契約、PR #54〜#66、[C04制御契約](../tools/memo/tests/CLOUD-CONTROLLER.md)、[通信なしsender境界](../tools/memo/tests/CLOUD-CONNECTION-FOUNDATION.md)、[single-rpc認定前ゲート](../tools/memo/tests/SINGLE-RPC-ACCEPTANCE.md)、[製品注入接続](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md) | 8RPC controller/senderとreadonly trialの注入compositionは実装済み。専用Chromiumの既知通信問題は保留。Step 4第4単位までにload/snapshot閲覧と既存メモ1件の編集/save/resolve・競合/UNKNOWN保持をfake検証。新規/削除/復元/タグ変更・実sender生成/製品配信経路は未結線。実senderはunverified、adapterは成功へ昇格しない。DB CLIのPASSを製品経路へ流用しない |
-| C05 | ローカル/Supabase保存先切替の製品接続 | 進行中 | 統合仕様§1.1、[編集契約](../tools/memo/tests/EDITOR-STATE.md)、[製品注入接続](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)、src/storage-target-controller.ts、PR #68 | Step 4第2単位で既存C05を製品hostへ注入し、明示保存先選択・確認・認証世代更新・logoutをfake検証。明示logoutはnavigation離脱判定後にlocalへ戻し、Auth失効はcloud選択とdirtyを維持。saving/rejected/unresolved/dirtyは既存判定を共有。cloud選択中のlocal暗黙保存なし。cloud一覧/詳細と単件編集/save/resolveはfakeで接続済み。cloud editorのdirty/saving/rejected/unresolvedも既存離脱契約へ委譲。通常entry/実クラウド接続・新規等の残りwriteは未接続。転送/merge/sync/retryを追加しない |
+| C04 | クラウド制御層・実HTTP経路と要求照合のUI接続 | 進行中 | RPC契約、PR #54〜#66、[C04制御契約](../tools/memo/tests/CLOUD-CONTROLLER.md)、[通信なしsender境界](../tools/memo/tests/CLOUD-CONNECTION-FOUNDATION.md)、[single-rpc認定前ゲート](../tools/memo/tests/SINGLE-RPC-ACCEPTANCE.md)、[製品注入接続](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md) | 8RPC controller/senderとreadonly trialの注入compositionは実装済み。専用Chromiumの既知通信問題は保留。Step 4第5単位までにload/snapshot閲覧・既存単件編集と新規単件作成のsave/resolve・競合/UNKNOWN/確定結果回収をfake検証。状態変更/削除/復元/タグ変更・実sender生成/製品配信経路は未結線。実senderはunverified、adapterは成功へ昇格しない。DB CLIのPASSを製品経路へ流用しない |
+| C05 | ローカル/Supabase保存先切替の製品接続 | 進行中 | 統合仕様§1.1、[編集契約](../tools/memo/tests/EDITOR-STATE.md)、[製品注入接続](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)、src/storage-target-controller.ts、PR #68 | Step 4第2単位で既存C05を製品hostへ注入し、明示保存先選択・確認・認証世代更新・logoutをfake検証。明示logoutはnavigation離脱判定後にlocalへ戻し、Auth失効はcloud選択とdirtyを維持。saving/rejected/unresolved/dirtyは既存判定を共有。cloud選択中のlocal暗黙保存なし。cloud一覧/詳細・既存編集/新規単件作成/save/resolveはfakeで接続済み。cloud editorのdirty/saving/rejected/unresolvedも既存離脱契約へ委譲。通常entry/実クラウド接続・状態変更等の残りwriteは未接続。転送/merge/sync/retryを追加しない |
 
 ## 5. DB・権限・セキュリティ
 
@@ -97,7 +97,7 @@
 | Q01 | 型チェック・Vitest・ビルドの既存回帰基盤 | 完了 | [package.json](../tools/memo/package.json)、試験案内、通信なし基盤、PR #29 | 過去記録は全Vitest1,300件等PASS。今回再実行なし。リリース対象コミットの最終回帰は別確認 |
 | Q02 | 合成メモリUI・ブラウザE2E | 完了 | [ブラウザ契約](../tools/memo/tests/BROWSER-UI.md)、tests/browser/、PR #12以降 | 過去記録83件PASS。実OS日本語IME・実端末受入とは別 |
 | Q03 | 隔離ChromiumのStorage/Web Locks・形式/切替試験 | 完了 | [永続化](../tools/memo/tests/LOCAL-PERSISTENCE.md)、Phase B、[切替設計](../tools/memo/tests/RELEASE-TRANSITION.md)、PR #14・#15・#17・#26 | 過去記録22/16/20件PASS。容量・再起動は記録範囲に限定 |
-| Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 進行中 | [実行記録](../tools/memo-db-test/Q04-RESULTS.md)、[Step 4準備](../tools/memo-db-test/Q04-PREPARATION.md)、[過去DB33試験](../tools/memo-db-test/TEST-SUMMARY-2026-10-25.md) | Step 3のS04差分確認は完了。証拠の限界・残置タグ/メモ保持・再実行禁止を維持。Step 4第1単位のAuth UIに続き、第2単位のC04 load/C05保存先選択に続き、第4単位の既存cloud単件編集/save/明示resolveまでfake Chromiumで確認。通常product entryはlocal-only。実SDK生成・実製品通信・新規等の残りwriteは未接続。製品実環境受入・single-rpcは未検証。全体PASS/cleanupなし |
+| Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 進行中 | [実行記録](../tools/memo-db-test/Q04-RESULTS.md)、[Step 4準備](../tools/memo-db-test/Q04-PREPARATION.md)、[過去DB33試験](../tools/memo-db-test/TEST-SUMMARY-2026-10-25.md) | Step 3のS04差分確認は完了。証拠の限界・残置タグ/メモ保持・再実行禁止を維持。Step 4第1単位のAuth UIに続き、第2単位のC04 load/C05保存先選択に続き、第5単位のcloud新規単件作成/save/明示resolveまでfake Chromiumで確認。通常product entryはlocal-only。実SDK生成・実製品通信・状態変更等の残りwriteは未接続。製品実環境受入・single-rpcは未検証。全体PASS/cleanupなし |
 | Q05 | 実機・IME・主要操作・ドラフト保護・アクセシビリティ等の受入範囲確認 | 要確認 | ブラウザ契約、Phase Bの未検証事項、今回のオーナー合意 | 必要。Windows + Chrome中心を想定し、日本語IME・主要操作・編集中データ保護を重視。Firefox・Safari/WebKit等は後回し。スマホ実機を含む正式検証範囲・対応対象は後日確定し、対象外と断定しない |
 
 ## 7. 本番移行・公開

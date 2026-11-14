@@ -85,5 +85,5 @@ PR #83のレビューPASS・マージ後、オーナーがStep 3の「S04差分�
 - S04：repository準備完了 + dev-sandbox適用成功報告 + helper直接拒否PASS + ケース13/6総合PASS。Step 3のS04差分確認はオーナー確定により完了。
 - Q04：**進行中**。S04差分として次の実試験候補は追加しない。実環境操作・cleanupは未承認。Q04全体をPASSへ昇格しない。
 - A17/S05保留、過去の監査PASS、Human Gate専用経路の既知課題は変更しない。
-- Step 4第1〜第3単位のsession/load/C05/snapshot（PR #84〜#86の修正を含む）に続き、第4単位で既存cloudメモ1件の編集/save/明示resolveをfake sender/合成StorageのChromiumで確認した。成功は要求適用の確認であり現在snapshotへ楽観反映しない。conflict/rejected/UNKNOWN・旧応答ではdraft保持、UNKNOWNの再送なし、終了はC04のbusy/pendingを維持。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)を参照。通常entryは未注入local-only。実SDK生成・実Storage・実sender・cloud新規等の残りwrite・実製品経路は未接続。実環境PASSやsingle-rpcへ昇格しない。追加の旧DB CLI実行を要求しない。
+- Step 4第1〜第4単位（PR #84〜#87の修正を含む）に続き、第5単位で同じcloud editorによる新規メモ1件の作成/save/明示resolveをfake sender/合成StorageのChromiumで確認した。新規UUIDは既存createId、expectedRevision=nullから開始。成功は要求適用の確認であり現在snapshotへ楽観反映しない。conflict/rejected/UNKNOWN・旧応答の保持、明示resolve/確定結果回収、busy/pending終了契約も共通。[製品UI契約](../memo/tests/PRODUCT-UI-INTEGRATION.md)を参照。通常entryは未注入local-only。実SDK生成・実Storage・実sender・cloud状態変更等の残りwrite・実製品経路は未接続。実環境PASSやsingle-rpcへ昇格しない。追加の旧DB CLI実行を要求しない。
 - 今回の記録整理中は、追加SQL・Auth/RPC通信・DB操作・再試行を実施していない。過去記録・準備manifestは上書きしない。生成manifestの`applied:false`は生成時の値として保存し、この実施報告と区別する。
