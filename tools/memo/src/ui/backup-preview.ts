@@ -1,3 +1,4 @@
+import { appendBackupPanel } from './product-dialog';
 import type { BackupResult } from '../local-backup';
 
 /** 隔離UIから読取専用サービスを呼ぶ。保存完了ではなくダウンロード開始だけを通知する。 */
@@ -55,7 +56,7 @@ export function mountBackupPreview(doc: Document, prepare: () => Promise<BackupR
       busy = false; button.disabled = disposed;
     }
   }
-  section.append(notice, button, link, discard, status); doc.getElementById('memo-app')!.append(section);
+  section.append(notice, button, link, discard, status); appendBackupPanel(doc, section);
   return () => {
     if (disposed) return;
     disposed = true; release(); button.disabled = true;

@@ -1,3 +1,4 @@
+import { outsidePanel, appendBackupPanel } from './product-dialog';
 import type { createLocalRestoreController, RestoreCommand } from '../local-restore-controller';
 import { MAX_IMPORT_BYTES } from '../backup-json';
 import { compareRestoreRow } from '../local-restore';
@@ -36,7 +37,7 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
     if (disposed) return;
     const s = controller.getState(), busy = s.phase === 'writing' || s.phase === 'reading';
     // 確認・適用中の通常画面操作を止める。ブラウザ自体の更新・終了は保証しない。
-    for (const child of Array.from(doc.getElementById('memo-app')!.children)) {
+    for (const child of outsidePanel(doc.getElementById('memo-app')!, section)) {
       if (child !== section && child instanceof doc.defaultView!.HTMLElement && (busy || readingFile || s.phase === 'confirmation')) {
         if (!held.has(child)) held.set(child, child.inert);
         child.inert = true;
@@ -73,6 +74,6 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
     }
     if (s.phase === 'unknown') controls.append(button('保存状況を再確認', { kind: 'inspect' }));
   }
-  section.append(notice, file, status, recovery, controls, rows); doc.getElementById('memo-app')!.append(section); render();
+  section.append(notice, file, status, recovery, controls, rows); appendBackupPanel(doc, section); render();
   return () => { disposed = true; for (const [node, previous] of held) node.inert = previous; held.clear(); section.remove(); };
 }

@@ -73,8 +73,14 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
   bind('back', () => { void send({ kind: 'list' }); });
   bind('reload', () => { void send({ kind: 'load' }); });
   bind('clear-tag-filters', () => { void query([]); });
+  doc.getElementById('filters-all')?.addEventListener('click', () => { void query([]); });
   bind('previous', () => { void send({ kind: 'adjacent', direction: 'previous' }); });
   bind('next', () => { void send({ kind: 'adjacent', direction: 'next' }); });
+  doc.getElementById('editor-previous')?.addEventListener('click', () => { void send({ kind: 'adjacent', direction: 'previous' }); });
+  doc.getElementById('editor-next')?.addEventListener('click', () => { void send({ kind: 'adjacent', direction: 'next' }); });
+  doc.getElementById('editor-duplicate')?.addEventListener('click', () => {
+    const route = controller.getState().route; if (route.kind === 'edit' && route.id) void send({ kind: 'duplicate', id: route.id });
+  });
   bind('edit', () => { const state = controller.getState(); if (state.route.kind === 'detail') void send({ kind: 'edit', id: state.route.id }); });
   bind('duplicate', () => { const state = controller.getState(); if (state.route.kind === 'detail') void send({ kind: 'duplicate', id: state.route.id }); });
   bind('permanent-delete', () => {
@@ -118,9 +124,11 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     });
   });
   const managed = element<HTMLSelectElement>('managed-tag'), tagName = element<HTMLInputElement>('tag-name');
+  doc.getElementById('tag-new')?.addEventListener('click', () => { managed.value = ''; tagName.value = ''; tagName.focus(); });
   managed.addEventListener('change', () => { tagName.value = controller.getState().data?.tags.find(tag => tag.id === managed.value)?.name ?? ''; });
   element('tag-form').addEventListener('submit', event => {
     event.preventDefault(); const state = controller.getState(), tag = state.data?.tags.find(row => row.id === managed.value);
+    if (doc.getElementById('tag-manager-rows') && tag && !win.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return;
     void send({ kind: 'mutate', operation: { kind: 'save-tag', id: tag?.id ?? win.crypto.randomUUID(), name: tagName.value, expectedRevision: tag?.revision ?? null } });
   });
   bind('tag-delete', () => {
@@ -145,6 +153,10 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     element<HTMLButtonElement>('reload').disabled = busy || composing;
     element<HTMLButtonElement>('save').disabled = busy || !ready || composing;
     element('empty-trash').hidden = state.storageVersion !== 3 || state.list?.result.query.view !== 'trash';
+    if (doc.getElementById('list-voice-slot')) {
+      element('normal-view').hidden = state.list?.result.query.view !== 'trash';
+      element('trash-view').hidden = state.list?.result.query.view === 'trash';
+    }
     element<HTMLButtonElement>('empty-trash').disabled = busy || !ready || composing;
     element('permanent-delete').hidden = true;
     element<HTMLButtonElement>('permanent-delete').disabled = busy || !ready || composing;
@@ -206,15 +218,20 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     // controllerが受理しない間はネイティブの選択変更も止め、見た目だけの変更を防ぐ。
     for (const input of element('filters').querySelectorAll<HTMLInputElement>('input')) input.disabled = busy || !ready || composing;
     text('missing-tags', state.list?.result.missingSelectedTagIds.length ? '選択中のタグが削除されています。選択は自動解除しません。' : '');
+    doc.getElementById('filters-all')?.setAttribute('aria-pressed', String(!state.list?.result.query.selectedTagIds.length));
     text('count', `${state.list?.result.query.view === 'trash' ? 'ゴミ箱' : '通常メモ'}：検索結果 ${state.list?.result.resultCount ?? 0}件`);
     const listKey = JSON.stringify([state.list?.result.items, state.storageVersion, busy, ready]);
     if (listKey !== listSignature) {
       listSignature = listKey; const scroll = cards.scrollTop, fragment = doc.createDocumentFragment();
       for (const { memo, tags } of state.list?.result.items ?? []) {
         const row = doc.createElement('li'); row.dataset.id = memo.id; row.dataset.revision = String(memo.revision);
-        const open = button(`${memo.pinnedAt ? '📌 ' : ''}${memo.title}`, () => { void send({ kind: 'detail', id: memo.id }); }, busy || !ready);
+        const open = button(`${!doc.getElementById('list-voice-slot') && memo.pinnedAt ? '📌 ' : ''}${memo.title}`, () => { void send({ kind: 'detail', id: memo.id }); }, busy || !ready);
         open.className = 'open-card'; const preview = doc.createElement('p'); preview.textContent = Array.from(memo.body).slice(0, 80).join('');
-        const metadata = doc.createElement('p'); metadata.textContent = `${tags.map(tag => tag.name).join('・')} 更新 ${memo.updatedAt}`;
+        preview.className = 'card-preview';
+        const metadata = doc.createElement('p'); metadata.className = 'card-meta';
+        const tagNames = doc.createElement('span'); tagNames.textContent = tags.map(tag => tag.name).join('・');
+        const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新 ${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; metadata.append(tagNames, updated);
+        const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
         const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙ 操作'; menu.append(summary);
         const action = (name: string, value: 'pin' | 'unpin' | 'trash' | 'restore') => button(name, () => {
           void send({ kind: 'mutate', operation: { kind: 'state', id: memo.id, action: value, expectedRevision: memo.revision } });
@@ -227,18 +244,31 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
             void send({ kind: 'mutate', operation: { kind: 'permanent-delete', id: memo.id, expectedRevision: memo.revision } });
           }, busy || !ready));
         }
-        row.append(open, preview, metadata, menu); fragment.append(row);
+        row.append(open, preview, metadata, pin, menu); fragment.append(row);
       }
       cards.replaceChildren(fragment); cards.scrollTop = scroll;
     }
-    const managerKey = JSON.stringify(state.data?.tags);
+    const managerKey = JSON.stringify([state.data?.tags, state.usage]);
     if (managerKey !== managerSignature) {
       managerSignature = managerKey; const previous = managed.value;
       const empty = doc.createElement('option'); empty.value = ''; empty.textContent = '新規タグ'; managed.replaceChildren(empty);
       for (const tag of state.data?.tags ?? []) { const option = doc.createElement('option'); option.value = tag.id; option.textContent = tag.name; managed.append(option); }
       managed.value = state.data?.tags.some(tag => tag.id === previous) ? previous : '';
+      const rows = doc.getElementById('tag-manager-rows');
+      if (rows) {
+        rows.replaceChildren();
+        for (const tag of state.data?.tags ?? []) {
+          const row = doc.createElement('div'), name = doc.createElement('span'), count = doc.createElement('span');
+          name.textContent = tag.name; count.textContent = `${state.usage.find(value => value.tagId === tag.id)?.count ?? 0}件`;
+          const choose = () => { managed.value = tag.id; managed.dispatchEvent(new win.Event('change')); tagName.focus(); };
+          row.append(name, count, button('名前を変更', choose, busy || !ready), button('削除', () => { choose(); element('tag-delete').click(); }, busy || !ready));
+          rows.append(row);
+        }
+      }
     }
     const ticket = state.confirmation;
+    for (const node of doc.querySelectorAll<HTMLButtonElement>('#tag-manager-rows button, #tag-new')) node.disabled = busy || !ready || composing;
+    for (const node of doc.querySelectorAll<HTMLButtonElement>('#editor-previous, #editor-next, #editor-duplicate')) node.disabled = busy || !ready || composing || !state.editor?.id;
     const validTicket = ticket && ticket.generation === state.generation;
     element('confirmation').hidden = !validTicket;
     if (validTicket) {

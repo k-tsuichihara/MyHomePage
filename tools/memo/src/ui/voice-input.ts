@@ -7,7 +7,7 @@ import type { VoiceEditBridge } from './memo-preview';
 export function createVoiceControls(doc: Document, controller: VoiceEditorPort, bridge: VoiceEditBridge, now?: () => Date) {
   const win = doc.defaultView! as Window & { SpeechRecognition?: new () => VoiceRecognition; webkitSpeechRecognition?: new () => VoiceRecognition };
   const Native = win.SpeechRecognition ?? win.webkitSpeechRecognition;
-  const section = doc.createElement('section'), status = doc.createElement('p'); status.setAttribute('role', 'status');
+  const section = doc.createElement('section'), status = doc.createElement('p'); section.dataset.voiceControls = ''; status.setAttribute('role', 'status');
   const messages: Record<VoiceStatus, string> = {
     idle: '音声入力は手動保存です。', listening: '日本語を認識中です。', unsupported: 'このブラウザは音声入力に対応していません。手入力を続けてください。',
     failed: '音声入力を開始・継続できません。入力は保持しています。手入力を続けてください。',
@@ -30,9 +30,11 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
   const buttons: HTMLButtonElement[] = [];
   for (const [id, label] of [['list-view', '新規音声メモ'], ['detail-view', '音声で本文へ追記'], ['editor-view', '音声で本文へ追記']]) {
     const button = doc.createElement('button'); button.type = 'button'; button.textContent = label!;
-    button.onclick = () => { void voice.start(); }; doc.getElementById(id!)!.append(button); buttons.push(button);
+    button.onclick = () => { void voice.start(); };
+    const slot = doc.getElementById(id === 'list-view' ? 'list-voice-slot' : id === 'detail-view' ? 'detail-voice-slot' : 'editor-voice-slot');
+    (slot ?? doc.getElementById(id!))!.append(button); buttons.push(button);
   }
-  doc.getElementById('memo-app')!.append(voice.section);
+  (doc.getElementById('editor-voice-controls-slot') ?? doc.getElementById('memo-app'))!.append(voice.section);
   return Object.assign(() => { voice.dispose(); buttons.forEach(button => button.remove()); },
     { stop: () => voice.stop() });
 }

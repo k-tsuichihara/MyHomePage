@@ -86,6 +86,24 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     closeTicket = null; changed();
   }), button('クラウド編集を続ける', () => { closeTicket = null; render(); }));
   root.append(title, body, tagField, tagNotice, voiceStart, save, resolve, close, confirmation, status); parent.append(root, voice.section);
+  if (doc.documentElement.dataset.productLayout === 'review2') {
+    const titleLabel = doc.createElement('label'); titleLabel.textContent = 'タイトル（最大100文字）';
+    title.before(titleLabel); titleLabel.append(title);
+    const bodyLabel = doc.createElement('label'); bodyLabel.textContent = '本文（最大10,000文字）';
+    body.before(bodyLabel); bodyLabel.append(body);
+    const heading = doc.createElement('h2'); heading.textContent = 'メモの作成・編集'; root.prepend(heading);
+    const search = doc.createElement('input'); search.type = 'search'; search.setAttribute('aria-label', 'クラウドの選択タグを検索'); search.placeholder = 'タグを検索…';
+    search.oninput = () => tagField.querySelectorAll('label').forEach(label => { label.hidden = !(label.textContent ?? '').toLocaleLowerCase().includes(search.value.toLocaleLowerCase()); });
+    const note = doc.createElement('p'); note.textContent = '編集中は既存タグを選択できます。タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。';
+    bodyLabel.before(search, note, tagField, tagNotice);
+    const bodyHeading = doc.createElement('div'); bodyHeading.className = 'section-heading';
+    const bodyText = doc.createElement('span'); bodyText.textContent = '本文（最大10,000文字）';
+    voiceStart.textContent = '音声入力';
+    bodyLabel.firstChild?.remove(); bodyHeading.append(bodyText, voiceStart);
+    const stop = voice.section.querySelector('button'); if (stop) { stop.textContent = '停止'; bodyHeading.append(stop); }
+    bodyLabel.before(bodyHeading);
+    root.append(voice.section);
+  }
   function render() {
     if (disposed) return;
     root.hidden = !editor || !deps.selected();

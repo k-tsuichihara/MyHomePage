@@ -39,7 +39,7 @@ await mkdir(new URL(cloud ? '.product/cloud/' : '.product/', root), { recursive:
 await writeFile(out, result.outputFiles[0].contents);
 if (authenticated) cloudManifest = authenticated.manifest;
 let html = productHtml(await readFile(new URL('memo.html', root), 'utf8'),
-  await readFile(new URL('tests/browser/preview.html', root), 'utf8'));
+  await readFile(new URL('scripts/product-ui.html', root), 'utf8'));
 if (maintenance) html = html.replace(/<main>[\s\S]*?<\/main>/, '<main><section class="memo-page"><div class="memo-shell"><h1>メモツール保守版</h1><p id="product-status" role="status">未起動・書込停止</p></div></section></main>');
 const candidate = new URL(maintenance ? '.product/maintenance/tools/memo/' : '.product/site/tools/memo/', root);
 const delivery = cloud ? new URL('.product/cloud/site/tools/memo/', root) : candidate;

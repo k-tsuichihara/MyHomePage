@@ -14,7 +14,12 @@ beforeAll(async () => {
   html = (await readFile(new URL('../.product/site/tools/memo/memo.html', import.meta.url), 'utf8'))
     .replace(/<script type="module"[^>]*><\/script>/, '<script src="/fixture.js"></script>');
   expect(html).toContain('<script src="/fixture.js"></script>');
-  productCss = await readFile(new URL('../css/memo-product.css', import.meta.url), 'utf8');
+  // controller/currentness回帰は従来の独立DOMで維持し、製品レイアウトは専用試験で検証する。
+  const component = (await readFile(new URL('./browser/preview.html', import.meta.url), 'utf8')).match(/<main>([\s\S]*?)<\/main>/)![1];
+  html = html.replace(/<main>[\s\S]*?<\/main>/, `<main><div class="memo-product"><p id="product-status"></p>${component}</div></main>`);
+
+  html = html.replace('</head>', '<style>#product-cloud-items{max-height:55vh;overflow:auto}</style></head>');
+  productCss = (await readFile(new URL('../css/memo-product.css', import.meta.url), 'utf8'));
   browser = await chromium.launch({ headless: true });
 }, 30000);
 afterAll(async () => { await browser?.close(); });
