@@ -1,5 +1,11 @@
 # C03：Auth・セッション接続契約と試験方針
 
+## 通常product entryへのSDK所有接続準備
+
+`product-cloud-app.ts`が既存`createMemoSdkAuth`を生成・所有し、同じsessionをC04/C05と製品UIへ注入する。専用キーStorage・Auth allowlist・SDK patch/disposeは既存実装をそのまま使う。Browser Authのloopback＋Permit入口を製品へ転用せず、通常製品のHTTPS/top-level/page境界を使う。接続先は既存MEMO_RPC_ORIGINのdev-sandboxだけで、実行時publishable key入力を除き任意設定を受け取らない。資格情報/キーをbuildに埋め込まない。
+
+既存local/保守buildは変更せず、明示的なcloud候補buildだけSDKを含む。設定開始前のAuth/Storage0と生成entry→実SDK＋合成HTTPの配線を試験する。Auth専用キーの通常session永続化は従来契約であり、tokenをDOM/ログ/URL/生成資産へ出すものではない。[製品UI契約](PRODUCT-UI-INTEGRATION.md)の現在状態/起動方法を正本とする。実Auth/Storage復元・refresh・受入は未実施、C03は進行中。以下の「未結線」は各時点の履歴として保持する。
+
 ## Q04 Step 4：製品候補UIへの注入接続（2026-11-14）
 
 既存sessionのgetState/subscribe/restore/login/logout/disposeだけを型として渡す製品UI接続を追加した。Authそのものの判定・SDK・token・Storage境界は変更しない。[製品UI契約](PRODUCT-UI-INTEGRATION.md)を参照。通知は再描画のきっかけに限り、getStateの現在値を再取得し、低いgenerationとdispose後の通知を反映しない。C03のgetContext/isCurrentによる書込認可を置き換えない。
