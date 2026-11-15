@@ -62,9 +62,11 @@ async function fixture(seed = false, fail = false, hold = false, snapshotBody: u
   const configure = async () => {
     await page.getByLabel('開発用publishable key', { exact: true }).fill(key);
     await page.getByRole('button', { name: '承認済みクラウド接続を開始', exact: true }).click();
-    await page.locator('#product-session').waitFor();
+    await page.locator('#product-session').waitFor({ state: 'attached' });
+    if (!seed) await page.locator('#product-auth-open').click();
   };
   const login = async () => {
+    if (!await page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await page.locator('#product-auth-open').click();
     await page.getByLabel('ログイン用メールアドレス').fill(email); await page.getByLabel('ログイン用パスワード').fill(password);
     await page.getByRole('button', { name: 'ログイン', exact: true }).click();
   };
@@ -88,7 +90,7 @@ it.each([false, true])('実SDK＋注入HTTPでlogin/restore(seed=%s)→D05→val
   try {
     await f.configure();
     if (!seed) {
-      await f.page.getByText('未ログイン', { exact: true }).waitFor(); expect(f.requests).toEqual([]); await f.login();
+      if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor(); expect(f.requests).toEqual([]); await f.login();
     }
     await f.page.getByText(/クラウド読取成功/).waitFor();
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toEqual([{ path: '/rest/v1/rpc/memo_load_snapshot', method: 'POST' }]);
@@ -98,8 +100,9 @@ it.each([false, true])('実SDK＋注入HTTPでlogin/restore(seed=%s)→D05→val
     expect(changes.every(k => k.startsWith('myhomepage.memo.auth.v1'))).toBe(true);
     const output = await f.privateOutput();
     for (const secret of [key, email, password, token, session.refresh_token, id]) expect(output).not.toContain(secret);
+    await f.page.locator('#product-auth-open').click();
     await f.page.getByRole('button', { name: 'ログアウト', exact: true }).click();
-    await f.page.getByText('未ログイン', { exact: true }).waitFor();
+    if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
     expect(await f.page.locator('#product-session').textContent()).toContain('保存先：ローカル');
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toHaveLength(1);
   } finally { await f.context.close(); }
@@ -117,7 +120,7 @@ it('正常HTTPでもsnapshot schema不正はUNKNOWNで停止し、再送・local
 it('providerの秘密付き認証拒否は固定表示だけにしRPCを開始しない', async () => {
   const f = await fixture(false, true);
   try {
-    await f.configure(); await f.page.getByText('未ログイン', { exact: true }).waitFor(); await f.login();
+    await f.configure(); if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor(); await f.login();
     await f.page.getByText(/認証を確認できません/).waitFor();
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toEqual([]);
     for (const secret of [key, email, password, token]) expect(await f.privateOutput()).not.toContain(secret);
@@ -145,21 +148,22 @@ it('BFCache退避は未開始の接続入口を保持し、設定値を空にし
     expect(await f.page.getByLabel('開発用publishable key').inputValue()).toBe('');
     expect(await f.page.getByRole('button', { name: '承認済みクラウド接続を開始' }).isEnabled()).toBe(true);
     expect(f.requests).toEqual([]); expect(await f.page.evaluate('productProbe.changes')).toEqual([]);
-    await f.configure(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
+    await f.configure(); if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
     expect(f.requests).toEqual([]);
   } finally { await f.context.close(); }
 });
 it('BFCache復帰後も同じSDK/Auth UIを使い、再生成せず明示loginとlogoutを続けられる', async () => {
   const f = await fixture();
   try {
-    await f.configure(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
+    await f.configure(); if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
     await f.page.locator('#product-session').evaluate(node => Object.assign(window, { cachedProductSession: node }));
     await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })); window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }))');
     expect(await f.page.evaluate('cachedProductSession === document.querySelector("#product-session")')).toBe(true);
     expect(f.requests).toEqual([]);
     await f.login(); await f.page.getByText(/クラウド読取成功/).waitFor();
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toHaveLength(1);
-    await f.page.getByRole('button', { name: 'ログアウト', exact: true }).click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
+    await f.page.locator('#product-auth-open').click();
+    await f.page.getByRole('button', { name: 'ログアウト', exact: true }).click(); if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
     expect(await f.page.locator('#product-session').textContent()).toContain('保存先：ローカル');
   } finally { await f.context.close(); }
 });
@@ -167,13 +171,14 @@ it('BFCache退避/復帰はcloud dirty draftと離脱確認を維持し、Auth/R
   const f = await fixture(true);
   try {
     await f.configure(); await f.page.getByText(/クラウド読取成功/).waitFor();
-    await f.page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+    await f.page.getByRole('button', { name: '＋ 新規作成', exact: true }).click();
     await f.page.getByLabel('クラウドのタイトル', { exact: true }).fill('退避前draft');
     await f.page.getByLabel('クラウドの本文', { exact: true }).fill('保持する本文');
     const before = [...f.requests], changes = await f.page.evaluate('productProbe.changes');
     await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })); window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }))');
     expect(await f.page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('退避前draft');
     expect(await f.page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('保持する本文');
+    await f.page.locator('#product-auth-open').click();
     await f.page.getByRole('button', { name: 'ログアウト', exact: true }).click();
     await f.page.getByRole('button', { name: 'ログアウトをキャンセル', exact: true }).click();
     expect(await f.page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('保持する本文');
@@ -183,7 +188,7 @@ it('BFCache退避/復帰はcloud dirty draftと離脱確認を維持し、Auth/R
 it('通常pagehideのdisposeでSDK/session購読・UIを終了し、旧ボタンで再通信しない', async () => {
   const f = await fixture();
   try {
-    await f.configure(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
+    await f.configure(); if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
     await f.page.getByRole('button', { name: 'ログイン', exact: true }).evaluate(node => Object.assign(window, { oldProductLogin: node }));
     await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })); oldProductLogin.click()');
     expect(await f.page.locator('#product-session').count()).toBe(0); expect(f.requests).toEqual([]);

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+</head>
+<body>
+<main>
+<section id="migration-view" aria-label="移行・復旧診断">
+<h1>保存データの確認</h1>
+<p id="migration-status" role="status">
+</p>
+<button id="migration-inspect">再診断</button>
+<div id="migration-confirmation" hidden role="dialog" aria-label="移行・復旧の確認">
+<p>旧データを保持し、照合した対象だけへ処理を実行してよいですか？</p>
+<button id="migration-yes">承認して実行</button>
+<button id="migration-no">移行・復旧をキャンセル</button>
+</div>
+</section>
+<div class="product-heading">
+<div>
+<h1 id="page-title">メモ一覧</h1>
+<p>メモを探す・整理する・すばやく書き始める</p>
+</div>
+<button id="product-auth-open" disabled>保存先：ローカル</button>
+</div>
+<div id="product-session-slot">
+</div>
+<div id="memo-app" hidden>
+<section aria-label="処理状態" class="statuses">
+<p id="save-status" role="status">
+</p>
+<p id="read-status" role="status">
+</p>
+<p id="draft-status" role="status">
+</p>
+<p id="error" role="alert">
+</p>
+</section>
+<nav class="detail-navigation" aria-label="メモ操作">
+<button id="back">← 一覧へ</button>
+<button data-open-dialog="backup-dialog">バックアップ・復元</button>
+<button id="reload">再読込</button>
+</nav>
+<section id="list-view" class="memo-list-layout">
+<div class="list-controls">
+<div class="list-toolbar">
+<label class="memo-search">
+<span class="visually-hidden">検索</span>
+<input id="search" type="search" placeholder="タイトル・本文・タグ名で検索…">
+</label>
+<button id="trash-view">ゴミ箱</button>
+<button id="normal-view">通常一覧</button>
+<button id="new" class="primary">＋ 新規作成</button>
+<div id="list-voice-slot">
+</div>
+</div>
+<div class="list-options">
+<section class="tag-controls" aria-label="タグ絞り込み">
+<div class="section-heading">
+<h2>タグで絞り込み</h2>
+<button data-open-dialog="tag-manager">タグ管理</button>
+</div>
+<div class="tag-search-row">
+<label>
+<span class="visually-hidden">タグを検索</span>
+<input id="tag-filter-search" type="search" placeholder="タグを検索…">
+</label>
+<button id="clear-tag-filters">絞込解除</button>
+</div>
+<div class="tag-chip-strip"><button id="filters-all" type="button">すべて</button><div id="filters" class="tag-chips"></div></div>
+<p id="missing-tags" role="status">
+</p>
+</section>
+<label class="sort-control">並び替え<select id="sort">
+<option value="updated-desc">更新日（新しい順）</option>
+<option value="updated-asc">更新日（古い順）</option>
+<option value="created-desc">作成日（新しい順）</option>
+<option value="created-asc">作成日（古い順）</option>
+</select>
+</label>
+</div>
+<div class="list-summary">
+<h2 id="count">
+</h2>
+<button id="empty-trash" hidden>ゴミ箱を空にする</button>
+</div>
+</div>
+<ul id="cards" class="memo-cards" aria-label="メモ一覧">
+</ul>
+</section>
+<section id="detail-view" hidden aria-label="メモ詳細" class="memo-detail-layout">
+<div class="detail-actions">
+<button id="previous">〈 前のメモ</button>
+<button id="next">次のメモ 〉</button>
+<button id="duplicate">複製</button>
+</div>
+<h2 id="detail-title">
+</h2>
+<p id="detail-tags">
+</p>
+<pre id="detail-body">
+</pre>
+<div class="detail-actions">
+<button id="edit" class="primary">編集する</button>
+<button id="permanent-delete" hidden>完全削除</button>
+</div>
+<div id="detail-voice-slot">
+</div>
+</section>
+<section id="editor-view" hidden aria-label="メモ編集" class="memo-detail-layout">
+<div class="detail-actions">
+<button id="editor-previous" type="button">〈 前のメモ</button>
+<button id="editor-next" type="button">次のメモ 〉</button>
+<button id="editor-duplicate" type="button">複製</button>
+</div>
+<form id="memo-form">
+<label>タイトル（最大100文字）<input id="memo-title" autocomplete="off">
+</label>
+<fieldset>
+<legend>タグ</legend>
+<div class="tag-search-row">
+<input id="editor-tag-search" type="search" aria-label="選択タグを検索" placeholder="タグを検索…">
+</div>
+<p>タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。</p>
+<div id="editor-tags" class="tag-chips">
+</div>
+</fieldset>
+<div class="section-heading">
+<label for="memo-body">本文（最大10,000文字）</label>
+<div id="editor-voice-slot">
+</div>
+</div>
+<textarea id="memo-body" rows="12">
+</textarea>
+<div id="editor-voice-controls-slot">
+</div>
+<p id="lengths">
+</p>
+<div class="editor-footer">
+<p>切替・戻る際、未保存の変更があれば確認します。</p>
+<button id="save" type="submit" class="primary">保存する</button>
+</div>
+</form>
+</section>
+<dialog id="tag-manager" aria-label="タグ管理" class="product-dialog">
+<div class="dialog-heading">
+<h2>タグ管理</h2>
+<button type="button" data-close-dialog="tag-manager" aria-label="タグ管理を閉じる">×</button>
+</div>
+<p>タグの名前変更・削除・新規作成</p>
+<input id="tag-manager-search" type="search" aria-label="管理タグを検索" placeholder="タグを検索…">
+<button id="tag-new" type="button">＋ 新規作成</button>
+<div class="tag-table-heading">
+<span>タグ名</span>
+<span>使用メモ数</span>
+</div>
+<div id="tag-manager-rows">
+</div>
+<form id="tag-form">
+<p id="tag-error" role="alert"></p>
+<label>管理するタグ<select id="managed-tag">
+<option value="">新規タグ</option>
+</select>
+</label>
+<label>タグ名<input id="tag-name">
+</label>
+<button id="tag-save" type="submit">タグを保存</button>
+<button id="tag-delete" type="button">タグを削除</button>
+</form>
+<p>タグ削除時は関連する全メモ（ゴミ箱内を含む）からタグを外します。確認後に実行します。</p>
+<button type="button" data-close-dialog="tag-manager">閉じる</button>
+</dialog>
+<dialog id="backup-dialog" aria-label="バックアップ・復元" class="product-dialog">
+<div class="dialog-heading">
+<h2>バックアップ・復元</h2>
+<button type="button" data-close-dialog="backup-dialog" aria-label="バックアップ・復元を閉じる">×</button>
+</div>
+<p>利用できる操作は現在の保存状態によって異なります。復元は確認後だけ実行します。</p>
+<div id="product-backup-slot">
+</div>
+<button type="button" data-close-dialog="backup-dialog">閉じる</button>
+</dialog>
+<dialog id="confirmation" hidden aria-modal="true" aria-labelledby="confirm-title" class="product-dialog">
+<h2 id="confirm-title">操作の確認</h2>
+<p id="confirm-description">
+</p>
+<button id="confirm-yes">確認して実行</button>
+<button id="confirm-no">キャンセル</button>
+</dialog>
+</div>
+</main>
+</body>
+</html>

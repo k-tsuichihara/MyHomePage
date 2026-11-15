@@ -15,6 +15,7 @@ export function mountV3Upgrade(doc: Document, upgrade: ReturnType<typeof createP
   button.onclick = async () => {
     if (disposed || !ack.checked || !canStart()) return;
     button.disabled = true; ack.checked = false;
+    section.setAttribute('aria-busy', 'true');
     setBusy(true);
     try {
     await upgrade.confirm();
@@ -24,13 +25,13 @@ export function mountV3Upgrade(doc: Document, upgrade: ReturnType<typeof createP
       ? '結果不明です。自動再試行・巻戻しは行いません。現在値を再診断してください。'
       : '更新していません。状態を確認し、必要なら再診断・再退避してください。';
     if (state === 'updated') await reload();
-    } finally { setBusy(false); button.disabled = disposed; }
+    } finally { section.removeAttribute('aria-busy'); setBusy(false); button.disabled = disposed; }
   };
   inspect.onclick = async () => {
     if (disposed) return;
     const value = await upgrade.diagnose();
     if (!disposed) status.textContent = `現在値：${value}。過去のUNKNOWNを成功へ変更しません。`;
   };
-  section.append(notice, label, button, inspect, status); doc.getElementById('memo-app')!.append(section);
+  section.append(notice, label, button, inspect, status); (doc.getElementById('product-backup-slot') ?? doc.getElementById('memo-app'))!.append(section);
   return () => { disposed = true; unsubscribe(); section.remove(); };
 }

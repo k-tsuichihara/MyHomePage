@@ -1,5 +1,38 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05前の製品レイアウト統合（現行正本）
+
+画面設計は現行[layout_review2.drawio](../doc/v1.1.0/memo_v1_1_layout_review2.drawio)の7ページ。archiveを使用しない。製品HTMLは`scripts/product-ui.html`へ分離し、メモリ検証用の簡易HTMLを製品へ配信しない。既存ID・controller・Storage/Auth/C04/C05の責務を維持する。
+
+| 正本ページ | 製品での対応 |
+| --- | --- |
+| 01 メモ一覧PC | 共通ヘッダー/フッターは既存外枠。タイトル・保存先、検索/作成/音声/ゴミ箱、タグ検索/選択/管理、並び替え、カード/ピン状態/︙。上部固定、カードだけ縦スクロール |
+| 02 メモ詳細PC | 前後移動・複製、タイトル/本文/タグ選択、文字数、音声開始/停止、保存、一覧への復帰。閲覧→明示編集は既存契約を維持 |
+| 03 タグ管理PC | native dialogのモーダル、検索、使用件数、新規/改名/削除。改名はUIで確認、削除は既存controllerの確認へ委譲 |
+| 04 メモ一覧スマホ | 検索の下に操作、並び替え/管理、タグ検索・横スクロールチップ、カード領域の独立スクロール。ページの横スクロールを防止 |
+| 05 メモ詳細スマホ | 幅に合わせた縦配置、本文内スクロール/編集、音声・保存・離脱確認。controllerによる一覧条件/スクロールの保持を継続 |
+| 06 タグ管理スマホ | 同じdialogを画面幅内に収め、内容だけスクロール。名前/使用件数/改名・削除操作を表示 |
+| 07 仕様メモ | ピンは状態表示、操作は︙。詳細の複製・未保存確認・手動保存・一覧状態保持を既存処理へ委譲 |
+
+### 承認済み調整と追加された4機能
+
+- **編集中のタグCRUDは提供しない（今回のオーナー決定）**。localの`editor-active`拒否、cloudの取得時候補固定を維持し、編集では既存タグの検索/選択のみ。タグCRUDは保存して一覧へ戻って行う。正本の「タグを検索・作成…」「編集中のタグ管理」はこの決定で調整し、controllerを緩和しない。
+- 一覧の「バックアップ・復元」1入口でnative dialogを開き、JSONバックアップ作成・初期復元・JSONからの追加・完全削除済みメモの復元を既存状態に応じて表示。詳細からの既存バックアップ利用も同じ1入口を共用する。既存v2の原値退避/明示更新も同じ保存安全領域へ配置し、仕様は変更しない。
+- モーダル内でも既存のbusy/確認時のinert対象を維持するため、パネル外のDOM枝を抑止する。Esc/閉じるは書込や確認の実行を意味しない。単件回復成功時は通常詳細へ戻り、直後だけ既存の元プレビュー操作へ戻れる。
+- local/cloudとも明示編集、cloudのsnapshot失効・明示再読取/UNKNOWN案内を残す。新しい保存・RPC・同期・Auth状態機械は追加しない。cloudの文言は保存先を区別できる範囲で維持する。
+
+### AI GateとUATの境界
+
+レビュー回帰：認証dialogを閉じる操作は処理取消・保存先離脱と分離し、初期復元UNKNOWN中も診断画面へ戻れる。タグ検証の既存通知はlocal/cloudともアクティブなタグmodal内で通知する。cloudカードは`queryMemos()`が返す関連付け済みtagsを利用し、カードごとの関連全走査をしない。local音声の状態通知は一覧/詳細/編集に共通する領域へ配置し、非対応で編集へ遷移しない場合も案内を表示する。既存のwrite/busy/departure判定は維持する。
+
+レビュー修正後の最終結果：typecheck PASS、Vitest 59ファイル/1,927件 PASS、既存Playwright E2E 83件 PASS、local/cloud product build PASS、`git diff --check` PASS。製品レイアウト6件にはPC/スマホ×local/fake cloud、hidden属性のみのタイトル追従、初期復元UNKNOWNからの認証modal終了を含む。タグ検証エラー・非対応音声通知・検索後のカードタグ表示も製品HTMLで検証する。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT/実マイク試験は未実施。
+
+cloud音声の追加レビュー対応：認識器非対応で新規editorを生成しない場合も、通知要素はeditor外のcloud共通領域で表示する。local選択時は非表示、dispose時は解放する。PC/スマホの製品回帰で、非対応通知・一覧維持・editor非生成・追加RPC0・local write0を確認した。この追加修正後のtypecheck、関連Vitest 2ファイル/292件、local/cloud product build、diffチェックはPASS。上記の全Vitest/E2E結果は直前のレビュー修正時の結果であり、この表示位置修正では関連回帰を再実行した。
+
+PC 1440px/スマホ390pxの製品HTML/CSSをChromiumで確認する。専用Contextの実localStorage保存、モーダル4機能、固定領域/スクロール、未保存確認Esc取消、タグ改名取消の無書込、fake cloudの一覧/タグ管理/編集を検証する。既存のIME/音声・初期復元/単件回復・Auth/generation/UNKNOWN/dispose回帰を再利用し、source draw.ioは変更しない。画像は合成データだけで`.product/`へ保存し、Git/公開へ含めない。
+
+Q04はPR #102後のオーナー判断でCOMPLETE、R03も実利用データ移行を公開条件から外してCOMPLETE。**Q05は正式開始前**。レイアウト未完成時のlocal操作は参考結果で、正式UAT PASSへ計上しない。本変更はAIの製品候補完成範囲であり、Human UAT・実通信・公開は行わない。single-rpc/完全provenanceは未認定・延期のまま。
+
 ## Q05 local UAT起動導線
 
 `tools/memo`で`npm run preview:product`を実行すると、`build:product`のlocal-only成果物を専用profile・headed Chromiumで開く。既存cloud previewの資産読込/route、profile所有ガード、初期化失敗時close、正常終了時破棄/失敗時保全を共有し、CLI/envによるモード・URL・profile指定は追加しない。固定`https://memo-product.localhost/tools/memo/memo.html`をローカル資産で応答し、証明書変更・公開・HTTPサーバーは不要。

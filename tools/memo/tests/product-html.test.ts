@@ -73,10 +73,13 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
       await context.close(); return;
     }
     if (mode === 'initial') {
+      await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).click();
       const backup = { format: 'myhomepage.memo.local-backup', backupVersion: 1, sourceStorageVersion: 3,
         exportedAt: '2026-01-01T00:00:00Z', data: { memos: [], tags: [], memoTags: [], deletedMemoIds: [] } };
       await page.getByLabel('初期復元のバックアップJSON').setInputFiles({ name: 'initial.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
       await page.getByRole('button', { name: '初期復元の確認へ', exact: true }).click();
+      await page.keyboard.press('Escape');
+      expect(await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).isVisible()).toBe(true);
       expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBeNull();
       await page.getByRole('button', { name: '確認して初期復元', exact: true }).click();
       await page.getByText('初期復元の書込と読戻しを確認しました。', { exact: true }).waitFor();
@@ -89,6 +92,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
       await context.close(); return;
     }
     if (mode === 'v2-original') {
+      await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).click();
       const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
       await page.getByRole('button', { name: 'v2移行前の原値ファイルを準備' }).click();
       const event = page.waitForEvent('download');
@@ -140,6 +144,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
     expect(await page.locator('#detail-body').textContent()).toBe('手入力変換中合成音声追記さらに入力');
     await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    await page.locator('#editor-view').waitFor({ state: 'visible' });
     await editorBody.focus();
     await editorBody.dispatchEvent('compositionstart');
     const beforeStoppedVoice = await editorBody.inputValue();
@@ -152,6 +157,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     const beforeBackup = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     expect(JSON.parse(beforeBackup!).version).toBe(3);
     expect(JSON.parse(beforeBackup!).deletedMemoIds).toEqual([]);
+    await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).click();
     await page.getByRole('button', { name: 'JSONバックアップを作成' }).click();
     const downloadEvent = page.waitForEvent('download');
     await page.getByRole('link', { name: '準備済みJSONをダウンロード' }).click();
@@ -166,6 +172,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({ name: 'detail-restore.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
     await page.getByRole('region', { name: '追加型復元', exact: true }).getByRole('checkbox').first().waitFor();
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeBackup);
+    await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
     // 実製品compositionの同一storeで削除→読取専用プレビュー→単件回復を確認する。
     await page.locator('#back').click();
     await page.locator('#cards summary').first().click();
@@ -175,6 +182,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await page.locator('#cards .open-card').first().click();
     await page.locator('#permanent-delete').click(); await page.locator('#confirm-yes').click();
     const afterDelete = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).click();
     await page.getByLabel('単件回復のバックアップJSON').setInputFiles({ name: 'synthetic.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
     const recovery = page.getByRole('region', { name: '完全削除後の回復', exact: true });
     await recovery.getByRole('button', { name: /をプレビュー/ }).first().click();
@@ -186,7 +194,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     expect(restoredMemo.id).not.toBe(backup.data.memos[0].id);
     expect(restoredMemo.revision).toBe(1); expect(restoredMemo.lastRequestId).toBeNull();
     expect(restoredMemo.pinnedAt).toBeNull(); expect(restoredMemo.deletedAt).toBeNull();
-    await recovery.getByRole('button', { name: 'バックアッププレビューに戻る', exact: true }).click();
+    await page.locator('#product-return-preview').click();
     await recovery.getByRole('button', { name: 'バックアップ一覧へ戻る', exact: true }).click();
     const snapshot = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{') });
@@ -198,6 +206,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await restoreArea.getByRole('button', { name: '追加内容を確認', exact: true }).click();
     await restoreArea.getByRole('button', { name: '確認して復元', exact: true }).click();
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('myhomepage.memo.data.v2')!).memos.length === 2);
+    await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
     await page.locator('#back').click();
     await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = false; });
     await page.getByRole('button', { name: '新規音声メモ', exact: true }).click();

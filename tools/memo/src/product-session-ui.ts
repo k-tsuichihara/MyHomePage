@@ -13,6 +13,7 @@ import { uuidKey } from './read-primitives';
 import { mountProductSnapshot } from './ui/product-snapshot-view';
 import { mountProductCloudEditor } from './product-cloud-editor';
 import type { EditorState } from './editor-state';
+import { openProductDialog } from './ui/product-dialog';
 
 /** 所有する既存sessionだけを注入する。SDK/Storage/transportをこのUIで生成しない。 */
 export type ProductSessionPort = Pick<ReturnType<typeof createMemoAuthSession>,
@@ -38,6 +39,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   injectedCloud?: ProductCloudHost) {
   // 同じsessionの現在contextを取得できない場合は従来local-onlyに留める。
   const cloud = session.getContext && session.isCurrent ? injectedCloud : undefined;
+  const productLayout = doc.documentElement.dataset.productLayout === 'review2';
   const root = doc.createElement('section'); root.id = 'product-session';
   root.setAttribute('aria-label', '認証');
   const state = doc.createElement('p'); state.id = 'product-session-state'; state.setAttribute('role', 'status');
@@ -68,6 +70,17 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const proceed = button('確認してログアウト'), cancel = button('ログアウトをキャンセル');
   confirmation.append(warning, proceed, cancel);
   form.append(login, restore, logout); root.append(state, source, form, confirmation, feedback);
+  let authDialog: HTMLDialogElement | undefined;
+  const authEntry = doc.getElementById('product-auth-open') as HTMLButtonElement | null;
+  if (productLayout) {
+    const startup = doc.getElementById('product-status'); if (startup) startup.textContent = '';
+    authDialog = doc.createElement('dialog'); authDialog.className = 'product-dialog'; authDialog.setAttribute('aria-label', 'ログイン / 保存先');
+    const heading = doc.createElement('h2'); heading.textContent = 'ログイン / 保存先';
+    // 閉じるのは表示だけ。処理取消・離脱ではなく、背後の回復操作へ戻れるようにする。
+    const close = button('閉じる'); close.onclick = () => authDialog?.close();
+    authDialog.append(heading, state, source, chooseLocal, chooseCloud, form, confirmation, feedback, close); root.append(authDialog);
+    if (authEntry) { authEntry.disabled = false; authEntry.onclick = () => openProductDialog(authDialog!); }
+  }
   let cloudEditor: ReturnType<typeof mountProductCloudEditor> | undefined;
   const snapshotView = cloud ? mountProductSnapshot(doc, root,
     cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices) =>
@@ -76,13 +89,14 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     cloud.controller.deletePermanently && local.createId ? (memo, valid) => startStateChange(memo, 'delete-permanently', valid) : undefined,
     cloud.controller.emptyTrash && local.createId ? startEmptyTrash : undefined,
     cloud.controller.saveTag && local.createId ? { canStart: () => !closed && !unavailable && !busy && !pending && !isBusy()
-      && !loading && !stateUncertain() && !cloudEditor?.getState() && !!cloudContext(), save: startSaveTag } : undefined,
+      && !loading && !stateUncertain() && !cloudEditor?.getState() && !!cloudContext(), save: startSaveTag, feedback: stateStatus } : undefined,
     cloud.controller.deleteTag ? startDeleteTag : undefined,
     cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices) =>
       !isBusy() && !stateUncertain() && !busy && !pending && !loading && !!cloudContext()
       && (cloudEditor?.duplicate(memo, tags, valid, choices) ?? false) : undefined) : undefined;
   const anchor = doc.getElementById('product-status');
-  if (anchor) anchor.after(root); else doc.body.prepend(root);
+  const slot = doc.getElementById('product-session-slot');
+  if (slot) slot.append(root); else if (anchor) anchor.after(root); else doc.body.prepend(root);
   let closed = false, busy = false, generation = -1, unavailable = false;
   // 不明操作はC04の返却結果ごと保持する。UI独自の再送・照合状態には変換しない。
   type StateChangeRecord = { readonly request: Readonly<{ context: AuthContext; id: string; expectedRevision: number; requestId: string; action: 'pin' | 'unpin' | 'trash' | 'restore' | 'delete-permanently' }>
@@ -132,6 +146,10 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       cloudStatus.textContent = '認証が更新されました。再読取には保存先を選び直してください。';
     }
     const selected = cloud.target.current().target === 'cloud';
+    if (productLayout) {
+      doc.querySelector<HTMLElement>('.memo-product')!.dataset.source = selected ? 'cloud' : 'local';
+      if (authEntry) authEntry.textContent = selected ? '保存先：クラウド / アカウント' : 'ログイン / 保存先';
+    }
     local.setCloudSelected?.(selected);
     source.textContent = selected ? cloudEditor
       ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ピン留め/解除・ゴミ箱移動・復元' : ''}${cloud.controller.deletePermanently ? '・完全削除' : ''}${cloud.controller.emptyTrash ? '・ゴミ箱一括削除' : ''}${cloud.controller.saveTag ? '・タグ作成/改名' : ''}${cloud.controller.deleteTag ? '・タグ削除' : ''}）`
@@ -258,6 +276,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (!cloud) return;
     if (result.kind === 'rejected') { feedback.textContent = '保存先を変更できません。現在の認証・編集状態を確認してください。'; refresh(); return; }
     if (result.kind !== 'changed') return;
+    authDialog?.close();
     if (result.state === from && intent !== 'logout') { refresh(); return; }
     snapshotView?.clear();
     selectionTicket = {};
@@ -321,7 +340,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   };
   const onCancel = () => { if (closed) return;
     if (cloud && pending?.target) cloud.target.confirm(pending.target, false, targetAuth(), { kind: 'allowed' });
-    clearConfirmation(); feedback.textContent = '離脱をキャンセルしました。'; refresh(); };
+    clearConfirmation(); authDialog?.close(); feedback.textContent = '離脱をキャンセルしました。'; refresh(); };
   const onLocal = () => requestDeparture('local'), onCloud = () => requestDeparture('cloud');
   const onNewCloud = () => {
     if (closed || unavailable || busy || pending || isBusy() || loading || stateUncertain() || !cloudContext()) return;
@@ -351,6 +370,11 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       selected: () => !closed && !unavailable && cloud.target.current().target === 'cloud', viewKey: () => selectionTicket, changed: refresh, now: local.now });
     newCloud.addEventListener('click', onNewCloud); root.append(newCloud);
     newCloudVoice.addEventListener('click', onNewCloudVoice); root.append(newCloudVoice);
+  }
+  if (productLayout) {
+    const actions = doc.createElement('div'); actions.className = 'cloud-actions';
+    newCloud.textContent = '＋ 新規作成'; newCloudVoice.textContent = '音声メモ';
+    actions.append(newCloud, newCloudVoice); root.prepend(actions);
   }
   let unsubscribe = () => {};
   try { unsubscribe = session.subscribe(refresh); } catch { unavailable = true; feedback.textContent = '認証状態を購読できませんでした。'; }
@@ -455,7 +479,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     try { unsubscribe(); } catch { /* 外部例外を表示しない。 */ }
     login.removeEventListener('click', onLogin); restore.removeEventListener('click', onRestore);
     logout.removeEventListener('click', onLogout); proceed.removeEventListener('click', onProceed); cancel.removeEventListener('click', onCancel);
-    form.removeEventListener('submit', onSubmit); root.remove();
+    form.removeEventListener('submit', onSubmit); authDialog?.close(); if (authEntry) authEntry.onclick = null; root.remove();
     try { void Promise.resolve(session.dispose()).catch(() => {}); } catch { /* 終了例外も秘密値を表示しない。 */ }
     return 'applied' as const;
   } });

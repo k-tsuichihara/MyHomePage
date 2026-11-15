@@ -1,3 +1,4 @@
+import { outsidePanel, appendBackupPanel } from './product-dialog';
 import type { createInitialRestoreController, InitialCommand } from '../initial-restore-controller';
 import { MAX_IMPORT_BYTES } from '../backup-json';
 
@@ -28,7 +29,7 @@ export function mountInitialRestorePreview(doc: Document, controller: ReturnType
   function render() {
     if (disposed) return;
     const s = controller.getState(), busy = readingFile || s.phase === 'reading' || s.phase === 'writing', modal = s.phase === 'confirmation';
-    for (const child of Array.from(root.children)) if (child !== section && child instanceof doc.defaultView!.HTMLElement && (busy || modal)) {
+    for (const child of outsidePanel(root, section)) if (child !== section && child instanceof doc.defaultView!.HTMLElement && (busy || modal)) {
       if (!held.has(child)) held.set(child, child.inert); child.inert = true;
     }
     if (!busy && !modal) { for (const [node, previous] of held) node.inert = previous; held.clear(); }
@@ -55,6 +56,6 @@ export function mountInitialRestorePreview(doc: Document, controller: ReturnType
     }
     if (!completed) controls.append(button('初期復元を終了して通常利用', { kind: 'leave' }, busy));
   }
-  section.append(notice, file, status, history, controls); root.append(section); render();
+  section.append(notice, file, status, history, controls); appendBackupPanel(doc, section); render();
   return () => { disposed = true; for (const [node, previous] of held) node.inert = previous; held.clear(); section.remove(); };
 }

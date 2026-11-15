@@ -1,3 +1,4 @@
+import { outsidePanel, appendBackupPanel } from './product-dialog';
 import type { createDeletedRecoveryController, RecoveryCommand } from '../deleted-recovery-controller';
 import { canRecover } from '../deleted-recovery';
 import { uuidKey } from '../read-primitives';
@@ -14,7 +15,7 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
   const content = doc.createElement('div');
   let reading = false, last: unknown = null, lastDetail: string | null = null, error = '', sourceEnded = false, sawDetail = false;
   const held = new Map<HTMLElement, boolean>();
-  const button = (label: string, command: RecoveryCommand) => { const node = doc.createElement('button'); node.type = 'button'; node.textContent = label; node.onclick = () => { void send(command); }; return node; };
+  const button = (label: string, command: RecoveryCommand) => { const node = doc.createElement('button'); node.type = 'button'; node.textContent = label; if (command.kind === 'source') node.dataset.returnPreview = ''; node.onclick = () => { void send(command); }; return node; };
   const send = async (command: RecoveryCommand) => { if (disposed) return; const pending = controller.dispatch(command); render(); await pending; render(); };
   file.onchange = () => { void (async () => {
     if (reading) return; const selected = file.files?.[0]; if (!selected) return;
@@ -27,7 +28,7 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
     if (disposed) return;
     const s = controller.getState(), busy = reading || ['reading', 'writing', 'diagnosing', 'opening'].includes(s.phase);
     const modal = s.phase === 'preview' || s.phase === 'unknown';
-    for (const child of Array.from(doc.getElementById('memo-app')!.children)) {
+    for (const child of outsidePanel(doc.getElementById('memo-app')!, section)) {
       if (child !== section && child instanceof doc.defaultView!.HTMLElement && (busy || modal)) {
         if (!held.has(child)) held.set(child, child.inert); child.inert = true;
       }
@@ -79,7 +80,7 @@ export function mountDeletedRecoveryPreview(doc: Document, controller: ReturnTyp
     }
     if (s.phase === 'failed') content.append(button('単件回復の一覧へ戻る', { kind: 'back' }));
   }
-  section.append(notice, file, status, content); doc.getElementById('memo-app')!.append(section); render();
+  section.append(notice, file, status, content); appendBackupPanel(doc, section); render();
   const observe = () => { if (disposed) return; const s = controller.getState(), detail = detailId(); if (s !== last || detail !== lastDetail) { last = s; lastDetail = detail; render(); } frame = doc.defaultView!.requestAnimationFrame(observe); };
   frame = doc.defaultView!.requestAnimationFrame(observe);
   return () => { disposed = true; doc.defaultView!.cancelAnimationFrame(frame); for (const [node, previous] of held) node.inert = previous; held.clear(); section.remove(); };
