@@ -61,8 +61,13 @@ export function mountProductCloudSetup(doc: Document, env: ProductBrowserEnviron
     const result = app?.dispose();
     if (result === 'busy' || result === 'pending') return result;
     closed = true; input.value = ''; start.onclick = null; section.remove();
-    doc.defaultView?.removeEventListener('pagehide', dispose); return 'applied' as const;
+    doc.defaultView?.removeEventListener('pagehide', onPageHide); return 'applied' as const;
   };
-  doc.defaultView?.addEventListener('pagehide', dispose);
+  const onPageHide = (event: PageTransitionEvent) => {
+    input.value = '';
+    // BFCacheは同じタブ内appの退避であり終了ではない。復帰時の再生成・自動再送もしない。
+    if (!event.persisted) dispose();
+  };
+  doc.defaultView?.addEventListener('pagehide', onPageHide);
   return { dispose };
 }

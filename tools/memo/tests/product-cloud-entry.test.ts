@@ -127,12 +127,55 @@ it('生成entryからの遅いRPCは再loginのgeneration変更後に成功反�
     expect(await f.page.getByText(/クラウド読取成功/).count()).toBe(0);
   } finally { f.release(); await f.context.close(); }
 });
-it('pagehideのdisposeでSDK/session購読・UIを終了し、旧ボタンで再通信しない', async () => {
+it('BFCache退避は未開始の接続入口を保持し、設定値を空にして復帰後も明示開始を待つ', async () => {
+  const f = await fixture();
+  try {
+    await f.page.getByLabel('開発用publishable key').fill(key);
+    await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })); window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }))');
+    expect(await f.page.getByLabel('開発用publishable key').inputValue()).toBe('');
+    expect(await f.page.getByRole('button', { name: '承認済みクラウド接続を開始' }).isEnabled()).toBe(true);
+    expect(f.requests).toEqual([]); expect(await f.page.evaluate('productProbe.changes')).toEqual([]);
+    await f.configure(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
+    expect(f.requests).toEqual([]);
+  } finally { await f.context.close(); }
+});
+it('BFCache復帰後も同じSDK/Auth UIを使い、再生成せず明示loginとlogoutを続けられる', async () => {
+  const f = await fixture();
+  try {
+    await f.configure(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
+    await f.page.locator('#product-session').evaluate(node => Object.assign(window, { cachedProductSession: node }));
+    await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })); window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }))');
+    expect(await f.page.evaluate('cachedProductSession === document.querySelector("#product-session")')).toBe(true);
+    expect(f.requests).toEqual([]);
+    await f.login(); await f.page.getByText(/UNKNOWN：読取結果/).waitFor();
+    expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toHaveLength(1);
+    await f.page.getByRole('button', { name: 'ログアウト', exact: true }).click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
+    expect(await f.page.locator('#product-session').textContent()).toContain('保存先：ローカル');
+  } finally { await f.context.close(); }
+});
+it('BFCache退避/復帰はcloud dirty draftと離脱確認を維持し、Auth/RPC/local writeを追加しない', async () => {
+  const f = await fixture(true);
+  try {
+    await f.configure(); await f.page.getByText(/UNKNOWN：読取結果/).waitFor();
+    await f.page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
+    await f.page.getByLabel('クラウドのタイトル', { exact: true }).fill('退避前draft');
+    await f.page.getByLabel('クラウドの本文', { exact: true }).fill('保持する本文');
+    const before = [...f.requests], changes = await f.page.evaluate('productProbe.changes');
+    await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })); window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }))');
+    expect(await f.page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('退避前draft');
+    expect(await f.page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('保持する本文');
+    await f.page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await f.page.getByRole('button', { name: 'ログアウトをキャンセル', exact: true }).click();
+    expect(await f.page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('保持する本文');
+    expect(f.requests).toEqual(before); expect(await f.page.evaluate('productProbe.changes')).toEqual(changes);
+  } finally { await f.context.close(); }
+});
+it('通常pagehideのdisposeでSDK/session購読・UIを終了し、旧ボタンで再通信しない', async () => {
   const f = await fixture();
   try {
     await f.configure(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
     await f.page.getByRole('button', { name: 'ログイン', exact: true }).evaluate(node => Object.assign(window, { oldProductLogin: node }));
-    await f.page.evaluate('window.dispatchEvent(new Event("pagehide")); oldProductLogin.click()');
+    await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })); oldProductLogin.click()');
     expect(await f.page.locator('#product-session').count()).toBe(0); expect(f.requests).toEqual([]);
   } finally { await f.context.close(); }
 });

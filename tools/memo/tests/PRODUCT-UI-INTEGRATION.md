@@ -10,6 +10,7 @@ fake/offlineの機能未結線B=0を維持し、既存product-entryから実製�
 - Auth Storageは既存createMemoSessionStorageの専用キーだけ。localデータ用Storageアダプターと分離し、tokenの通常Auth永続化以外の保存・観測を追加しない。SDKのimport時debug probeは既存の版/SHA/1箇所検証付きauth-sdk-patchを再利用し、node_modules原本は変更しない。patch検証はDB監査の再実施ではない。
 - native fetchは既存SDK allowlistと8RPC senderへだけ必須注入する。Auth path/POST/GET、8RPCキー集合、origin/path/POST/redirect:error/期限・現在世代検証は既存C03/C04を再利用する。cloud候補HTMLのconnect-srcだけをtrusted originに限定し、通常local/保守版のCSPは広げない。
 - D05のlogin/restore後cloud選択、logout→local、失効/dirty/UNKNOWN/離脱/遅い応答は既存製品UIのまま。C04の生session/contextを別に作らず、同じ発行元を渡す。同期・転送・local fallback・独自retryなし。
+- pagehideのpersisted=trueはBFCache退避として同じapp/SDK/draftを保持し、通常終了だけ既存disposeへ委譲する。退避時も未送信の設定欄は空にする。pageshowでSDK再生成・Auth復元・RPC再送を追加せず、復帰後の操作認可は既存C03/C04の現在性検査に従う。
 - **実senderは引き続きunverified**。HTTP200/正常JSONや合成HTTPを成功へ昇格せず、C01/C04はUNKNOWN/停止を返す。今回の受入候補でsnapshot本文表示・write成功を約束しない。response provenance/single-rpcの認定は別工程・別承認。
 
 ### 起動方法（後続の承認後だけ使用）
@@ -25,6 +26,8 @@ profileは既存owner検証付き終了処理で管理し、raw console/trace/�
 生成HTML/SRI/CSP→通常product entry→実SDK（HTTPだけ合成）→C03/C04/C05→製品UIをChromiumで検証する。未認証RPC0、login/restoreとD05、logout、遅い応答の世代拒否、pagehide/dispose/旧DOM、秘密非露出、unverified維持と設定前Storage0を追加確認。8RPC正式引数/未知RPC拒否・user/context・dispose/unsubscribeの詳細は既存sender/C03/C04試験を再利用する。実Supabase/Auth/RPC/DB/SQL通信0。
 
 最終AI Gate：typecheck、全Vitest 57ファイル/1907件、新規composition/生成entry10件（Chromium6件＋境界/成果物4件）、既存Playwright E2E83件、SDK patch回帰23件、local/保守build、cloud候補build、git diff --checkはPASS。最初の全回帰は長時間実行のため中断し、詳細出力で全件を再実行して上記PASS・終了コード0を確認した。headed previewのbuild/静的確認と、実SDK＋fake HTTPのheadless実行を区別する。
+
+レビューP2回帰では、生成entryへ合成PageTransitionEvent（persisted=trueのpagehide/pageshow）を送り、設定入口の保持/設定値クリア、同じAuth UIでのlogin/logout、cloud dirty draft/離脱cancelの保持と追加通信0を3ケース追加する。persisted=falseの通常終了/旧DOM拒否も維持する。修正後のtypecheck、関連Vitest 3ファイル/28件（cloud entry13件を含む）、local/保守build、cloud候補build、git diff --checkはPASS。変更がcloud setupのpagehide分岐に限定されるため全Vitest/E2Eは再実行せず、上記初回全回帰の結果と区別する。実Supabase/Auth/RPC/DB/SQL通信0。実ブラウザのBFCache採用可否・履歴ナビゲーションそのものをこのイベント試験で実証したとは扱わず、実環境受入へ残す。
 
 repository準備はAI完了候補で、B=0を維持。C03/C04/C05/Q04全体、実製品経路/refresh/再読込保持/実ブラウザ通信/実RLSの受入、response provenance、single-rpc、R03/Q05/R04/R05は未完了。次の最小承認候補はdev-sandbox・合成ユーザーによる設定開始→login/restore→自動loadの限定受入。送信上限・停止条件と実操作の承認は別途具体化し、write/cleanupや過去PASS済みDB監査を再実施しない。SDK/実経路の挙動はfake証拠で認定しない。
 
