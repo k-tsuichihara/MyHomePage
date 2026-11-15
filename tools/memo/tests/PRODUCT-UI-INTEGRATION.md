@@ -35,6 +35,9 @@ Q04はPR #102後のオーナー判断でCOMPLETE、R03も実利用データ移�
 
 ## Q05 local UAT起動導線
 
+local previewは`viewport: null`でPlaywrightの固定viewportを解除し、通常のデスクトップウィンドウの幅・高さ変更に製品ページを追従させる。専用profile・dead proxy・route/CSPの外部通信拒否は維持し、cloud previewの設定は変更しない。自動回帰ではUATと同じheaded設定のウィンドウ自体を1200×900から900×700へ変更し、`innerWidth`/`innerHeight`の追従を確認する。製品UI・保存処理の変更やHuman UATは含まない。
+リサイズ修正のAI Gate：typecheck、preview 5件・製品レイアウト/cloud入口20件、local/cloud product build、`git diff --check`はPASS。実Supabase/Auth/RPC/DB/SQL通信0件。
+
 `tools/memo`で`npm run preview:product`を実行すると、`build:product`のlocal-only成果物を専用profile・headed Chromiumで開く。既存cloud previewの資産読込/route、profile所有ガード、初期化失敗時close、正常終了時破棄/失敗時保全を共有し、CLI/envによるモード・URL・profile指定は追加しない。固定`https://memo-product.localhost/tools/memo/memo.html`をローカル資産で応答し、証明書変更・公開・HTTPサーバーは不要。
 
 localのみdead proxy、service worker拒否、`connect-src 'none'`等のCSP、固定資産以外のroute拒否を併用する。製品localStorage/Web Locksを置換せず、既存製品のv3保存を使用する。Auth/cloud UI・SDK生成はlocal製品bundleへ追加しない。cloud版のtrusted origin許可・SDK検査・dead proxyなしは維持する。起動ごとに新規profileとなり、正常終了時に試験データを削除する。ダウンロード・マイクの受入範囲は拡張しない。
