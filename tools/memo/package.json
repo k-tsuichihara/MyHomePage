@@ -9,6 +9,7 @@
     "build:preview": "node scripts/build-preview.mjs",
     "build:product": "node scripts/build-product.mjs",
     "build:product-cloud": "node scripts/build-product.mjs --cloud",
+    "preview:product": "npm run build:product && node .product/local/preview.mjs",
     "preview:product-cloud": "npm run build:product-cloud && node .product/cloud/preview.mjs",
     "preview": "npm run build:preview && node scripts/serve-preview.mjs",
     "test:e2e": "playwright test",

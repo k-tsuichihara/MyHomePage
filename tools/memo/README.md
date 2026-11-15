@@ -19,6 +19,20 @@ Ver1.1.0の作業状況・残課題は、進捗管理の正本 [リリース進�
 
 ## 3. 現行実装の起動・利用方法
 
+### v1.1.0 local製品候補のHuman UAT
+
+開発依存が導入済みの環境で、`tools/memo`から次の1コマンドを実行します。
+
+```sh
+npm run preview:product
+```
+
+製品local build→専用profileのheaded Chromium起動→固定HTTPS相当ページの表示まで自動実行します。Auth/cloud設定はなく、外部通信は拒否します。実localStorageを使いますが、普段のブラウザや公開サイトのデータとは別のUAT専用領域です。合成データだけで操作してください。ブラウザのウィンドウを閉じると終了し、正常終了時には専用profileの試験データを削除します。起動・終了失敗時は既存所有ガードに従って保全し、自動再起動しません。
+
+`npm run preview`は合成メモリの開発previewで、この製品候補とは別物です。cloud候補の`preview:product-cloud`も変更しません。このlocal起動は公開・Human UAT実施済みの認定ではありません。
+
+### 公開中の旧版
+
 リポジトリルートをドキュメントルートとして静的HTTPサーバーで配信し、`/tools/memo/memo.html` にアクセスしてください。共通CSS・JavaScriptを相対参照するため、メモのディレクトリだけを切り出さずリポジトリ構成を維持します。
 
 現行本体はHTMLからJavaScriptを直接読み込みます。この本体の利用にTypeScriptビルドやSupabase設定は必要ありません。特定のサーバー導入・ビルドコマンドはここでは規定しません。
