@@ -1,5 +1,7 @@
 # Supabase実接続検証基盤：通信なしの実装・テスト方針
 
+製品senderは現在`validated-http`を使用し、[SINGLE-RPC-ACCEPTANCE](SINGLE-RPC-ACCEPTANCE.md)冒頭の最小受入条件に従う。以下の製品senderが「常にunverified」という記述は旧方針。C02テスト専用transport自体の`unverified`契約は変更しない。厳密single-rpc・完全出所証明は未認定のまま延期する。
+
 最新mainから、tests/cloud-liveのテスト専用コードだけを追加する。製品RPCアダプター・SQL・公開資産・既存ローカル処理を変更しない。実設定読取・Auth・実通信は未承認のため実装入口へ接続しない。
 
 ## 構成と安全境界

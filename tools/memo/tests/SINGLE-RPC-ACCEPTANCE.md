@@ -1,10 +1,24 @@
 # single-rpc 認定前ゲート
 
-## 結論
+## v1.1.0承認済み方針（現在の正本）
+
+厳密なsingle-rpc認定と完全なresponse provenance証明は未認定のまま延期し、v1.1.0のリリース条件から外す。以下の厳密認定手順は将来の認定用であり、今回の公開必須条件ではない。
+
+製品senderは既存の固定origin、正式8 RPC/引数、POST、redirect拒否、応答URL完全一致、status範囲、本文/JSON検査を通過した応答を`validated-http`として返す。adapterはこれをRPC別status・schema・所有者・revision/requestId等の通常検証へ進める。HTTP 2xxだけの成功認定でもsingle-rpcの証明でもない。`unverified`・未知のprovenanceは拒否し、Auth現在性、UNKNOWN、無再送、local/cloud分離を維持する。
+
+AI Gate方針：sender→adapterの正常snapshot/不正schema/競合/不正write照合と、既存adapter回帰を製品受入状態で確認する。実SDK＋合成HTTPの製品Chromiumでlogin/restore→D05→読取成功を検証し、stale/Auth・無再送・秘密非露出・local-only回帰を再利用する。実通信は行わない。
+
+AI Gate結果：typecheck PASS、全Vitest 57ファイル/1,917件 PASS（`npm test -- --maxWorkers=2`）、Playwright E2E 83件 PASS、offline Human Gate回帰 PASS、product/local・product/cloud build PASS、git diff --check PASS。合成HTTPの製品entry回帰14件もPASS。実Supabase/Auth/RPC/DB/SQL通信0、実UAT/実マイク未実施。
+
+Q04は本変更のレビュー・マージ後、既存DB PASSとオーナー報告の実login/D05/logoutを合わせ、個人利用v1.1.0の技術ゲートとして完了可能。主要操作・session永続化/refreshの利用時挙動・実マイク等はQ05/UATへ引き継ぐ。今回の実snapshot応答を正常と認定したものではない。
+
+以下の「常にunverified」「認定まで成功禁止」は以前の方針の履歴で、本節の製品受入方針に置き換える。
+
+## 旧方針の記録（上記承認で置換）
 
 現行の製品senderは、通信なし・注入fetchの境界であり、すべての応答を`unverified`として返す。`single-rpc`への昇格処理は実装しない。HTTP status、JSON本文、SQLSTATEらしい値、偽fetchの成功だけでは実経路の認定条件を満たさない。
 
-## 認定条件
+## 将来の厳密認定条件（v1.1.0公開条件ではない）
 
 `single-rpc`を将来許可するには、少なくとも次を同じ実行経路について証拠付きで確認し、オーナーが承認する必要がある。
 
@@ -36,7 +50,7 @@
 - [x] C01/C04で`unverified`を成功扱いしないこと
 - [x] 偽fetchのみでの回帰テスト
 
-## 実接続前の承認チェックリスト
+## 将来の厳密認定用チェックリスト
 
 1. 対象環境・origin・公開キーの確認（本番か開発かを明示）。
 2. 実Authユーザー、合成データ、操作上限、停止担当者の承認。

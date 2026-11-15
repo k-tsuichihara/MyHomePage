@@ -1,5 +1,7 @@
 # C03：Auth・セッション接続契約と試験方針
 
+製品senderの現在の応答受入は[SINGLE-RPC-ACCEPTANCE](SINGLE-RPC-ACCEPTANCE.md)冒頭を正本とする。`validated-http`から通常の内容検証へ進めるが、Authの現在user/generation/期限・送信直前検査は変更しない。以下の「常にunverified」は以前の製品senderの履歴。厳密single-rpc・完全出所証明は未認定のまま延期する。
+
 ## 通常product entryへのSDK所有接続準備
 
 `product-cloud-app.ts`が既存`createMemoSdkAuth`を生成・所有し、同じsessionをC04/C05と製品UIへ注入する。専用キーStorage・Auth allowlist・SDK patch/disposeは既存実装をそのまま使う。Browser Authのloopback＋Permit入口を製品へ転用せず、通常製品のHTTPS/top-level/page境界を使う。接続先は既存MEMO_RPC_ORIGINのdev-sandboxだけで、実行時publishable key入力を除き任意設定を受け取らない。資格情報/キーをbuildに埋め込まない。

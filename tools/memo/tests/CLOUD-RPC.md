@@ -1,5 +1,9 @@
 # 通信なしSupabase RPC境界の契約・テスト方針
 
+## v1.1.0最小受入（現在の正本）
+
+`validated-http`は製品senderの既存HTTP境界検査通過を示し、adapterの既存RPC別内容検証へ進める。`single-rpc`は厳密認定、`unverified`は受入未確認として区別する。後者は引き続きfailed/unknown。正式status/schema/所有者/revision/requestId照合、競合・UNKNOWN・無再送の意味論は変更しない。厳密認定と完全出所証明は未認定のまま延期する。以下のsingle-rpc限定の分類条件は`single-rpc`または`validated-http`へ更新する。詳細は[SINGLE-RPC-ACCEPTANCE](SINGLE-RPC-ACCEPTANCE.md)冒頭を参照。
+
 C01のアダプター結果型と応答検証は維持し、C04の認証停止・古い応答・結果不明要求の保持は上位の[CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md)で扱う。C02の実接続検証用HTTP境界を製品transportへ流用したり、`unverified`を認定済みに変更したりしない。
 
 根拠はReview8統合仕様§4・6・7、正式SQL・型、既存validateCloudSnapshot。今回の承認は模擬通信による限定先行実装だけで、SQL/TS実DB一致ゲート、Auth、公開接続を解除しない。

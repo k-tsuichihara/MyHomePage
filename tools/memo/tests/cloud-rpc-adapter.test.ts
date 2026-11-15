@@ -14,7 +14,7 @@ const tag = () => ({ id: TAG, user_id: OWNER, name: 'Tag', created_at: DATE, rev
 const saved = () => ({ memo: memo(), tagIds: [TAG] });
 const snapshot = () => ({ memos: [memo()], tags: [tag()], memoTags: [{ user_id: OWNER, memo_id: ID, tag_id: TAG }] });
 function fixture(body: unknown, status = 200) {
-  const transport = vi.fn<CloudTransport>(async () => ({ provenance: 'single-rpc', status, body }));
+  const transport = vi.fn<CloudTransport>(async () => ({ provenance: 'validated-http', status, body }));
   return { transport, adapter: createCloudRpcAdapter(OWNER, transport) };
 }
 function ok<T>(result: CloudResult<T>): T { expect(result.kind).toBe('ok'); if (result.kind !== 'ok') throw Error('Expected ok'); return result.value; }
@@ -22,6 +22,12 @@ function call(result: CloudResult<unknown>): CloudCall { if (result.kind === 'no
 const error = (code: string, message = '合成エラー') => ({ code, message, details: '本文を含めない', hint: null });
 
 describe('正式RPCの引数・型変換', () => {
+  it('厳密認定済みtransportの互換性を維持するが、未知の受入状態は拒否する', async () => {
+    const trusted: CloudTransport = async () => ({ provenance: 'single-rpc', status: 200, body: snapshot() });
+    expect((await createCloudRpcAdapter(OWNER, trusted).load()).kind).toBe('ok');
+    const invalid = (async () => ({ provenance: 'http-ok', status: 200, body: snapshot() })) as unknown as CloudTransport;
+    expect(await createCloudRpcAdapter(OWNER, invalid).load()).toMatchObject({ kind: 'failed', reason: 'unverified-response' });
+  });
   it('snapshotは全行を変換し、所有者を除去、日時原表記・配列順序を保持する', async () => {
     const source = snapshot(), { adapter, transport } = fixture(source);
     const result = await adapter.load(); const data = ok(result);

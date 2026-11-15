@@ -12,10 +12,11 @@ export interface CloudCall {
 }
 /**
  * single-rpcは当該呼出し1回の正式RPC応答で、再試行・応答差替えがないとtransportが確認した場合だけ指定する。
- * プロキシ等の合成応答や出所/試行回数不明はunverified。HTTP/SQLSTATEだけでsingle-rpcに認定しない。
+ * validated-httpは製品senderの固定要求・応答URL/status/JSON検査を通過した状態で、厳密な出所/試行回数の証明ではない。
+ * unverifiedは受入条件未確認。HTTP/SQLSTATEだけでsingle-rpcに認定しない。
  * 本文解析不能・応答消失はrejectする。これは信頼する注入実装の契約で、暗号学的な出所証明ではない。
  */
-export interface CloudTransportResponse { readonly provenance: 'single-rpc' | 'unverified'; readonly status: number; readonly body: unknown }
+export interface CloudTransportResponse { readonly provenance: 'single-rpc' | 'validated-http' | 'unverified'; readonly status: number; readonly body: unknown }
 export type CloudTransport = (rpc: RpcName, args: CloudCall['args']) => Promise<CloudTransportResponse>;
 export type ConflictReason = 'used-memo-id' | 'memo-revision' | 'state-revision' | 'delete-not-found-or-revision'
   | 'trash-snapshot' | 'trash-revision' | 'tag-revision';

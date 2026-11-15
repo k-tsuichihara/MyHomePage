@@ -40,8 +40,8 @@ export function createCloudRpcAdapter(ownerId: string, transport: CloudTransport
     catch { return failure('communication'); }
     try {
       const { provenance, status, body } = record(response, ['provenance', 'status', 'body']);
-      // HTTP/codeの見た目だけでDBの拒否や成功を認定しない。信頼できない成功応答も同じ扱い。
-      if (provenance !== 'single-rpc') return failure('unverified-response');
+      // HTTP境界を通過しても、以下のRPC別status/schema/所有者/要求照合は省略しない。
+      if (provenance !== 'single-rpc' && provenance !== 'validated-http') return failure('unverified-response');
       if (status !== (voidResponse ? 204 : 200)) {
         // PostgreSQLエラーの任意message/details/hintは返さない。操作・HTTP・codeの組だけで分類する。
         if (typeof status !== 'number' || !Number.isInteger(status) || status < 400 || status > 599) return failure('invalid-response');
