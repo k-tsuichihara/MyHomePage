@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMemoRpcSender, MEMO_RPC_ORIGIN, RpcSenderError } from '../src/cloud-rpc-sender';
+import { createCloudRpcAdapter } from '../src/cloud-rpc-adapter';
 import type { CloudCall, RpcName } from '../src/cloud-rpc-types';
 
 const KEY = 'sb_publishable_synthetic', TOKEN = 'header.payload.signature';
@@ -21,7 +22,7 @@ describe('通信なし製品RPC sender境界', () => {
     const sender = factory(fetchPort);
     const rpcs: RpcName[] = ['memo_load_snapshot', 'memo_save', 'memo_resolve_request', 'memo_change_state',
       'memo_delete_permanently', 'memo_empty_trash', 'memo_save_tag', 'memo_delete_tag'];
-    for (const rpc of rpcs) expect((await sender(rpc, args(rpc))).provenance).toBe('unverified');
+    for (const rpc of rpcs) expect((await sender(rpc, args(rpc))).provenance).toBe('validated-http');
     expect(fetchPort).toHaveBeenCalledTimes(8);
     expect(fetchPort.mock.calls[0]?.[1]).toMatchObject({ method: 'POST', redirect: 'error' });
   });
@@ -32,7 +33,7 @@ describe('通信なし製品RPC sender境界', () => {
       const sender = factory(async requestUrl => response(requestUrl.split('/').pop() as RpcName, body, status));
       const result = await sender(status === 204 ? 'memo_delete_tag' : 'memo_load_snapshot',
         status === 204 ? args('memo_delete_tag') : {});
-      expect(result.provenance).toBe('unverified');
+      expect(result.provenance).toBe('validated-http');
     }
   });
 
@@ -100,14 +101,16 @@ describe('通信なし製品RPC sender境界', () => {
     await expect(redirected('memo_load_snapshot', {})).rejects.toThrow('redirect');
     const changed = factory(async () => ({ ...response('memo_load_snapshot'), url: 'https://other.invalid' }));
     await expect(changed('memo_load_snapshot', {})).rejects.toThrow('redirect');
+    const wrongPath = factory(async () => ({ ...response('memo_load_snapshot'), url: url('memo_save') }));
+    await expect(wrongPath('memo_load_snapshot', {})).rejects.toThrow('redirect');
   });
 
   it('204空本文とJSON本文を解析するがsingle-rpcには昇格しない', async () => {
     const sender = factory(async (requestUrl) => response(requestUrl.split('/').pop() as RpcName, undefined, 204));
     const empty = await sender('memo_delete_tag', args('memo_delete_tag'));
-    expect(empty).toEqual({ provenance: 'unverified', status: 204, body: undefined });
+    expect(empty).toEqual({ provenance: 'validated-http', status: 204, body: undefined });
     const json = await factory()('memo_load_snapshot', {});
-    expect(json.provenance).toBe('unverified');
+    expect(json.provenance).toBe('validated-http');
   });
 
   it('本文解析失敗・不正status・通信断を固定理由へ変換する', async () => {
@@ -140,5 +143,29 @@ describe('通信なし製品RPC sender境界', () => {
     expect(fetchPort).toHaveBeenCalledOnce();
     await factory(fetchPort)('memo_save_tag', args('memo_save_tag'));
     expect(fetchPort).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('validated-http sender to adapter', () => {
+  const owner = '00000000-0000-0000-0000-000000000003';
+  it('valid snapshot reaches domain validation without single-rpc certification', async () => {
+    const port = vi.fn(async () => response('memo_load_snapshot', { memos: [], tags: [], memoTags: [] }));
+    expect(await createCloudRpcAdapter(owner, factory(port)).load()).toMatchObject({ kind: 'ok', value: { memos: [], tags: [], memoTags: [] } });
+    expect(port).toHaveBeenCalledOnce();
+  });
+  it.each([{}, { memos: [], tags: [], memoTags: [], extra: true }])('JSON alone is insufficient: %j', async body => {
+    expect(await createCloudRpcAdapter(owner, factory(async () => response('memo_load_snapshot', body))).load()).toMatchObject({ kind: 'failed', reason: 'invalid-response' });
+  });
+  it('known conflict stays rejected and invalid write receipt stays unknown', async () => {
+    const conflict = createCloudRpcAdapter(owner, factory(async () => response('memo_change_state', { code: 'PT409', message: 'revision conflict' }, 409)));
+    expect(await conflict.changeState(args('memo_change_state').p_id as string, 'pin', { expectedRevision: 1, requestId: args('memo_change_state').p_request_id as string })).toMatchObject({ kind: 'rejected', reason: 'conflict' });
+    const invalid = createCloudRpcAdapter(owner, factory(async () => response('memo_save', {})));
+    expect(await invalid.save({ memoId: args('memo_save').p_id as string, title: 'x', body: '', tagIds: [], expectedRevision: null, requestId: args('memo_save').p_request_id as string })).toMatchObject({ kind: 'unknown', reason: 'invalid-response' });
+  });
+  it('unknown RPC and extra arguments never reach HTTP', async () => {
+    const port = vi.fn(async () => response('memo_load_snapshot'));
+    await expect(factory(port)('unknown' as RpcName, {})).rejects.toThrow('boundary');
+    await expect(factory(port)('memo_load_snapshot', { extra: null })).rejects.toThrow('boundary');
+    expect(port).not.toHaveBeenCalled();
   });
 });

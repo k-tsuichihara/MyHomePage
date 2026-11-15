@@ -111,8 +111,8 @@ export function createMemoRpcSender(config: { origin: string; publishableKey: st
         if (status === 204) { if (text !== '') throw Error(); parsed = undefined; }
         else parsed = JSON.parse(text) as unknown;
       } catch { throw new RpcSenderError('json'); }
-      // 経路の再試行・中継・出所はこの注入境界から証明できないため、常に未検証とする。
-      return { provenance: 'unverified' as const, status, body: parsed };
+      // HTTP境界の通過だけを表す。中継を含む完全な出所やsingle-rpc認定は保証しない。
+      return { provenance: 'validated-http' as const, status, body: parsed };
     };
     try { return await Promise.race([receive(), deadline]); }
     catch (error) { controller.abort(); throw error instanceof RpcSenderError ? error : new RpcSenderError('communication'); }

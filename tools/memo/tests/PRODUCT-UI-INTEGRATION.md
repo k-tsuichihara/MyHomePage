@@ -1,5 +1,9 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## v1.1.0応答受入方針（現在の正本）
+
+製品senderの`validated-http`を既存adapterの内容検証へ接続する。条件・テスト方針は[SINGLE-RPC-ACCEPTANCE](SINGLE-RPC-ACCEPTANCE.md)冒頭を正本とする。厳密なsingle-rpcと完全response provenanceは未認定・延期。以下の「実senderは常にunverified」「厳密認定がcloud公開必須」は過去の方針で、本節が優先する。B=0を維持し、主要操作の実UATはQ05へ渡す。実データ・公開・実通信の追加承認ではない。
+
 ## 通常product entryの実SDK/Auth/RPC composition準備（現在状態）
 
 fake/offlineの機能未結線B=0を維持し、既存product-entryから実製品用compositionを選べるrepository準備を追加する。通常local/保守buildは従来のAuth/cloud混入拒否を維持する。`npm run build:product-cloud`だけが同じentryをcloud候補モードでbuildし、`.product/cloud/site/tools/memo/memo.html`へ未公開成果物を生成する。公開memo.html・Pages設定は変更しない。

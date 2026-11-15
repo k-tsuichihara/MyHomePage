@@ -23,7 +23,7 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => { await browser?.close(); });
 
-async function fixture(seed = false, fail = false, hold = false) {
+async function fixture(seed = false, fail = false, hold = false, snapshotBody: unknown = { memos: [], tags: [], memoTags: [] }) {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   await context.addInitScript(({ seed, session }) => {
     const values = new Map<string, string>(seed ? [['myhomepage.memo.auth.v1', JSON.stringify(session)]] : []);
@@ -46,7 +46,7 @@ async function fixture(seed = false, fail = false, hold = false) {
       else if (url.pathname === '/auth/v1/logout') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*' } });
       else if (url.pathname === '/rest/v1/rpc/memo_load_snapshot') {
         if (hold) await new Promise<void>(resolve => { release = resolve; });
-        body = { memos: [], tags: [], memoTags: [] };
+        body = snapshotBody;
       } else throw new Error('Unexpected synthetic product request');
       return route.fulfill({ status: fail && url.pathname === '/auth/v1/token' ? 400 : 200,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
@@ -83,17 +83,17 @@ it('通常entryのcloud候補は設定操作までAuth/RPCを生成せず、キ�
     expect(await f.page.evaluate('productProbe.reads')).toEqual([]);
   } finally { await f.context.close(); }
 });
-it.each([false, true])('実SDK＋注入HTTPでlogin/restore(seed=%s)→D05→既存sender/loadを接続し、unverifiedを成功にしない', async seed => {
+it.each([false, true])('実SDK＋注入HTTPでlogin/restore(seed=%s)→D05→validated-httpのsnapshot内容検証へ進む', async seed => {
   const f = await fixture(seed);
   try {
     await f.configure();
     if (!seed) {
       await f.page.getByText('未ログイン', { exact: true }).waitFor(); expect(f.requests).toEqual([]); await f.login();
     }
-    await f.page.getByText(/UNKNOWN：読取結果/).waitFor();
+    await f.page.getByText(/クラウド読取成功/).waitFor();
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toEqual([{ path: '/rest/v1/rpc/memo_load_snapshot', method: 'POST' }]);
     expect(await f.page.locator('#product-session').textContent()).toContain('保存先：クラウド');
-    expect(await f.page.getByText(/クラウド読取成功/).count()).toBe(0);
+    expect(await f.page.getByText(/クラウド読取成功/).count()).toBe(1);
     const changes = await f.page.evaluate('productProbe.changes') as string[];
     expect(changes.every(k => k.startsWith('myhomepage.memo.auth.v1'))).toBe(true);
     const output = await f.privateOutput();
@@ -102,6 +102,16 @@ it.each([false, true])('実SDK＋注入HTTPでlogin/restore(seed=%s)→D05→既
     await f.page.getByText('未ログイン', { exact: true }).waitFor();
     expect(await f.page.locator('#product-session').textContent()).toContain('保存先：ローカル');
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toHaveLength(1);
+  } finally { await f.context.close(); }
+});
+it('正常HTTPでもsnapshot schema不正はUNKNOWNで停止し、再送・local書込しない', async () => {
+  const f = await fixture(true, false, false, { privateError: `${email} ${password} ${token}` });
+  try {
+    await f.configure(); await f.page.getByText(/UNKNOWN：読取結果/).waitFor();
+    expect(await f.page.getByText(/クラウド読取成功/).count()).toBe(0);
+    expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toEqual([{ path: '/rest/v1/rpc/memo_load_snapshot', method: 'POST' }]);
+    expect((await f.page.evaluate('productProbe.changes') as string[]).every(k => k.startsWith('myhomepage.memo.auth.v1'))).toBe(true);
+    for (const secret of [email, password, token]) expect(await f.privateOutput()).not.toContain(secret);
   } finally { await f.context.close(); }
 });
 it('providerの秘密付き認証拒否は固定表示だけにしRPCを開始しない', async () => {
@@ -147,7 +157,7 @@ it('BFCache復帰後も同じSDK/Auth UIを使い、再生成せず明示login�
     await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })); window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }))');
     expect(await f.page.evaluate('cachedProductSession === document.querySelector("#product-session")')).toBe(true);
     expect(f.requests).toEqual([]);
-    await f.login(); await f.page.getByText(/UNKNOWN：読取結果/).waitFor();
+    await f.login(); await f.page.getByText(/クラウド読取成功/).waitFor();
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toHaveLength(1);
     await f.page.getByRole('button', { name: 'ログアウト', exact: true }).click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
     expect(await f.page.locator('#product-session').textContent()).toContain('保存先：ローカル');
@@ -156,7 +166,7 @@ it('BFCache復帰後も同じSDK/Auth UIを使い、再生成せず明示login�
 it('BFCache退避/復帰はcloud dirty draftと離脱確認を維持し、Auth/RPC/local writeを追加しない', async () => {
   const f = await fixture(true);
   try {
-    await f.configure(); await f.page.getByText(/UNKNOWN：読取結果/).waitFor();
+    await f.configure(); await f.page.getByText(/クラウド読取成功/).waitFor();
     await f.page.getByRole('button', { name: 'クラウドに新規メモ', exact: true }).click();
     await f.page.getByLabel('クラウドのタイトル', { exact: true }).fill('退避前draft');
     await f.page.getByLabel('クラウドの本文', { exact: true }).fill('保持する本文');
