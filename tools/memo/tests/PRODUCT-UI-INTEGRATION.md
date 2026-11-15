@@ -1,5 +1,15 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 local UAT起動導線
+
+`tools/memo`で`npm run preview:product`を実行すると、`build:product`のlocal-only成果物を専用profile・headed Chromiumで開く。既存cloud previewの資産読込/route、profile所有ガード、初期化失敗時close、正常終了時破棄/失敗時保全を共有し、CLI/envによるモード・URL・profile指定は追加しない。固定`https://memo-product.localhost/tools/memo/memo.html`をローカル資産で応答し、証明書変更・公開・HTTPサーバーは不要。
+
+localのみdead proxy、service worker拒否、`connect-src 'none'`等のCSP、固定資産以外のroute拒否を併用する。製品localStorage/Web Locksを置換せず、既存製品のv3保存を使用する。Auth/cloud UI・SDK生成はlocal製品bundleへ追加しない。cloud版のtrusted origin許可・SDK検査・dead proxyなしは維持する。起動ごとに新規profileとなり、正常終了時に試験データを削除する。ダウンロード・マイクの受入範囲は拡張しない。
+
+AI Gate方針：共通配信処理と同じ起動optionsのheadless試験で製品HTML→実Storage保存→再読込、Auth UI不在、外部要求拒否を確認する。コマンド配線・両buildのrunner生成・cloud route非回帰、既存製品entry/profile/lifecycle回帰を再利用する。実Supabase/Auth/RPC/DB/SQL通信・Human UATは行わない。
+
+AI Gate結果：typecheck、local/cloud両product build、関連Vitest 7ファイル45件（新規preview 4件含む）、関連Playwright E2E 42件、git diff --checkはPASS。E2E初回は42件成功後の終了待ちで停止し、実行権限を切り分けた同一試験で42件PASS/終了コード0を確認。headed起動は設定・build配線で確認し、ブラウザ自動試験はheadlessで実施した。Human UAT・実Supabase通信は未実施。
+
 ## v1.1.0応答受入方針（現在の正本）
 
 製品senderの`validated-http`を既存adapterの内容検証へ接続する。条件・テスト方針は[SINGLE-RPC-ACCEPTANCE](SINGLE-RPC-ACCEPTANCE.md)冒頭を正本とする。厳密なsingle-rpcと完全response provenanceは未認定・延期。以下の「実senderは常にunverified」「厳密認定がcloud公開必須」は過去の方針で、本節が優先する。B=0を維持し、主要操作の実UATはQ05へ渡す。実データ・公開・実通信の追加承認ではない。

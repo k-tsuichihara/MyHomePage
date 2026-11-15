@@ -59,7 +59,7 @@ for (const [name, bytes] of assets) {
 }
 await writeFile(new URL('memo.html', delivery), html);
 }
-if (cloud) await build({ entryPoints: [fileURLToPath(new URL('scripts/preview-product-cloud.ts', root))],
-  outfile: fileURLToPath(new URL('.product/cloud/preview.mjs', root)), bundle: true, packages: 'external',
-  platform: 'node', format: 'esm', target: 'node22' });
+await build({ entryPoints: [fileURLToPath(new URL('scripts/preview-product-cloud.ts', root))],
+  outfile: fileURLToPath(new URL(cloud ? '.product/cloud/preview.mjs' : '.product/local/preview.mjs', root)), bundle: true, packages: 'external',
+  platform: 'node', format: 'esm', target: 'node22', define: { __MEMO_PREVIEW_CLOUD__: String(cloud) } });
 if (cloudManifest) await writeFile(new URL('.product/cloud/memo-app.js.patch.json', root), JSON.stringify(cloudManifest));
