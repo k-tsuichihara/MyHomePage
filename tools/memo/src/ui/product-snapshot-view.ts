@@ -12,7 +12,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   changeState?: (memo: Memo, action: 'pin' | 'unpin' | 'trash' | 'restore', valid: () => boolean) => boolean,
   deletePermanently?: (memo: Memo, valid: () => boolean) => boolean,
   emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean,
-  tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean },
+  tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean; feedback?: HTMLElement },
   deleteTag?: (tag: Tag, valid: () => boolean) => boolean,
   duplicate?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[]) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
@@ -21,7 +21,8 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   parent.append(root);
   let active: { value: MemoData; valid: () => boolean; token: object; view: 'normal' | 'trash'; normal: ListContext; trash: ListContext } | null = null;
   let disposed = false;
-  const clear = () => { active = null; root.replaceChildren(); root.hidden = true; };
+  const releaseTagFeedback = () => { if (tagEditor?.feedback && root.contains(tagEditor.feedback)) parent.append(tagEditor.feedback); };
+  const clear = () => { releaseTagFeedback(); active = null; root.replaceChildren(); root.hidden = true; };
   const current = (token: object) => {
     if (disposed || active?.token !== token) return null;
     try { if (active.valid()) return active.value; } catch { /* 元例外は表示しない。 */ }
@@ -44,7 +45,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     const value = current(token), memo = value?.memos.find(row => uuidKey(row.id) === uuidKey(id)); if (!value || !memo) return;
     const tags = value.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(memo.id))
       .map(row => value.tags.find(tag => uuidKey(tag.id) === uuidKey(row.tagId))!.name);
-    root.dataset.view = 'detail';
+    releaseTagFeedback(); root.dataset.view = 'detail';
     root.replaceChildren(text('h2', 'クラウドメモ詳細（読取専用）'), text('p', memo.title), text('pre', memo.body),
       text('p', memo.deletedAt ? 'ゴミ箱内のメモ（読取専用）' : '通常メモ（読取専用）'),
       text('p', tags.length ? `タグ：${tags.join('、')}` : 'タグなし'),
@@ -139,13 +140,17 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     form.append(label, save, button('タグ編集をキャンセル', () => list(token)));
     if (productLayout) {
       const dialog = doc.createElement('dialog'); dialog.className = 'product-dialog'; dialog.setAttribute('aria-label', 'クラウドタグの編集');
-      dialog.append(form); dialog.addEventListener('cancel', event => { event.preventDefault(); list(token); });
+      dialog.append(form);
+      // 既存の通知要素を移し、同じC04/入力検証メッセージをアクティブなmodal内で通知する。
+      if (tagEditor.feedback) form.append(tagEditor.feedback);
+      dialog.addEventListener('cancel', event => { event.preventDefault(); list(token); });
       root.replaceChildren(dialog); openProductDialog(dialog);
     } else root.replaceChildren(form);
     input.focus();
   };
   const list = (token: object) => {
     const value = current(token); if (!value) return;
+    releaseTagFeedback();
     const view = active!.view;
     root.dataset.view = 'list'; root.classList.remove('memo-detail-layout');
     root.replaceChildren(text('h2', 'クラウドメモ一覧（読取専用）'));
@@ -165,7 +170,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       if (!current(token)) return;
       const scroll = context().scrollTop;
       rows.replaceChildren();
-      context().result.items.forEach(({ memo }) => {
+      context().result.items.forEach(({ memo, tags }) => {
         const row = doc.createElement('li');
         // 検索結果の添字ではなく、現在snapshotのIDをclosureに結び付ける。DOMへIDを出さない。
         const open = button(memo.title, () => {
@@ -176,9 +181,8 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         if (productLayout) {
           open.className = 'open-card';
           const preview = text('p', memo.body); preview.className = 'card-preview';
-          const names = value.memoTags.filter(link => uuidKey(link.memoId) === uuidKey(memo.id)).map(link => value.tags.find(tag => uuidKey(tag.id) === uuidKey(link.tagId))!.name);
           const meta = text('p', ''); meta.className = 'card-meta';
-          const tagNames = doc.createElement('span'); tagNames.textContent = names.join('・');
+          const tagNames = doc.createElement('span'); tagNames.textContent = tags.map(tag => tag.name).join('・');
           const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新 ${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; meta.append(tagNames, updated);
           const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
           const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙ 操作'; menu.append(summary);

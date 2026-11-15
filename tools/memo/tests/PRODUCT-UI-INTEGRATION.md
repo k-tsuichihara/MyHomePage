@@ -23,7 +23,9 @@
 
 ### AI GateとUATの境界
 
-最終結果：typecheck PASS、Vitest 59ファイル/1,925件 PASS、既存Playwright E2E 83件 PASS、local/cloud product build PASS、`git diff --check` PASS。VitestにはPC/スマホ×local/fake cloudの製品レイアウト4件、および両preview/製品入口を含む関連22件を含む。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT/実マイク試験は未実施。
+レビュー回帰：認証dialogを閉じる操作は処理取消・保存先離脱と分離し、初期復元UNKNOWN中も診断画面へ戻れる。タグ検証の既存通知はlocal/cloudともアクティブなタグmodal内で通知する。cloudカードは`queryMemos()`が返す関連付け済みtagsを利用し、カードごとの関連全走査をしない。local音声の状態通知は一覧/詳細/編集に共通する領域へ配置し、非対応で編集へ遷移しない場合も案内を表示する。既存のwrite/busy/departure判定は維持する。
+
+レビュー修正後の最終結果：typecheck PASS、Vitest 59ファイル/1,927件 PASS、既存Playwright E2E 83件 PASS、local/cloud product build PASS、`git diff --check` PASS。製品レイアウト6件にはPC/スマホ×local/fake cloud、hidden属性のみのタイトル追従、初期復元UNKNOWNからの認証modal終了を含む。タグ検証エラー・非対応音声通知・検索後のカードタグ表示も製品HTMLで検証する。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT/実マイク試験は未実施。
 
 PC 1440px/スマホ390pxの製品HTML/CSSをChromiumで確認する。専用Contextの実localStorage保存、モーダル4機能、固定領域/スクロール、未保存確認Esc取消、タグ改名取消の無書込、fake cloudの一覧/タグ管理/編集を検証する。既存のIME/音声・初期復元/単件回復・Auth/generation/UNKNOWN/dispose回帰を再利用し、source draw.ioは変更しない。画像は合成データだけで`.product/`へ保存し、Git/公開へ含めない。
 

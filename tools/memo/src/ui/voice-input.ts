@@ -20,7 +20,7 @@ export function createVoiceControls(doc: Document, controller: VoiceEditorPort, 
   const notice = doc.createElement('p'); notice.textContent = '音声入力はブラウザの認識サービスを利用します。音声が外部サービスへ送信される場合があります。アプリは録音を保存しません。開始はボタン操作時だけです。';
   section.append(notice, stop, status);
   const pagehide = () => voice.stop(); win.addEventListener('pagehide', pagehide);
-  return { section, start: () => voice.start(), stop: () => voice.stop(), dispose() {
+  return { section, status, start: () => voice.start(), stop: () => voice.stop(), dispose() {
     voice.dispose(); win.removeEventListener('pagehide', pagehide); stop.onclick = null; section.remove();
   } };
 }
@@ -35,6 +35,8 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
     (slot ?? doc.getElementById(id!))!.append(button); buttons.push(button);
   }
   (doc.getElementById('editor-voice-controls-slot') ?? doc.getElementById('memo-app'))!.append(voice.section);
-  return Object.assign(() => { voice.dispose(); buttons.forEach(button => button.remove()); },
+  // 非対応時はeditorへ遷移しないため、通知は一覧・詳細からも見える共通領域へ置く。
+  (doc.querySelector('#memo-app .statuses') ?? doc.getElementById('memo-app'))!.append(voice.status);
+  return Object.assign(() => { voice.dispose(); voice.status.remove(); buttons.forEach(button => button.remove()); },
     { stop: () => voice.stop() });
 }

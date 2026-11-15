@@ -146,7 +146,10 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     text('read-status', state.read.kind === 'loading' ? '一覧を再読込中です。'
       : state.read.kind === 'failed' ? '一覧の再読込に失敗しました。以前の表示は最新とは限りません。' : ready ? '一覧の読込が完了しました。' : '読込前です。');
     text('draft-status', state.editor ? isDirty(state.editor) ? '未保存の追加編集があります。' : '現在のドラフトに未保存の変更はありません。' : '');
-    text('error', feedback || (state.editorIssue ? `編集中データの不整合：${state.editorIssue}。入力は保持しています。` : ''));
+    const errorMessage = feedback || (state.editorIssue ? `編集中データの不整合：${state.editorIssue}。入力は保持しています。` : '');
+    text('error', errorMessage);
+    // 同じ既存判定結果をmodal内でも通知する。検証や保存の状態は追加しない。
+    const tagError = doc.getElementById('tag-error'); if (tagError) tagError.textContent = errorMessage;
     for (const id of ['new', 'back', 'edit', 'duplicate', 'previous', 'next', 'tag-save', 'tag-delete', 'clear-tag-filters']) {
       element<HTMLButtonElement>(id).disabled = busy || !ready || composing;
     }

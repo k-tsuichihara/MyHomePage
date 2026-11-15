@@ -71,15 +71,13 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   confirmation.append(warning, proceed, cancel);
   form.append(login, restore, logout); root.append(state, source, form, confirmation, feedback);
   let authDialog: HTMLDialogElement | undefined;
-  let authClose: HTMLButtonElement | undefined;
   const authEntry = doc.getElementById('product-auth-open') as HTMLButtonElement | null;
   if (productLayout) {
     const startup = doc.getElementById('product-status'); if (startup) startup.textContent = '';
     authDialog = doc.createElement('dialog'); authDialog.className = 'product-dialog'; authDialog.setAttribute('aria-label', 'ログイン / 保存先');
     const heading = doc.createElement('h2'); heading.textContent = 'ログイン / 保存先';
+    // 閉じるのは表示だけ。処理取消・離脱ではなく、背後の回復操作へ戻れるようにする。
     const close = button('閉じる'); close.onclick = () => authDialog?.close();
-    authClose = close;
-    authDialog.addEventListener('cancel', event => { if (busy || pending || isBusy()) event.preventDefault(); });
     authDialog.append(heading, state, source, chooseLocal, chooseCloud, form, confirmation, feedback, close); root.append(authDialog);
     if (authEntry) { authEntry.disabled = false; authEntry.onclick = () => openProductDialog(authDialog!); }
   }
@@ -91,7 +89,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     cloud.controller.deletePermanently && local.createId ? (memo, valid) => startStateChange(memo, 'delete-permanently', valid) : undefined,
     cloud.controller.emptyTrash && local.createId ? startEmptyTrash : undefined,
     cloud.controller.saveTag && local.createId ? { canStart: () => !closed && !unavailable && !busy && !pending && !isBusy()
-      && !loading && !stateUncertain() && !cloudEditor?.getState() && !!cloudContext(), save: startSaveTag } : undefined,
+      && !loading && !stateUncertain() && !cloudEditor?.getState() && !!cloudContext(), save: startSaveTag, feedback: stateStatus } : undefined,
     cloud.controller.deleteTag ? startDeleteTag : undefined,
     cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices) =>
       !isBusy() && !stateUncertain() && !busy && !pending && !loading && !!cloudContext()
@@ -174,7 +172,6 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       // C03が公開した最初の認証済みcontextを完了に結び付け、後続世代へ読み替えない。
       if (authOperation && !authOperation.completed && current.phase === 'authenticated') authOperation.completed = context();
       syncSource();
-      if (authClose) authClose.disabled = busy || !!pending || isBusy();
       chooseLocal.disabled = chooseCloud.disabled = busy || !!pending || isBusy();
       newCloud.disabled = !cloudEditor || !!cloudEditor.getState() || stateUncertain() || busy || !!pending || isBusy() || loading
         || !cloudContext();
