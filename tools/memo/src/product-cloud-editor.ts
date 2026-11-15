@@ -103,11 +103,14 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     const stop = voice.section.querySelector('button'); if (stop) { stop.textContent = '停止'; bodyHeading.append(stop); }
     bodyLabel.before(bodyHeading);
     root.append(voice.section);
+    // 非対応時は新規editorが作られない。通知だけはcloud一覧からも見える位置に置く。
+    parent.append(voice.status);
   }
   function render() {
     if (disposed) return;
     root.hidden = !editor || !deps.selected();
     voice.section.hidden = !deps.selected();
+    voice.status.hidden = !deps.selected();
     const available = editor && auth();
     if (voiceContext && (!editor || !voiceCurrent())) { voice.stop(); voiceContext = null; }
     voiceStart.disabled = !available || working || !!closeTicket;
@@ -240,7 +243,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     getState: () => editor,
     isBusy: () => working,
     refresh: render,
-    dispose() { disposed = true; voice.dispose(); voiceContext = null; voiceChoices = null; editor = null; pending = null; owner = null; closeTicket = null; notice = '';
+    dispose() { disposed = true; voice.dispose(); voice.status.remove(); voiceContext = null; voiceChoices = null; editor = null; pending = null; owner = null; closeTicket = null; notice = '';
       tagInputs.forEach(({ node }) => { node.onchange = null; }); tagInputs = []; candidates = null; candidateContext = null; candidateView = null;
       tagField.replaceChildren(); tagNotice.textContent = '';
       title.oninput = body.oninput = null; title.value = body.value = ''; root.remove(); },

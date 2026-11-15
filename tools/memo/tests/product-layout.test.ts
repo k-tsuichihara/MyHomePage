@@ -159,6 +159,13 @@ it.each([1440, 390])('同じ製品HTMLのfake cloud配置：幅%s', async width 
     // 同じ製品HTML/CSSを使い、SDK/通信だけを既存fake compositionへ差し替える。
     const page = await fakeProduct(context, 'cloud-assign-edit');
     await page.locator('#product-cloud-items').waitFor();
+    const beforeVoice = await page.evaluate('fixture.rpcNames.slice()');
+    await page.getByRole('button', { name: '音声メモ', exact: true }).click();
+    await page.locator('#product-session > [role="status"]').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).waitFor();
+    expect(await page.locator('#product-cloud-editor').isVisible()).toBe(false);
+    expect(await page.locator('#product-cloud-items').isVisible()).toBe(true);
+    expect(await page.evaluate('fixture.rpcNames.slice()')).toEqual(beforeVoice);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
     expect(await page.locator('#product-cloud-items .card-meta').first().textContent()).toContain('既存クラウドタグ');
     await page.getByLabel('クラウドの検索', { exact: true }).fill('クラウド');
     expect(await page.locator('#product-cloud-items .card-meta').first().textContent()).toContain('既存クラウドタグ');

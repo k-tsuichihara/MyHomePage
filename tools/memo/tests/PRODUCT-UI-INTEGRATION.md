@@ -27,6 +27,8 @@
 
 レビュー修正後の最終結果：typecheck PASS、Vitest 59ファイル/1,927件 PASS、既存Playwright E2E 83件 PASS、local/cloud product build PASS、`git diff --check` PASS。製品レイアウト6件にはPC/スマホ×local/fake cloud、hidden属性のみのタイトル追従、初期復元UNKNOWNからの認証modal終了を含む。タグ検証エラー・非対応音声通知・検索後のカードタグ表示も製品HTMLで検証する。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT/実マイク試験は未実施。
 
+cloud音声の追加レビュー対応：認識器非対応で新規editorを生成しない場合も、通知要素はeditor外のcloud共通領域で表示する。local選択時は非表示、dispose時は解放する。PC/スマホの製品回帰で、非対応通知・一覧維持・editor非生成・追加RPC0・local write0を確認した。この追加修正後のtypecheck、関連Vitest 2ファイル/292件、local/cloud product build、diffチェックはPASS。上記の全Vitest/E2E結果は直前のレビュー修正時の結果であり、この表示位置修正では関連回帰を再実行した。
+
 PC 1440px/スマホ390pxの製品HTML/CSSをChromiumで確認する。専用Contextの実localStorage保存、モーダル4機能、固定領域/スクロール、未保存確認Esc取消、タグ改名取消の無書込、fake cloudの一覧/タグ管理/編集を検証する。既存のIME/音声・初期復元/単件回復・Auth/generation/UNKNOWN/dispose回帰を再利用し、source draw.ioは変更しない。画像は合成データだけで`.product/`へ保存し、Git/公開へ含めない。
 
 Q04はPR #102後のオーナー判断でCOMPLETE、R03も実利用データ移行を公開条件から外してCOMPLETE。**Q05は正式開始前**。レイアウト未完成時のlocal操作は参考結果で、正式UAT PASSへ計上しない。本変更はAIの製品候補完成範囲であり、Human UAT・実通信・公開は行わない。single-rpc/完全provenanceは未認定・延期のまま。
