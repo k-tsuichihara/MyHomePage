@@ -17,11 +17,28 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => { await browser?.close(); });
 
+it('hidden属性だけの変更でもページタイトルが現在のviewへ追従する', async () => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  try {
+    const url = await prepareProductPreview(context, root, false), page = await context.newPage();
+    await page.goto(url); await page.locator('#new').waitFor({ state: 'visible' });
+    await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ一覧');
+    // 子要素の追加・削除やinert変更に頼らず、既存viewの表示属性だけを変更する。
+    for (const [id, title] of [['detail-view', 'メモ詳細'], ['editor-view', 'メモ編集'], ['list-view', 'メモ一覧']]) {
+      await page.evaluate(id => {
+        for (const view of ['list-view', 'detail-view', 'editor-view']) document.getElementById(view)!.hidden = view !== id;
+      }, id!);
+      await expect.poll(() => page.locator('#page-title').textContent()).toBe(title);
+    }
+  } finally { await context.close(); }
+}, 15000);
+
 it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width => {
   const context = await browser.newContext({ viewport: { width, height: width === 1440 ? 950 : 844 }, acceptDownloads: true, serviceWorkers: 'block' });
   try {
     const url = await prepareProductPreview(context, root, false), page = await context.newPage();
     await page.goto(url); await page.locator('#new').waitFor({ state: 'visible' });
+    await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ一覧');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).count()).toBe(1);
     expect(await page.getByRole('button', { name: 'JSONバックアップを作成' }).isVisible()).toBe(false);
@@ -68,12 +85,16 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     await page.locator('#cards').evaluate(node => { node.scrollTop = 400; });
     expect(await page.locator('#cards').evaluate(node => node.scrollTop)).toBeGreaterThan(0);
     expect(await page.locator('#search').evaluate(node => node.getBoundingClientRect().top)).toBe(top);
-    await page.locator('#cards button.open-card').first().click(); await page.locator('#edit').click();
+    await page.locator('#cards button.open-card').first().click();
+    await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ詳細');
+    await page.locator('#edit').click();
+    await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ編集');
     await page.locator('#memo-body').fill('未保存の入力'); await page.locator('#back').click();
     await page.getByRole('dialog', { name: '操作の確認', exact: true }).waitFor();
     await page.keyboard.press('Escape');
     expect(await page.locator('#memo-body').inputValue()).toBe('未保存の入力');
     await page.locator('#save').click(); await page.locator('#back').click();
+    await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ一覧');
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-list-${width}.png`, root)) });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   } finally { await context.close(); }

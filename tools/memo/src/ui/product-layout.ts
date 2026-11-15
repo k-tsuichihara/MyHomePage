@@ -21,7 +21,8 @@ export function mountProductLayout(doc: Document) {
     const input = doc.getElementById(id) as HTMLInputElement | null;
     if (!input) return;
     const apply = () => doc.querySelectorAll<HTMLElement>(target).forEach(row => {
-      row.hidden = !(row.textContent ?? '').toLocaleLowerCase().includes(input.value.toLocaleLowerCase());
+      const hidden = !(row.textContent ?? '').toLocaleLowerCase().includes(input.value.toLocaleLowerCase());
+      if (row.hidden !== hidden) row.hidden = hidden;
     });
     input.addEventListener('input', apply);
     return apply;
@@ -57,7 +58,7 @@ export function mountProductLayout(doc: Document) {
   // 既存renderが作るDOMの表示状態だけを追従し、Authやeditor世代を複製しない。
   const observer = new win.MutationObserver(update);
   const scope = doc.querySelector('.memo-product');
-  if (scope) observer.observe(scope, { childList: true, subtree: true, attributes: true, attributeFilter: ['inert'] });
+  if (scope) observer.observe(scope, { childList: true, subtree: true, attributes: true, attributeFilter: ['inert', 'hidden'] });
   if (confirm) observer.observe(confirm, { attributes: true, attributeFilter: ['hidden'] });
   const cleanup = () => { observer.disconnect(); doc.removeEventListener('click', click); doc.removeEventListener('cancel', blockBusyClose, true); confirm?.removeEventListener('cancel', cancel); };
   win.addEventListener('pagehide', event => { if (!event.persisted) cleanup(); });
