@@ -5,11 +5,11 @@ import { MEMO_RPC_ORIGIN } from '../src/cloud-rpc-sender';
 export const PRODUCT_PREVIEW_ORIGIN = 'https://memo-product.localhost';
 export const PRODUCT_PREVIEW_PATH = '/tools/memo/memo.html';
 
-/** localだけdead proxyを併用する。cloudの既存HTTPS通信設定は変更しない。 */
+/** localは通常のウィンドウサイズに追従し、dead proxyを併用する。cloud設定は変更しない。 */
 export function productPreviewOptions(cloud: boolean) {
   return { headless: false, serviceWorkers: 'block' as const, acceptDownloads: false,
     args: ['--disable-background-networking', '--disable-sync', '--no-first-run'],
-    ...(!cloud ? { proxy: { server: 'http://127.0.0.1:9', bypass: '127.0.0.1' } } : {}) };
+    ...(!cloud ? { viewport: null, proxy: { server: 'http://127.0.0.1:9', bypass: '127.0.0.1' } } : {}) };
 }
 
 /** 製品候補と既存共通資産だけを配信する。任意URLをファイルパスへ変換しない。 */

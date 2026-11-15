@@ -18,8 +18,9 @@ it('1コマンドがlocal成果物をbuildして固定headed起動する構成',
   expect(pkg.scripts['preview:product']).toBe('npm run build:product && node .product/local/preview.mjs');
   expect(pkg.scripts['preview:product-cloud']).toBe('npm run build:product-cloud && node .product/cloud/preview.mjs');
   for (const mode of ['local', 'cloud']) expect(await readFile(new URL(`.product/${mode}/preview.mjs`, root), 'utf8')).toContain('launchPersistentContext');
-  expect(productPreviewOptions(false)).toMatchObject({ headless: false, serviceWorkers: 'block', proxy: { server: 'http://127.0.0.1:9' } });
+  expect(productPreviewOptions(false)).toMatchObject({ headless: false, viewport: null, serviceWorkers: 'block', proxy: { server: 'http://127.0.0.1:9' } });
   expect(productPreviewOptions(true)).not.toHaveProperty('proxy');
+  expect(productPreviewOptions(true)).not.toHaveProperty('viewport');
   const code = await readFile(new URL('.product/memo-app.js', root), 'utf8');
   expect(code).not.toMatch(/createMemoSdkAuth|sb_publishable_|\/auth\/v1\/|memo_load_snapshot/);
 });
@@ -41,6 +42,31 @@ it.each([false, true])('既存route方針を維持する：cloud=%s', async clou
   const headers = page.fulfill.mock.calls[0]![0].headers;
   expect(headers['Content-Security-Policy']).toBe(cloud ? undefined : "connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'");
 });
+
+it('local製品previewはネイティブウィンドウの幅・高さ変更に追従する', async () => {
+  const owner = await createProfileOwner(await prepareProfileBase(fileURLToPath(root)));
+  const profile = await owner.create();
+  await runOwnedCase(owner, profile, async () => {
+    // UATと同じheaded設定でウィンドウ自体を変更する。viewportのエミュレーションは使わない。
+    const context = await chromium.launchPersistentContext(profile, productPreviewOptions(false));
+    try {
+      const url = await prepareProductPreview(context, root, false), page = await context.newPage();
+      await page.goto(url); await page.locator('#new').waitFor({ state: 'visible' });
+      expect(page.viewportSize()).toBeNull();
+      const cdp = await context.newCDPSession(page);
+      const { windowId } = await cdp.send('Browser.getWindowForTarget');
+      await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+      await cdp.send('Browser.setWindowBounds', { windowId, bounds: { width: 1200, height: 900 } });
+      await expect.poll(() => page.evaluate(() => outerWidth)).toBe(1200);
+      const large = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+      await cdp.send('Browser.setWindowBounds', { windowId, bounds: { width: 900, height: 700 } });
+      await expect.poll(() => page.evaluate(() => innerWidth)).toBeLessThan(large.width);
+      await expect.poll(() => page.evaluate(() => innerHeight)).toBeLessThan(large.height);
+      expect(await page.locator('#new').isVisible()).toBe(true);
+      expect(await page.locator('#product-session').count()).toBe(0);
+    } finally { await context.close(); }
+  }, () => {});
+}, 20000);
 
 it('同じ製品配信・専用profileで実localStorage保存と再読込ができ、外部通信とAuth UIはない', async () => {
   const owner = await createProfileOwner(await prepareProfileBase(fileURLToPath(root)));
