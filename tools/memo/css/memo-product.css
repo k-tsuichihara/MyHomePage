@@ -83,16 +83,9 @@ html[data-product-layout] body:has(.memo-product) .memo-page{padding:12px 14px}.
 .memo-product .detail-navigation{display:contents}
 .memo-product .detail-navigation #back{align-self:flex-start;margin-bottom:10px}
 .memo-product #product-auth-open{min-width:250px}
-.memo-product .detail-navigation [data-open-dialog=backup-dialog],.memo-product .detail-navigation #reload{position:absolute;right:0;width:250px}
-.memo-product .detail-navigation [data-open-dialog=backup-dialog]{top:76px;right:258px}
-.memo-product .detail-navigation #reload{top:76px}
-.memo-product #trash-view{position:absolute;top:76px;right:516px}
-.memo-product .cloud-trash-toggle,.memo-product .cloud-normal-toggle{position:absolute;top:76px;right:0}
 html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-state,html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-trash-state{display:none}
 .memo-product .statuses [data-routine=true]{display:none!important}
 .memo-product .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([hidden]))){display:none}
-.memo-product .voice-memo-button{background:#bd283b;color:white;border-color:#bd283b}
-.memo-product .voice-memo-button:hover{background:#9f2031}
 .memo-product .list-options{display:grid;grid-template-columns:minmax(0,1fr) 250px;column-gap:12px;row-gap:0}
 .memo-product .tag-controls,.memo-product .sort-control{display:contents}
 .memo-product .tag-controls>.section-heading{grid-column:1;grid-row:1;justify-self:start;justify-content:flex-start;gap:12px;margin-bottom:12px}
@@ -106,4 +99,49 @@ html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-
 .memo-product .tag-controls>#missing-tags{grid-column:1/-1;grid-row:4}
 .memo-product .tag-chip-strip,.memo-product .cloud-filter-wrap{margin-top:12px}
 .memo-product .sort-control select{appearance:none;padding-right:42px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath d='m2 2 5 5 5-5' fill='none' stroke='%2352647b' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center}
+}
+
+/* 切替ボタンは同じ領域に置く。DOM所有位置・処理の境界は変えない。 */
+.memo-product .list-operation-group{display:flex;gap:8px;align-items:center}
+.memo-product .list-summary{min-height:44px}
+.memo-product button.voice-memo-button{background:#bd283b;color:white;border-color:#bd283b}
+.memo-product button.voice-memo-button:hover{background:#9f2031}
+.memo-product .mobile-reset-label{display:none}
+@media(min-width:651px){
+.memo-product .list-operation-group{position:absolute;top:76px;right:0;flex-wrap:nowrap}
+.memo-product .detail-navigation [data-open-dialog=backup-dialog],.memo-product .detail-navigation #reload{position:static;width:250px}
+.memo-product #trash-view,.memo-product #normal-view{position:static;width:74px;padding:9px 4px;white-space:nowrap}
+.memo-product .cloud-operation-group{position:absolute;top:76px;right:0;width:192px}
+.memo-product .cloud-trash-toggle,.memo-product .cloud-normal-toggle{position:static;width:192px}
+}
+@media(max-width:650px){
+.memo-product .list-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.memo-product #list-voice-slot>button{width:100%}
+.memo-product #new,.memo-product #list-voice-slot>button,.memo-product .cloud-actions button,.memo-product #product-auth-open,.memo-product .tag-chips label,.memo-product #filters-all{min-height:44px}
+.memo-product .detail-navigation{flex-direction:column;align-items:stretch}
+.memo-product .detail-navigation #back{align-self:flex-start}
+.memo-product .list-operation-group{flex-wrap:wrap;width:100%}
+.memo-product .list-operation-group button{flex:1 1 160px;min-height:44px;white-space:nowrap}
+.memo-product .cloud-operation-group{display:flex;gap:8px;margin-bottom:10px}
+.memo-product .cloud-operation-group button{min-height:44px;flex:1}
+.memo-product .tag-controls>.section-heading{display:flex;grid-column:1/-1;grid-row:1;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.memo-product .tag-controls>.section-heading>h2{margin:0}
+.memo-product .tag-controls>.section-heading>button{min-height:44px}
+.memo-product .sort-control{display:contents}
+.memo-product .sort-control>.sort-caption{display:block;grid-column:1;grid-row:2;align-self:center;font-size:17px;font-weight:650}
+.memo-product .sort-control>.mobile-sort-caption{display:none}
+.memo-product .sort-control select{grid-column:2;grid-row:2;width:100%;min-height:44px}
+.memo-product .tag-controls>.tag-search-row{grid-column:1/-1;grid-row:3;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.memo-product .tag-search-row>button{justify-self:start;min-height:44px}
+.memo-product .tag-chip-strip,.memo-product .cloud-filter-wrap{margin-top:12px}
+.memo-product .desktop-reset-label{display:none}.memo-product .mobile-reset-label{display:inline}
+}
+@media(max-width:380px){
+.memo-product .product-heading{flex-wrap:wrap;gap:8px}
+.memo-product .product-heading>div{flex:1 1 100%}
+.memo-product #product-auth-open{margin-left:auto}
+.memo-product .sort-control>.sort-caption{grid-column:1/-1;grid-row:2}
+.memo-product .sort-control select{grid-column:1/-1;grid-row:3}
+.memo-product .tag-controls>.tag-search-row{grid-row:4;grid-template-columns:minmax(0,1fr) auto}
+.memo-product .tag-controls>.tag-chip-strip,.memo-product .tag-controls>.cloud-filter-wrap{grid-row:5}
 }

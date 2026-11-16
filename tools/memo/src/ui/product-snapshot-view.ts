@@ -163,8 +163,13 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     };
     const normal = button('クラウド通常一覧', () => { if (root.contains(normal)) navigate('normal'); });
     const trash = button('クラウドゴミ箱', () => { if (root.contains(trash)) navigate('trash'); });
-    normal.setAttribute('aria-pressed', String(view === 'normal')); trash.setAttribute('aria-pressed', String(view === 'trash')); root.append(normal, trash);
-    if (productLayout) { normal.hidden = view === 'normal'; trash.hidden = view === 'trash'; }
+    normal.setAttribute('aria-pressed', String(view === 'normal')); trash.setAttribute('aria-pressed', String(view === 'trash'));
+    if (productLayout) {
+      normal.hidden = view === 'normal'; trash.hidden = view === 'trash';
+      normal.className = 'cloud-normal-toggle'; trash.className = 'cloud-trash-toggle';
+      const operations = doc.createElement('div'); operations.className = 'cloud-operation-group'; operations.setAttribute('role', 'group'); operations.setAttribute('aria-label', 'クラウド一覧の切替');
+      operations.append(normal, trash); root.append(operations);
+    } else root.append(normal, trash);
     const count = text('p', ''); count.setAttribute('role', 'status');
     const renderRows = () => {
       if (!current(token)) return;
@@ -244,12 +249,14 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       const reset = button('クラウドのタグ絞込を解除', () => { if (root.contains(reset)) query([]); });
       search.oninput = () => query(); sort.onchange = () => query();
       if (productLayout) {
+        reset.setAttribute('aria-label', 'クラウドのタグ絞込を解除');
+        const desktopReset = doc.createElement('span'); desktopReset.className = 'desktop-reset-label'; desktopReset.textContent = reset.textContent;
+        const mobileReset = doc.createElement('span'); mobileReset.className = 'mobile-reset-label'; mobileReset.textContent = '絞込解除'; reset.replaceChildren(desktopReset, mobileReset);
         controls.className = 'list-controls'; search.placeholder = 'タイトル・本文・タグ名で検索…';
-        trash.className = 'cloud-trash-toggle'; normal.className = 'cloud-normal-toggle';
         const caption = doc.createElement('span'); caption.className = 'sort-caption pc-sort-caption'; caption.textContent = '並び替え';
         const mobileCaption = doc.createElement('span'); mobileCaption.className = 'mobile-sort-caption'; mobileCaption.textContent = 'クラウドの並び順';
         sortLabel.firstChild?.remove(); sortLabel.prepend(caption, mobileCaption);
-        const toolbar = doc.createElement('div'); toolbar.className = 'list-toolbar'; toolbar.append(searchLabel, normal, trash);
+        const toolbar = doc.createElement('div'); toolbar.className = 'list-toolbar'; toolbar.append(searchLabel);
         const options = doc.createElement('div'); options.className = 'list-options';
         const tags = doc.createElement('div'); tags.className = 'tag-controls';
         tagHeading = doc.createElement('div'); tagHeading.className = 'section-heading'; tagHeading.append(text('h2', 'タグで絞り込み'));
