@@ -148,7 +148,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const selected = cloud.target.current().target === 'cloud';
     if (productLayout) {
       doc.querySelector<HTMLElement>('.memo-product')!.dataset.source = selected ? 'cloud' : 'local';
-      if (authEntry) authEntry.textContent = selected ? '保存先：クラウド / アカウント' : 'ログイン / 保存先';
+      if (authEntry) authEntry.textContent = selected ? 'ログアウト/保存先：クラウド' : 'ログイン/保存先：ローカル';
     }
     local.setCloudSelected?.(selected);
     source.textContent = selected ? cloudEditor
@@ -249,6 +249,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const selection = cloud.target.current();
     snapshotView?.clear();
     selectionTicket = {};
+    // 明示再読取へ進んだら前の成功案内だけを片付ける。不明要求・失敗通知は残す。
+    if (stateRecord?.result?.kind === 'completed' && stateRecord.result.result.kind === 'ok') stateStatus.textContent = '';
     loading = true; cloudStatus.textContent = 'クラウド読取中です。書込は行いません。';
     refresh();
     try {
@@ -374,6 +376,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   if (productLayout) {
     const actions = doc.createElement('div'); actions.className = 'cloud-actions';
     newCloud.textContent = '＋ 新規作成'; newCloudVoice.textContent = '音声メモ';
+    const mic = doc.createElement('span'); mic.textContent = '🎙'; mic.setAttribute('aria-hidden', 'true');
+    newCloudVoice.className = 'voice-memo-button'; newCloudVoice.setAttribute('aria-label', '音声メモ'); newCloudVoice.prepend(mic, ' ');
     actions.append(newCloud, newCloudVoice); root.prepend(actions);
   }
   let unsubscribe = () => {};

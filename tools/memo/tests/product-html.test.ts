@@ -209,7 +209,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
     await page.locator('#back').click();
     await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = false; });
-    await page.getByRole('button', { name: '新規音声メモ', exact: true }).click();
+    await page.getByRole('button', { name: '音声メモ', exact: true }).click();
     await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '合成音声追記');
     expect(await page.locator('#memo-title').inputValue()).toMatch(/^音声メモ-\d{8}-\d{4}$/);
     expect(await page.locator('#memo-body').inputValue()).toBe('合成音声追記');

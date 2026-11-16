@@ -1,5 +1,18 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 PC一覧の7項目調整
+
+- 保存先ボタンはC05の現在選択に従い「ログイン/保存先：ローカル」「ログアウト/保存先：クラウド」と表示する。認証や切替の処理は変更しない。
+- PCではidle/読込完了/clean draftの定型通知を省略し、空の状態領域を畳む。local書込成功通知だけは次の明示操作で閉じ、次の書込結果では再表示する。cloudの明示再読取では前の成功案内だけを片付ける。error/rejected/UNKNOWNはこの終了対象に含めない。処理結果や未解決要求は変更しない。
+- localの既存「バックアップ・復元」「再読み込み」は保存先ボタンの下、右端へ縦配置する。DOMの所有位置とinertガードは維持する。cloudへlocalバックアップやlocal再読込を露出せず、既存のcloud読取経路も変更しない。
+- local/cloudの音声入口はマイクアイコン＋「音声メモ」。PCの背景を赤にし、既存音声開始処理へ委譲する。
+- タグ管理を「タグで絞り込み」の右隣の見出し行へ配置し、タグ検索と選択チップに余白を付ける。
+- selectの矢印を右端から16px内側へ配置し、右paddingを42px確保する。選択肢と並び替え処理は維持する。
+
+PCの配置・装飾・定型通知抑制は651px以上へ限定する。共通ボタンの文言/アイコンは同一入口で使い、スマホの配置や操作仕様は変更しない。draw.io正本・保存/認証/cloud/復元/音声の処理契約・公開memo.htmlを変更しない。製品ChromiumではPC/スマホ回帰、local/cloudの表示、UNKNOWN保持、成功通知終了、右側配置、モーダル起動、タグ絞込と並び替えを確認する。合成データだけを使用し、実通信・Human UATは実施しない。
+
+本調整の最終AI Gate：typecheck、Vitest 59ファイル/1,929件（製品レイアウト8件を含む）、既存Playwright E2E83件、local/cloud product build、`git diff --check`はPASS。実Supabase/Auth/RPC/DB/SQL通信0件。自動ブラウザ試験をHuman UAT PASSへ計上しない。
+
 ## Q05前の製品レイアウト統合（現行正本）
 
 画面設計は現行[layout_review2.drawio](../doc/v1.1.0/memo_v1_1_layout_review2.drawio)の7ページ。archiveを使用しない。製品HTMLは`scripts/product-ui.html`へ分離し、メモリ検証用の簡易HTMLを製品へ配信しない。既存ID・controller・Storage/Auth/C04/C05の責務を維持する。
@@ -31,7 +44,7 @@ cloud音声の追加レビュー対応：認識器非対応で新規editorを生
 
 PC 1440px/スマホ390pxの製品HTML/CSSをChromiumで確認する。専用Contextの実localStorage保存、モーダル4機能、固定領域/スクロール、未保存確認Esc取消、タグ改名取消の無書込、fake cloudの一覧/タグ管理/編集を検証する。既存のIME/音声・初期復元/単件回復・Auth/generation/UNKNOWN/dispose回帰を再利用し、source draw.ioは変更しない。画像は合成データだけで`.product/`へ保存し、Git/公開へ含めない。
 
-Q04はPR #102後のオーナー判断でCOMPLETE、R03も実利用データ移行を公開条件から外してCOMPLETE。**Q05は正式開始前**。レイアウト未完成時のlocal操作は参考結果で、正式UAT PASSへ計上しない。本変更はAIの製品候補完成範囲であり、Human UAT・実通信・公開は行わない。single-rpc/完全provenanceは未認定・延期のまま。
+Q04はPR #102後のオーナー判断でCOMPLETE、R03も実利用データ移行を公開条件から外してCOMPLETE。**初回レイアウト統合時点ではQ05は正式開始前**。レイアウト未完成時のlocal操作は参考結果で、正式UAT PASSへ計上しない。今回のPC UAT指摘対応もAI Gateと人間の受入を分離し、AI側ではHuman UAT・実通信・公開を行わない。single-rpc/完全provenanceは未認定・延期のまま。
 
 ## Q05 local UAT起動導線
 

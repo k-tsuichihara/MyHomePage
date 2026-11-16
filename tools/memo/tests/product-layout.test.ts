@@ -26,6 +26,48 @@ async function fakeProduct(context: BrowserContext, mode: string) {
   const page = await context.newPage(); page.setDefaultTimeout(3000); await page.goto(url); return page;
 }
 
+it('PCの定型通知を省略してもlocal/cloudのUNKNOWNは操作後も表示する', async () => {
+  for (const mode of ['cloud-edit-signed-out', 'cloud-failure']) {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, mode);
+      if (mode === 'cloud-edit-signed-out') {
+        await page.locator('#new').waitFor();
+        expect(await page.locator('.statuses').isVisible()).toBe(false);
+        await page.evaluate('fixture.failWrites()'); await page.evaluate('fixture.saveTag()');
+        await page.locator('#save-status').filter({ hasText: '保存結果は不明' }).waitFor();
+        await page.locator('#product-auth-open').click();
+        await page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
+        expect(await page.locator('#save-status').isVisible()).toBe(true);
+      } else {
+        await page.locator('#product-cloud-state').filter({ hasText: 'UNKNOWN' }).waitFor();
+        await page.locator('#product-auth-open').click();
+        await page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
+        expect(await page.locator('#product-cloud-state').isVisible()).toBe(true);
+        expect(await page.locator('#product-cloud-trash-state').isVisible()).toBe(false);
+      }
+    } finally { await context.close(); }
+  }
+}, 15000);
+
+it('cloudの明示再読取では古い成功案内だけを片付ける', async () => {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-pin');
+    await page.locator('#product-cloud-items button.open-card').first().click();
+    await page.getByRole('button', { name: 'ピン留め', exact: true }).click();
+    await page.locator('#product-cloud-trash-state').filter({ hasText: '要求の成功を確認' }).waitFor();
+    await page.locator('#product-auth-open').click();
+    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
+    await page.locator('#product-auth-open').click();
+    await page.getByRole('button', { name: 'クラウドを選択', exact: true }).click();
+    await page.locator('#product-cloud-items').waitFor();
+    expect(await page.locator('#product-cloud-trash-state').textContent()).toBe('');
+    expect(await page.locator('#product-cloud-trash-state').isVisible()).toBe(false);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_change_state', 'memo_load_snapshot']);
+  } finally { await context.close(); }
+}, 15000);
+
 it('初期復元UNKNOWNから認証画面を閉じて回復操作へ戻れる', async () => {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   try {
@@ -81,7 +123,26 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     const url = await prepareProductPreview(context, root, false), page = await context.newPage();
     await page.goto(url); await page.locator('#new').waitFor({ state: 'visible' });
     await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ一覧');
-    await page.getByRole('button', { name: '新規音声メモ', exact: true }).click();
+    expect(await page.locator('#product-auth-open').textContent()).toBe('ログイン/保存先：ローカル');
+    if (width === 1440) {
+      expect(await page.locator('.statuses').isVisible()).toBe(false);
+      const boxes = await page.evaluate(() => {
+        const box = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { right: r.right, top: r.top, bottom: r.bottom }; };
+        const select = getComputedStyle(document.querySelector('#sort')!);
+        return { auth: box('#product-auth-open'), backup: box('[data-open-dialog="backup-dialog"]'), reload: box('#reload'),
+          heading: box('.tag-controls h2'), manager: box('.tag-controls .section-heading button'),
+          search: box('.tag-search-row'), all: box('#filters-all'), padding: parseFloat(select.paddingRight), appearance: select.appearance,
+          voice: getComputedStyle(document.querySelector('#list-voice-slot button')!).backgroundColor };
+      });
+      expect(boxes.backup.right).toBe(boxes.auth.right); expect(boxes.backup.top).toBeGreaterThan(boxes.auth.bottom);
+      expect(boxes.reload.top).toBeGreaterThan(boxes.backup.bottom);
+      expect(Math.abs(boxes.heading.top - boxes.manager.top)).toBeLessThan(15);
+      expect(boxes.all.top - boxes.search.bottom).toBeGreaterThanOrEqual(12);
+      expect(boxes.padding).toBeGreaterThanOrEqual(40); expect(boxes.appearance).toBe('none');
+      expect(boxes.voice).toBe('rgb(189, 40, 59)');
+    }
+    expect(await page.locator('#list-voice-slot button [aria-hidden=true]').textContent()).toBe('🎙');
+    await page.getByRole('button', { name: '音声メモ', exact: true }).click();
     await page.getByRole('status').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).waitFor();
     expect(await page.locator('#editor-view').isVisible()).toBe(false);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -96,11 +157,13 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     await page.locator('#memo-title').fill('画面確認の合成メモ'); await page.locator('#memo-body').fill('日本語の本文を保存します。');
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-editor-${width}.png`, root)) });
     await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
+    if (width === 1440) expect(await page.locator('#save-status').isVisible()).toBe(true);
     await page.getByRole('button', { name: '音声で本文へ追記', exact: true }).click();
     expect(await page.getByRole('status').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).isVisible()).toBe(true);
     expect(await page.locator('#detail-view').isVisible()).toBe(true);
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-detail-${width}.png`, root)) });
     await page.locator('#back').click();
+    if (width === 1440) expect(await page.locator('#save-status').isVisible()).toBe(false);
     let raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     expect(JSON.parse(raw!).memos[0].title).toBe('画面確認の合成メモ');
     await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
@@ -134,6 +197,8 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
       localStorage.setItem('myhomepage.memo.data.v2', JSON.stringify(data));
     });
     await page.reload(); await page.locator('#cards li').first().waitFor();
+    await page.locator('#sort').selectOption('created-asc');
+    expect(await page.locator('#sort').inputValue()).toBe('created-asc');
     const top = await page.locator('#search').evaluate(node => node.getBoundingClientRect().top);
     await page.locator('#cards').evaluate(node => { node.scrollTop = 400; });
     expect(await page.locator('#cards').evaluate(node => node.scrollTop)).toBeGreaterThan(0);
@@ -159,6 +224,7 @@ it.each([1440, 390])('同じ製品HTMLのfake cloud配置：幅%s', async width 
     // 同じ製品HTML/CSSを使い、SDK/通信だけを既存fake compositionへ差し替える。
     const page = await fakeProduct(context, 'cloud-assign-edit');
     await page.locator('#product-cloud-items').waitFor();
+    expect(await page.locator('#product-auth-open').textContent()).toBe('ログアウト/保存先：クラウド');
     const beforeVoice = await page.evaluate('fixture.rpcNames.slice()');
     await page.getByRole('button', { name: '音声メモ', exact: true }).click();
     await page.locator('#product-session > [role="status"]').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).waitFor();
@@ -184,6 +250,14 @@ it.each([1440, 390])('同じ製品HTMLのfake cloud配置：幅%s', async width 
     expect(await page.evaluate('fixture.rpcNames.slice()')).toEqual(beforeTag);
     await tagDialog.getByRole('button', { name: 'タグ編集をキャンセル', exact: true }).click();
     expect(await page.locator('#product-session > #product-cloud-trash-state').count()).toBe(1);
+    if (width === 1440) {
+      await page.getByLabel('クラウドの並び順', { exact: true }).selectOption('created-asc');
+      expect(await page.getByLabel('クラウドの並び順', { exact: true }).inputValue()).toBe('created-asc');
+      const beforeFilter = await page.evaluate('fixture.rpcNames.slice()');
+      await page.getByLabel('クラウド絞込タグ：既存クラウドタグ', { exact: true }).check();
+      expect(await page.locator('#product-cloud-items button.open-card').count()).toBe(1);
+      expect(await page.evaluate('fixture.rpcNames.slice()')).toEqual(beforeFilter);
+    }
     if (width === 390) {
       const before = await page.evaluate('fixture.rpcNames.slice()');
       await page.locator('#product-cloud-items details summary').first().click();
