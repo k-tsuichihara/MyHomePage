@@ -76,22 +76,34 @@ html[data-product-layout] body:has(.memo-product) .memo-page{padding:12px 14px}.
 }
 
 /* Q05 PC一覧の配置調整。スマホの配置・既存操作ガードは維持する。 */
+.memo-product .pc-sort-caption{display:none}
 @media(min-width:651px){
 .memo-product{position:relative}
-.memo-product .product-heading{align-items:flex-start;min-height:138px}
+.memo-product .product-heading{align-items:flex-start;min-height:124px}
 .memo-product .detail-navigation{display:contents}
 .memo-product .detail-navigation #back{align-self:flex-start;margin-bottom:10px}
 .memo-product #product-auth-open{min-width:250px}
 .memo-product .detail-navigation [data-open-dialog=backup-dialog],.memo-product .detail-navigation #reload{position:absolute;right:0;width:250px}
-.memo-product .detail-navigation [data-open-dialog=backup-dialog]{top:50px}
-.memo-product .detail-navigation #reload{top:98px}
+.memo-product .detail-navigation [data-open-dialog=backup-dialog]{top:76px;right:258px}
+.memo-product .detail-navigation #reload{top:76px}
+.memo-product #trash-view{position:absolute;top:76px;right:516px}
+.memo-product .cloud-trash-toggle,.memo-product .cloud-normal-toggle{position:absolute;top:76px;right:0}
 html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-state,html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-trash-state{display:none}
 .memo-product .statuses [data-routine=true]{display:none!important}
 .memo-product .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([hidden]))){display:none}
 .memo-product .voice-memo-button{background:#bd283b;color:white;border-color:#bd283b}
 .memo-product .voice-memo-button:hover{background:#9f2031}
-.memo-product .tag-controls>.section-heading{justify-content:flex-start;gap:12px}
+.memo-product .list-options{display:grid;grid-template-columns:minmax(0,1fr) 250px;column-gap:12px;row-gap:0}
+.memo-product .tag-controls,.memo-product .sort-control{display:contents}
+.memo-product .tag-controls>.section-heading{grid-column:1;grid-row:1;justify-self:start;justify-content:flex-start;gap:12px;margin-bottom:12px}
 .memo-product .tag-controls>.section-heading h2{margin:0}
+.memo-product .sort-control>.sort-caption{display:block;grid-column:1;grid-row:1;justify-self:end;align-self:start;font-size:17px;font-weight:650;line-height:44px}
+.memo-product .sort-control>.mobile-sort-caption{display:none}
+.memo-product .sort-control select{grid-column:2;grid-row:1;width:250px;height:44px;align-self:start}
+.memo-product .tag-controls>.tag-search-row{grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px}
+.memo-product .tag-search-row>button{justify-self:start}
+.memo-product .tag-controls>.tag-chip-strip,.memo-product .tag-controls>.cloud-filter-wrap{grid-column:1/-1;grid-row:3}
+.memo-product .tag-controls>#missing-tags{grid-column:1/-1;grid-row:4}
 .memo-product .tag-chip-strip,.memo-product .cloud-filter-wrap{margin-top:12px}
 .memo-product .sort-control select{appearance:none;padding-right:42px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath d='m2 2 5 5 5-5' fill='none' stroke='%2352647b' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center}
 }

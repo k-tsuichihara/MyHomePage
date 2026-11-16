@@ -35,7 +35,7 @@ it('headed cloud製品画面も6幅で追従し、PC7項目とスマホ境界を
     const cdp = await context.newCDPSession(page), { windowId } = await cdp.send('Browser.getWindowForTarget');
     await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
     const samples = [];
-    for (const width of [1200, 992, 900, 800, 650, 390]) {
+    for (const width of [1200, 992, 900, 800, 651, 650, 390]) {
       const frame = await page.evaluate(() => outerWidth - innerWidth);
       await cdp.send('Browser.setWindowBounds', { windowId, bounds: { width: width + frame, height: 950 } });
       await page.waitForTimeout(150);
@@ -51,17 +51,22 @@ it('headed cloud製品画面も6幅で追従し、PC7項目とスマホ境界を
         const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
         return { width, nativeWidth, emulated, scroll: document.documentElement.scrollWidth,
           roots: ['body', 'main', '.memo-page', '.memo-product'].map(rect),
-          controls: ['.cloud-actions', '#product-cloud-snapshot .list-controls', '#product-cloud-snapshot .memo-search', '#product-cloud-snapshot .tag-search-row', '#product-cloud-snapshot .sort-control'].map(rect),
+          controls: ['.cloud-actions', '#product-cloud-snapshot .list-controls', '#product-cloud-snapshot .memo-search', '#product-cloud-snapshot .tag-search-row', '#product-cloud-snapshot .sort-control select'].map(rect),
           heading: rect('#product-cloud-snapshot .tag-controls h2'), manager: rect('#product-cloud-snapshot .tag-controls .section-heading button'),
+          search: rect('#product-cloud-snapshot .tag-search-row'), clear: rect('#product-cloud-snapshot .tag-search-row button'), sort: rect('#product-cloud-snapshot .sort-control select'),
+          caption: rect('#product-cloud-snapshot .pc-sort-caption'),
+          bold: style('#product-cloud-snapshot .pc-sort-caption').fontWeight, headingBold: style('#product-cloud-snapshot .tag-controls h2').fontWeight,
           sortPadding: parseFloat(style('#product-cloud-snapshot .sort-control select').paddingRight), voiceColor: style('.cloud-actions .voice-memo-button').backgroundColor };
       }, { width, nativeWidth, emulated });
       expect(sample.scroll).toBeLessThanOrEqual(width);
       for (const box of [...sample.roots, ...sample.controls]) { expect(box.left).toBeGreaterThanOrEqual(0); expect(box.right).toBeLessThanOrEqual(width); }
-      expect(await page.locator('#product-auth-open').textContent()).toBe('ログアウト/保存先：クラウド');
+      expect(await page.locator('#product-auth-open').textContent()).toBe('ログアウト / 保存先：クラウド');
       expect(await page.locator('.cloud-actions .voice-memo-button [aria-hidden=true]').textContent()).toBe('🎙');
       if (width > 650) {
         expect(sample.voiceColor).toBe('rgb(189, 40, 59)'); expect(sample.sortPadding).toBeGreaterThanOrEqual(40);
         expect(sample.manager.left).toBeGreaterThan(sample.heading.right);
+        expect(sample.sort.left).toBe(sample.clear.left); expect(sample.caption.right).toBeLessThan(sample.sort.left); expect(sample.bold).toBe(sample.headingBold);
+        expect(sample.search.top - sample.manager.bottom).toBeGreaterThanOrEqual(12);
       }
       samples.push(sample); await page.screenshot({ path: fileURLToPath(new URL(`.product/width-cloud-${width}.png`, root)) });
       if (emulated) await cdp.send('Emulation.clearDeviceMetricsOverride');
@@ -169,19 +174,22 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     const url = await prepareProductPreview(context, root, false), page = await context.newPage();
     await page.goto(url); await page.locator('#new').waitFor({ state: 'visible' });
     await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ一覧');
-    expect(await page.locator('#product-auth-open').textContent()).toBe('ログイン/保存先：ローカル');
+    expect(await page.locator('#product-auth-open').textContent()).toBe('ログイン / 保存先：ローカル');
     if (width === 1440) {
       expect(await page.locator('.statuses').isVisible()).toBe(false);
       const boxes = await page.evaluate(() => {
-        const box = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { right: r.right, top: r.top, bottom: r.bottom }; };
+        const box = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { width: r.width, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
         const select = getComputedStyle(document.querySelector('#sort')!);
         return { auth: box('#product-auth-open'), backup: box('[data-open-dialog="backup-dialog"]'), reload: box('#reload'),
           heading: box('.tag-controls h2'), manager: box('.tag-controls .section-heading button'),
+          trash: box('#trash-view'), clear: box('#clear-tag-filters'), combo: box('#sort'),
           search: box('.tag-search-row'), all: box('#filters-all'), padding: parseFloat(select.paddingRight), appearance: select.appearance,
           voice: getComputedStyle(document.querySelector('#list-voice-slot button')!).backgroundColor };
       });
-      expect(boxes.backup.right).toBe(boxes.auth.right); expect(boxes.backup.top).toBeGreaterThan(boxes.auth.bottom);
-      expect(boxes.reload.top).toBeGreaterThan(boxes.backup.bottom);
+      expect(boxes.reload.right).toBe(boxes.auth.right); expect(boxes.backup.top).toBeGreaterThan(boxes.auth.bottom);
+      expect(boxes.reload.top).toBe(boxes.backup.top); expect(boxes.trash.right).toBeLessThan(boxes.backup.left);
+      expect(boxes.backup.right).toBeLessThan(boxes.reload.left); expect(boxes.backup.width).toBe(250); expect(boxes.reload.width).toBe(250);
+      expect(boxes.combo.left).toBe(boxes.clear.left); expect(boxes.search.top - boxes.manager.bottom).toBeGreaterThanOrEqual(12);
       expect(Math.abs(boxes.heading.top - boxes.manager.top)).toBeLessThan(15);
       expect(boxes.all.top - boxes.search.bottom).toBeGreaterThanOrEqual(12);
       expect(boxes.padding).toBeGreaterThanOrEqual(40); expect(boxes.appearance).toBe('none');
@@ -270,7 +278,7 @@ it.each([1440, 390])('同じ製品HTMLのfake cloud配置：幅%s', async width 
     // 同じ製品HTML/CSSを使い、SDK/通信だけを既存fake compositionへ差し替える。
     const page = await fakeProduct(context, 'cloud-assign-edit');
     await page.locator('#product-cloud-items').waitFor();
-    expect(await page.locator('#product-auth-open').textContent()).toBe('ログアウト/保存先：クラウド');
+    expect(await page.locator('#product-auth-open').textContent()).toBe('ログアウト / 保存先：クラウド');
     const beforeVoice = await page.evaluate('fixture.rpcNames.slice()');
     await page.getByRole('button', { name: '音声メモ', exact: true }).click();
     await page.locator('#product-session > [role="status"]').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).waitFor();
