@@ -1,5 +1,23 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## PR #105・#106後の横幅再確認
+
+基準mainは`17206ff`（両PRマージ済み）。通常のscreen表示では幅固定を再現していないため、原因未確認のCSS上書きや製品処理変更は追加しない。
+
+- Bootstrapのbody/`.container`の`min-width: 992px !important`は`@media print`内。通常screenではbodyのcomputed min-widthは0pxで、製品のmain内に`.container`はない。印刷用指定を通常表示の原因と認定しない。
+- headed local preview（PR #105と同じ専用profile/viewportなし/配信route）で、長いタイトル・本文・30文字タグを持つ合成メモを作成して測定。fake cloudもheadedブラウザで測定する。body/main/`.memo-page`/`.memo-product`は各表示幅へ追従し、ページ横方向のはみ出しはない。タグチップの意図した内部スクロールは維持する。
+
+| 確認した表示幅 | ネイティブウィンドウによる内幅 | 検証方法 |
+| --- | --- | --- |
+| 1200 / 992 / 900 / 800 / 650px | 指定どおり | CDPで実window寸法を変更し、frame幅を差し引いたinnerWidthを照合 |
+| 390px | このWindows/Chromiumでは500pxに制限 | 制限を記録し、同じheadedブラウザの表示領域を390pxへ補完。ネイティブ390pxの成功とは扱わない |
+
+local/cloudの各6幅でスクリーンショットと寸法JSONを`.product/width-local-*` / `.product/width-cloud-*`へ保存する（合成データ・ignored、Git/公開対象外）。PCの7項目は既存実装を維持し、localの右側縦配置、通知/UNKNOWN、音声アイコン/赤背景、タグ管理の位置、検索余白、select余白、cloud保存先表示を既存回帰と6幅検証で確認する。650/390pxでは既存スマホ配置を確認する。
+
+残る未確定事項は、報告された「ウィンドウは縮むが内容が固定」の発生条件。この結果だけで利用環境の原因や解消を断定しない。再現条件が得られるまでは、print用CSSの解除や推測による幅指定を重ねない。実通信・Human UAT・公開は行わない。
+
+本再確認のAI Gate：typecheck、関連Vitest 4ファイル/36件、既存Playwright E2E83件、local/cloud product build、`git diff --check`はPASS。実Supabase/Auth/RPC/DB/SQL通信0件。製品コード・共通Bootstrap・製品CSSの差分は0件。
+
 ## Q05 PC一覧の7項目調整
 
 - 保存先ボタンはC05の現在選択に従い「ログイン/保存先：ローカル」「ログアウト/保存先：クラウド」と表示する。認証や切替の処理は変更しない。

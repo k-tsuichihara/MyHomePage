@@ -1,7 +1,7 @@
 import { beforeAll, expect, it, vi } from 'vitest';
 import { chromium, type BrowserContext, type Route } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { prepareProductPreview, productPreviewOptions, PRODUCT_PREVIEW_ORIGIN } from '../scripts/product-preview';
 import { createProfileOwner, prepareProfileBase } from './persistence/profile-guard';
@@ -43,7 +43,7 @@ it.each([false, true])('既存route方針を維持する：cloud=%s', async clou
   expect(headers['Content-Security-Policy']).toBe(cloud ? undefined : "connect-src 'none'; worker-src 'none'; frame-src 'none'; object-src 'none'; form-action 'none'");
 });
 
-it('local製品previewはネイティブウィンドウの幅・高さ変更に追従する', async () => {
+it('local製品previewはウィンドウ6幅の内部領域まで追従する（390pxはOS制限時に補完）', async () => {
   const owner = await createProfileOwner(await prepareProfileBase(fileURLToPath(root)));
   const profile = await owner.create();
   await runOwnedCase(owner, profile, async () => {
@@ -64,6 +64,64 @@ it('local製品previewはネイティブウィンドウの幅・高さ変更に�
       await expect.poll(() => page.evaluate(() => innerHeight)).toBeLessThan(large.height);
       expect(await page.locator('#new').isVisible()).toBe(true);
       expect(await page.locator('#product-session').count()).toBe(0);
+      await page.getByRole('button', { name: 'タグ管理', exact: true }).click();
+      for (const name of ['あ'.repeat(30), 'い'.repeat(30), 'う'.repeat(30)]) {
+        await page.locator('#tag-name').fill(name); await page.locator('#tag-save').click();
+      }
+      await page.getByRole('dialog', { name: 'タグ管理', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
+      await page.locator('#new').click();
+      await page.locator('#memo-title').fill('横幅を確認する長いタイトル'.repeat(6));
+      await page.locator('#memo-body').fill('long-unbroken-body-'.repeat(50));
+      await page.locator('#editor-tags input').first().check();
+      await page.locator('#save').click(); await page.locator('#detail-view').waitFor(); await page.locator('#back').click();
+      const samples = [];
+      for (const width of [1200, 992, 900, 800, 650, 390]) {
+        const frame = await page.evaluate(() => outerWidth - innerWidth);
+        await cdp.send('Browser.setWindowBounds', { windowId, bounds: { width: width + frame, height: 950 } });
+        await page.waitForTimeout(150);
+        const nativeWidth = await page.evaluate(() => innerWidth);
+        // Windowsの通常タブ付きwindowは内幅500px未満へ縮まない。制限値を記録し390pxだけ補完する。
+        const emulated = nativeWidth !== width;
+        if (emulated) {
+          expect(width).toBe(390);
+          await cdp.send('Emulation.setDeviceMetricsOverride', { width, height: 850, deviceScaleFactor: 1, mobile: false });
+        }
+        await expect.poll(() => page.evaluate(() => innerWidth)).toBe(width);
+        const sample = await page.evaluate(({ requested, nativeWidth, emulated }) => ({ requested, nativeWidth, emulated, inner: innerWidth, outer: outerWidth, screen: matchMedia('screen').matches, print: matchMedia('print').matches,
+          document: document.documentElement.scrollWidth,
+          elements: ['body', 'main', '.memo-page', '.memo-product', '.list-toolbar', '.tag-search-row', '.list-options', '#sort'].map(selector => {
+            const node = document.querySelector(selector)! as HTMLElement, s = getComputedStyle(node), r = node.getBoundingClientRect();
+            return { selector, width: r.width, right: r.right, scroll: node.scrollWidth, min: s.minWidth, max: s.maxWidth };
+          }) }), { requested: width, nativeWidth, emulated });
+        samples.push(sample);
+        expect(sample.screen).toBe(true); expect(sample.print).toBe(false);
+        expect(sample.elements[0]!.min).toBe('0px');
+        expect(await page.locator('#product-auth-open').textContent()).toBe('ログイン/保存先：ローカル');
+        expect(await page.locator('#list-voice-slot button').getAttribute('aria-label')).toBe('音声メモ');
+        expect(await page.locator('#list-voice-slot button [aria-hidden=true]').textContent()).toBe('🎙');
+        const layout = await page.evaluate(() => {
+          const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+          return { auth: rect('#product-auth-open'), backup: rect('[data-open-dialog=backup-dialog]'), reload: rect('#reload'),
+            heading: rect('.tag-controls h2'), manager: rect('.tag-controls .section-heading button'),
+            search: rect('.tag-search-row'), all: rect('#filters-all'),
+            arrowPadding: parseFloat(getComputedStyle(document.querySelector('#sort')!).paddingRight),
+            voice: getComputedStyle(document.querySelector('#list-voice-slot button')!).backgroundColor };
+        });
+        if (width > 650) {
+          expect(layout.backup.right).toBe(layout.auth.right); expect(layout.backup.top).toBeGreaterThan(layout.auth.bottom);
+          expect(layout.reload.top).toBeGreaterThan(layout.backup.bottom); expect(layout.manager.left).toBeGreaterThan(layout.heading.right);
+          expect(layout.all.top - layout.search.bottom).toBeGreaterThanOrEqual(12);
+          expect(layout.arrowPadding).toBeGreaterThanOrEqual(40); expect(layout.voice).toBe('rgb(189, 40, 59)');
+          expect(await page.locator('.statuses').isVisible()).toBe(false);
+        }
+        await page.screenshot({ path: fileURLToPath(new URL(`.product/width-local-${width}.png`, root)) });
+        if (emulated) await cdp.send('Emulation.clearDeviceMetricsOverride');
+      }
+      await writeFile(new URL('.product/width-local.json', root), JSON.stringify(samples, null, 2));
+      for (const sample of samples) {
+        expect(sample.document).toBeLessThanOrEqual(sample.inner);
+        expect(sample.elements.slice(0, 4).every(row => row.width <= sample.inner)).toBe(true);
+      }
     } finally { await context.close(); }
   }, () => {});
 }, 20000);
