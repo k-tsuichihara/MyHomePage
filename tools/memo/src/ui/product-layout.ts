@@ -19,8 +19,12 @@ export function mountProductLayout(doc: Document) {
   doc.addEventListener('click', click); doc.addEventListener('cancel', blockBusyClose, true);
   // 成功通知だけを次の明示操作で閉じる。処理結果・error/UNKNOWNの保持には触れない。
   const dismissSuccess = () => {
-    const localList = doc.querySelector('.memo-product')?.getAttribute('data-source') !== 'cloud' && doc.getElementById('list-view')?.hidden === false;
-    if (!win.matchMedia('(min-width: 651px)').matches && !localList) return;
+    const cloud = doc.querySelector('.memo-product')?.getAttribute('data-source') === 'cloud';
+    // observerの反映待ちでも、現在の表示属性から一覧を判定する。
+    const list = cloud
+      ? doc.getElementById('product-cloud-editor')?.hidden !== false && !doc.querySelector<HTMLElement>('[data-view="detail"]:not([hidden])')
+      : doc.getElementById('list-view')?.hidden === false;
+    if (!win.matchMedia('(min-width: 651px)').matches && !list) return;
     doc.querySelectorAll<HTMLElement>('[data-notice="succeeded"]').forEach(node => { if (!node.hidden) node.hidden = true; });
   };
   doc.addEventListener('click', dismissSuccess); doc.addEventListener('input', dismissSuccess);

@@ -230,6 +230,35 @@ it('headed cloud製品画面も6幅で追従し、PC7項目とスマホ境界を
   } finally { await context.close(); await headed.close(); }
 }, 20000);
 
+it.each(['local', 'cloud'])('スマホ一覧では成功通知だけを次の明示操作で閉じる：%s', async mode => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, mode === 'cloud' ? 'cloud-assign-edit' : 'cloud-edit-signed-out');
+    await page.locator(mode === 'cloud' ? '#product-cloud-items' : '#new').waitFor();
+    for (const operation of ['click', 'input']) {
+      // 通知の結果分類は変更せず、layoutのdismiss対象だけを確認する。
+      await page.evaluate(() => {
+        document.getElementById('notice-probe')?.remove();
+        const group = document.createElement('div'); group.id = 'notice-probe';
+        for (const kind of ['succeeded', 'rejected', 'unknown']) {
+          const p = document.createElement('p'); p.dataset.notice = kind; p.textContent = `通知：${kind}`; group.append(p);
+        }
+        document.querySelector('.memo-product')!.append(group);
+      });
+      const success = page.locator('#notice-probe [data-notice=succeeded]');
+      expect(await success.isVisible()).toBe(true);
+      if (operation === 'click') {
+        await page.locator('#product-auth-open').click();
+        await page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
+      } else await (mode === 'cloud' ? page.getByLabel('クラウドの検索', { exact: true }) : page.locator('#search')).fill('確認');
+      expect(await success.isVisible()).toBe(false);
+      expect(await page.locator('#notice-probe [data-notice=rejected]').isVisible()).toBe(true);
+      expect(await page.locator('#notice-probe [data-notice=unknown]').isVisible()).toBe(true);
+    }
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+  } finally { await context.close(); }
+}, 15000);
+
 it.each([1440, 390, 320])('定型通知を省略してもlocal/cloudのエラー・UNKNOWNは操作後も表示する：幅%s', async width => {
   for (const failure of ['unknown', 'rejected', 'cloud']) {
     const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });

@@ -2,6 +2,8 @@
 
 ## メモ一覧UI最終4項目（現行）
 
+レビュー回帰：スマホの成功通知を閉じる条件がlocal一覧だけだったため、既存のcloud editor/detail表示属性からも一覧を判定する。local/cloudのスマホ一覧でclick/input後に成功通知だけが閉じ、rejected/UNKNOWNは残ることを確認する。処理結果の分類・保存契約や詳細/編集中の表示方針は変更しない。今回のtypecheck、製品/preview関連33件、Playwright E2E83件、local/cloud build、差分チェックはPASS。実通信・Human UAT・公開は未実施。
+
 - 既存のdata-routine（idle/読込完了/clean draft）をスマホの一覧にも適用し、定型通知だけを省略する。重要な処理中/error/rejected/UNKNOWNは残し、`.statuses`全体を無条件には隠さない。音声のidle/stoppedは専用の表示属性で分類し、unsupported/failed等は維持する。表示範囲は既存のタイトル判定から導くdata-pageで一覧に限定し、詳細/編集中へ波及させない。
 - 共通HTMLの既存footerをスマホ一覧でも表示する。製品CSSの局所上書きで余白と文字サイズだけをコンパクトにし、新しいfooterは作らない。短い画面ではPR #109のmainスクロールと一覧最低高を維持する。PCのフッター/配置、詳細/モーダルは変更しない。
 - スマホのタグ領域は「見出し＋タグ管理→検索＋絞込解除→タグ一覧（すべて）→並び替え＋select」の順。320pxでは並び替えラベルとselectを縦配置し、PCのgrid位置は維持する。
