@@ -2,6 +2,11 @@
 
 ## 一覧切替位置とスマホ配置（現行）
 
+短いスマホのレビュー回帰：320×568 / 390×667 / 568×320pxでは一覧が6pxまで潰れることをChromiumで再現した。650px以下ではmainを必要時に縦スクロール可能にし、一覧に`min(240px, 50dvh)`の最低高さを確保する。収まる画面の既存flex配置、PC、ListContext/切替位置保持は維持する。スクロールバー出現時にも長い操作ラベルが窮屈にならないよう、操作ボタンのmin-content幅を維持する。
+
+修正後は上記local3寸法とcloud320×568 / 568×320pxで、実ホイールによるmainスクロール、一覧の領域確保・画面内到達・メモ詳細への遷移、横はみ出しなし、local保存値不変、cloud追加RPC/writeなしを確認する。合成画像はignored `.product/short-local-*` / `short-cloud-*`だけへ保存する。
+このレビュー修正後のtypecheck、製品/preview関連27件（短い画面5件を含む）、Playwright E2E83件、local/cloud build、`git diff --check`はPASS。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT・公開・マージ未実施。
+
 PCでゴミ箱だけが右側、通常一覧が元のツールバーに表示される位置差を解消する。localは両ボタンを既存バックアップ/再読込と同じ操作groupへまとめ、同寸法・同位置で切り替える。DOMは同じlocal app配下で、既存handler/inert/離脱・保存ガードを維持する。移動した一覧切替入口は詳細/編集中には表示しない。
 
 localの切替要求が毎回scrollTop=0だった点は、UIが通常/ゴミ箱それぞれの位置だけを保持し、既存queryへ渡す形へ修正する。位置の型は既存ListContext.scrollTopを利用し、検索条件・結果・データ鮮度はcontrollerを正本とする。切替前に未反映のscroll RAFを止めて実位置を捕捉し、view変更後の描画でcontrollerの位置を適用する。新しい結果cache・永続Storage・navigation状態機械は追加しない。localの既存query条件の共有は変更しない。cloudは既存normal/trashのListContextとrememberScrollをそのまま利用し、切替groupの配置だけを揃える。

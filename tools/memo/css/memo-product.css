@@ -115,13 +115,16 @@ html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-
 .memo-product .cloud-trash-toggle,.memo-product .cloud-normal-toggle{position:static;width:192px}
 }
 @media(max-width:650px){
+/* 操作群で高さを使い切る場合だけmainをスクロールし、一覧の潰れを防ぐ。 */
+html[data-product-layout] body:has(.memo-product)>main{overflow-y:auto}
+.memo-product #cards,.memo-product #product-cloud-items{min-height:min(240px,50dvh)}
 .memo-product .list-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .memo-product #list-voice-slot>button{width:100%}
 .memo-product #new,.memo-product #list-voice-slot>button,.memo-product .cloud-actions button,.memo-product #product-auth-open,.memo-product .tag-chips label,.memo-product #filters-all{min-height:44px}
 .memo-product .detail-navigation{flex-direction:column;align-items:stretch}
 .memo-product .detail-navigation #back{align-self:flex-start}
 .memo-product .list-operation-group{flex-wrap:wrap;width:100%}
-.memo-product .list-operation-group button{flex:1 1 160px;min-height:44px;white-space:nowrap}
+.memo-product .list-operation-group button{flex:1 1 160px;min-width:min-content;min-height:44px;white-space:nowrap}
 .memo-product .cloud-operation-group{display:flex;gap:8px;margin-bottom:10px}
 .memo-product .cloud-operation-group button{min-height:44px;flex:1}
 .memo-product .tag-controls>.section-heading{display:flex;grid-column:1/-1;grid-row:1;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}

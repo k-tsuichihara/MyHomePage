@@ -26,6 +26,49 @@ async function fakeProduct(context: BrowserContext, mode: string) {
   const page = await context.newPage(); page.setDefaultTimeout(3000); await page.goto(url); return page;
 }
 
+it.each([[320, 568], [390, 667], [568, 320]])('縦に短いスマホでも操作領域をスクロールして一覧へ到達できる：%s×%s', async (width, height) => {
+  const context = await browser.newContext({ viewport: { width: width!, height: height! }, serviceWorkers: 'block' });
+  try {
+    const url = await prepareProductPreview(context, root, false), page = await context.newPage();
+    await page.goto(url); await page.locator('#new').waitFor();
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('短い画面の合成メモ');
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor(); await page.locator('#back').click();
+    const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    expect(await page.locator('#cards').evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(160);
+    const main = page.locator('body > main'), box = await main.boundingBox();
+    await page.mouse.move(box!.x + 20, box!.y + 30); await page.mouse.wheel(0, 2000);
+    await expect.poll(() => main.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    const cards = await page.locator('#cards').boundingBox();
+    expect(cards!.y).toBeGreaterThanOrEqual(box!.y);
+    expect(cards!.y + cards!.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/short-local-${width}-${height}.png`, root)) });
+    await page.locator('#cards button.open-card').first().click(); await page.locator('#detail-title').filter({ hasText: '短い画面の合成メモ' }).waitFor();
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(raw);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each([[320, 568], [568, 320]])('短いスマホのcloud一覧へも縦スクロールで到達できる：%s×%s', async (width, height) => {
+  const context = await browser.newContext({ viewport: { width: width!, height: height! }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-assign-edit'), rows = page.locator('#product-cloud-items');
+    await rows.waitFor();
+    expect(await rows.evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(160);
+    const main = page.locator('body > main'), box = await main.boundingBox();
+    await page.mouse.move(box!.x + 20, box!.y + 30); await page.mouse.wheel(0, 2000);
+    await expect.poll(() => main.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    const list = await rows.boundingBox();
+    expect(list!.y).toBeGreaterThanOrEqual(box!.y);
+    expect(list!.y + list!.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/short-cloud-${width}-${height}.png`, root)) });
+    await rows.locator('button.open-card').first().click();
+    await page.getByText('クラウドメモ詳細（読取専用）', { exact: true }).waitFor();
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+  } finally { await context.close(); }
+}, 15000);
+
 it.each([1200, 800, 650, 390, 320])('local切替領域とview別スクロールを保持しスマホ操作をまとめる：幅%s', async width => {
   const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
   try {
