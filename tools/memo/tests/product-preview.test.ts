@@ -75,7 +75,7 @@ it('local製品previewはウィンドウ6幅の内部領域まで追従する（
       await page.locator('#editor-tags input').first().check();
       await page.locator('#save').click(); await page.locator('#detail-view').waitFor(); await page.locator('#back').click();
       const samples = [];
-      for (const width of [1200, 992, 900, 800, 650, 390]) {
+      for (const width of [1200, 992, 900, 800, 651, 650, 390]) {
         const frame = await page.evaluate(() => outerWidth - innerWidth);
         await cdp.send('Browser.setWindowBounds', { windowId, bounds: { width: width + frame, height: 950 } });
         await page.waitForTimeout(150);
@@ -96,20 +96,28 @@ it('local製品previewはウィンドウ6幅の内部領域まで追従する（
         samples.push(sample);
         expect(sample.screen).toBe(true); expect(sample.print).toBe(false);
         expect(sample.elements[0]!.min).toBe('0px');
-        expect(await page.locator('#product-auth-open').textContent()).toBe('ログイン/保存先：ローカル');
+        expect(await page.locator('#product-auth-open').textContent()).toBe('ログイン / 保存先：ローカル');
         expect(await page.locator('#list-voice-slot button').getAttribute('aria-label')).toBe('音声メモ');
         expect(await page.locator('#list-voice-slot button [aria-hidden=true]').textContent()).toBe('🎙');
         const layout = await page.evaluate(() => {
-          const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+          const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { width: r.width, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
           return { auth: rect('#product-auth-open'), backup: rect('[data-open-dialog=backup-dialog]'), reload: rect('#reload'),
+            description: rect('.product-heading p'),
             heading: rect('.tag-controls h2'), manager: rect('.tag-controls .section-heading button'),
             search: rect('.tag-search-row'), all: rect('#filters-all'),
+            trash: rect('#trash-view'), clear: rect('#clear-tag-filters'), sort: rect('#sort'), caption: rect('.sort-caption'),
+            bold: getComputedStyle(document.querySelector('.sort-caption')!).fontWeight, headingBold: getComputedStyle(document.querySelector('.tag-controls h2')!).fontWeight,
             arrowPadding: parseFloat(getComputedStyle(document.querySelector('#sort')!).paddingRight),
             voice: getComputedStyle(document.querySelector('#list-voice-slot button')!).backgroundColor };
         });
         if (width > 650) {
-          expect(layout.backup.right).toBe(layout.auth.right); expect(layout.backup.top).toBeGreaterThan(layout.auth.bottom);
-          expect(layout.reload.top).toBeGreaterThan(layout.backup.bottom); expect(layout.manager.left).toBeGreaterThan(layout.heading.right);
+          expect(layout.reload.right).toBe(layout.auth.right); expect(layout.backup.top).toBeGreaterThan(layout.auth.bottom);
+          expect(layout.reload.top).toBe(layout.backup.top); expect(layout.trash.top).toBe(layout.backup.top);
+          expect(layout.trash.top).toBeGreaterThan(layout.description.bottom);
+          expect(layout.trash.right).toBeLessThan(layout.backup.left); expect(layout.backup.right).toBeLessThan(layout.reload.left);
+          expect(layout.backup.width).toBe(250); expect(layout.reload.width).toBe(250);
+          expect(layout.manager.left).toBeGreaterThan(layout.heading.right); expect(layout.search.top - layout.manager.bottom).toBeGreaterThanOrEqual(12);
+          expect(layout.sort.left).toBe(layout.clear.left); expect(layout.caption.right).toBeLessThan(layout.sort.left); expect(layout.bold).toBe(layout.headingBold);
           expect(layout.all.top - layout.search.bottom).toBeGreaterThanOrEqual(12);
           expect(layout.arrowPadding).toBeGreaterThanOrEqual(40); expect(layout.voice).toBe('rgb(189, 40, 59)');
           expect(await page.locator('.statuses').isVisible()).toBe(false);

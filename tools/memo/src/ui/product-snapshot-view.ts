@@ -245,6 +245,10 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       search.oninput = () => query(); sort.onchange = () => query();
       if (productLayout) {
         controls.className = 'list-controls'; search.placeholder = 'タイトル・本文・タグ名で検索…';
+        trash.className = 'cloud-trash-toggle'; normal.className = 'cloud-normal-toggle';
+        const caption = doc.createElement('span'); caption.className = 'sort-caption pc-sort-caption'; caption.textContent = '並び替え';
+        const mobileCaption = doc.createElement('span'); mobileCaption.className = 'mobile-sort-caption'; mobileCaption.textContent = 'クラウドの並び順';
+        sortLabel.firstChild?.remove(); sortLabel.prepend(caption, mobileCaption);
         const toolbar = doc.createElement('div'); toolbar.className = 'list-toolbar'; toolbar.append(searchLabel, normal, trash);
         const options = doc.createElement('div'); options.className = 'list-options';
         const tags = doc.createElement('div'); tags.className = 'tag-controls';

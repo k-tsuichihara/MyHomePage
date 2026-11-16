@@ -148,7 +148,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const selected = cloud.target.current().target === 'cloud';
     if (productLayout) {
       doc.querySelector<HTMLElement>('.memo-product')!.dataset.source = selected ? 'cloud' : 'local';
-      if (authEntry) authEntry.textContent = selected ? 'ログアウト/保存先：クラウド' : 'ログイン/保存先：ローカル';
+      if (authEntry) authEntry.textContent = selected ? 'ログアウト / 保存先：クラウド' : 'ログイン / 保存先：ローカル';
     }
     local.setCloudSelected?.(selected);
     source.textContent = selected ? cloudEditor
