@@ -3,7 +3,7 @@ import { chromium, type Browser, type BrowserContext } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { prepareProductPreview } from '../scripts/product-preview';
 
 const root = new URL('../', import.meta.url);
@@ -25,6 +25,52 @@ async function fakeProduct(context: BrowserContext, mode: string) {
   await context.route('**/layout-fixture.js', route => route.fulfill({ contentType: 'text/javascript', body: fake }));
   const page = await context.newPage(); page.setDefaultTimeout(3000); await page.goto(url); return page;
 }
+
+it('headed cloud製品画面も6幅で追従し、PC7項目とスマホ境界を維持する', async () => {
+  const headed = await chromium.launch({ headless: false, proxy: { server: 'http://127.0.0.1:9' } });
+  const context = await headed.newContext({ viewport: null, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-assign-edit');
+    await page.locator('#product-cloud-items').waitFor();
+    const cdp = await context.newCDPSession(page), { windowId } = await cdp.send('Browser.getWindowForTarget');
+    await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+    const samples = [];
+    for (const width of [1200, 992, 900, 800, 650, 390]) {
+      const frame = await page.evaluate(() => outerWidth - innerWidth);
+      await cdp.send('Browser.setWindowBounds', { windowId, bounds: { width: width + frame, height: 950 } });
+      await page.waitForTimeout(150);
+      const nativeWidth = await page.evaluate(() => innerWidth), emulated = nativeWidth !== width;
+      if (emulated) {
+        expect(width).toBe(390);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width, height: 850, deviceScaleFactor: 1, mobile: false });
+      }
+      await expect.poll(() => page.evaluate(() => innerWidth)).toBe(width);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/width-cloud-${width}.png`, root)) });
+      const sample = await page.evaluate(({ width, nativeWidth, emulated }) => {
+        const rect = (selector: string) => { const node = document.querySelector(selector); if (!node) throw new Error(`Missing layout element: ${selector}`); const r = node.getBoundingClientRect(); return { width: r.width, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+        const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
+        return { width, nativeWidth, emulated, scroll: document.documentElement.scrollWidth,
+          roots: ['body', 'main', '.memo-page', '.memo-product'].map(rect),
+          controls: ['.cloud-actions', '#product-cloud-snapshot .list-controls', '#product-cloud-snapshot .memo-search', '#product-cloud-snapshot .tag-search-row', '#product-cloud-snapshot .sort-control'].map(rect),
+          heading: rect('#product-cloud-snapshot .tag-controls h2'), manager: rect('#product-cloud-snapshot .tag-controls .section-heading button'),
+          sortPadding: parseFloat(style('#product-cloud-snapshot .sort-control select').paddingRight), voiceColor: style('.cloud-actions .voice-memo-button').backgroundColor };
+      }, { width, nativeWidth, emulated });
+      expect(sample.scroll).toBeLessThanOrEqual(width);
+      for (const box of [...sample.roots, ...sample.controls]) { expect(box.left).toBeGreaterThanOrEqual(0); expect(box.right).toBeLessThanOrEqual(width); }
+      expect(await page.locator('#product-auth-open').textContent()).toBe('ログアウト/保存先：クラウド');
+      expect(await page.locator('.cloud-actions .voice-memo-button [aria-hidden=true]').textContent()).toBe('🎙');
+      if (width > 650) {
+        expect(sample.voiceColor).toBe('rgb(189, 40, 59)'); expect(sample.sortPadding).toBeGreaterThanOrEqual(40);
+        expect(sample.manager.left).toBeGreaterThan(sample.heading.right);
+      }
+      samples.push(sample); await page.screenshot({ path: fileURLToPath(new URL(`.product/width-cloud-${width}.png`, root)) });
+      if (emulated) await cdp.send('Emulation.clearDeviceMetricsOverride');
+    }
+    await writeFile(new URL('.product/width-cloud.json', root), JSON.stringify(samples, null, 2));
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+  } finally { await context.close(); await headed.close(); }
+}, 20000);
 
 it('PCの定型通知を省略してもlocal/cloudのUNKNOWNは操作後も表示する', async () => {
   for (const mode of ['cloud-edit-signed-out', 'cloud-failure']) {
