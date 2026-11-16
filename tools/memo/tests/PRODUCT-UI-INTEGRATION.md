@@ -1,6 +1,17 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
-## 一覧切替位置とスマホ配置（現行）
+## メモ一覧UI最終4項目（現行）
+
+- 既存のdata-routine（idle/読込完了/clean draft）をスマホの一覧にも適用し、定型通知だけを省略する。重要な処理中/error/rejected/UNKNOWNは残し、`.statuses`全体を無条件には隠さない。音声のidle/stoppedは専用の表示属性で分類し、unsupported/failed等は維持する。表示範囲は既存のタイトル判定から導くdata-pageで一覧に限定し、詳細/編集中へ波及させない。
+- 共通HTMLの既存footerをスマホ一覧でも表示する。製品CSSの局所上書きで余白と文字サイズだけをコンパクトにし、新しいfooterは作らない。短い画面ではPR #109のmainスクロールと一覧最低高を維持する。PCのフッター/配置、詳細/モーダルは変更しない。
+- スマホのタグ領域は「見出し＋タグ管理→検索＋絞込解除→タグ一覧（すべて）→並び替え＋select」の順。320pxでは並び替えラベルとselectを縦配置し、PCのgrid位置は維持する。
+- local/cloud一覧の新規作成は通常青(#275e9d)＋白文字、hoverは薄青(#dbeafe)＋濃紺文字(#173f6b)。一覧の新規作成入口にだけ適用し、通常/hoverとも自動算定コントラスト比4.5以上を確認する。
+
+AI Gate：全Vitest 59ファイル/1,948件とPlaywright E2E83件がPASS。最終の一覧限定ガードを含む製品/preview関連31件、typecheck、local/cloud product build、`git diff --check`もPASS。320/390px・PCの共通footer、スマホのタグ順、local/cloudのエラー・UNKNOWN保持、詳細/編集中へ通知抑制が波及しないことを確認する。合成画像はignored `.product/list-create-*` / `switch-*`等のみへ保存する。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT・公開・マージ未実施。実機での視認性・操作感は未確認として残す。
+
+範囲外のメモ：詳細の保存ボタン等の既存primaryには汎用hover指定が適用され、薄い背景と白文字になる可能性がある（CSSの静的確認）。今回は詳細/モーダルの修正へ広げず、別の確認対象として残す。
+
+## 一覧切替位置とスマホ配置（PR #109時点）
 
 短いスマホのレビュー回帰：320×568 / 390×667 / 568×320pxでは一覧が6pxまで潰れることをChromiumで再現した。650px以下ではmainを必要時に縦スクロール可能にし、一覧に`min(240px, 50dvh)`の最低高さを確保する。収まる画面の既存flex配置、PC、ListContext/切替位置保持は維持する。スクロールバー出現時にも長い操作ラベルが窮屈にならないよう、操作ボタンのmin-content幅を維持する。
 

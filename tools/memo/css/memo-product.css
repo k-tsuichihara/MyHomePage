@@ -148,3 +148,25 @@ html[data-product-layout] body:has(.memo-product)>main{overflow-y:auto}
 .memo-product .tag-controls>.tag-search-row{grid-row:4;grid-template-columns:minmax(0,1fr) auto}
 .memo-product .tag-controls>.tag-chip-strip,.memo-product .tag-controls>.cloud-filter-wrap{grid-row:5}
 }
+
+/* 一覧だけの最終調整。詳細・モーダルや処理結果には適用しない。 */
+.memo-product[data-page=list] #product-session>[data-voice-routine=true],.memo-product[data-page=list] .statuses [data-voice-routine=true]{display:none!important}
+.memo-product[data-page=list] .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([data-voice-routine=true]):not([hidden]))){display:none}
+.memo-product[data-page=list] #new,.memo-product[data-page=list] .cloud-actions>button:first-child{background:#275e9d;color:#fff;border-color:#275e9d}
+.memo-product[data-page=list] #new:hover,.memo-product[data-page=list] .cloud-actions>button:first-child:hover{background:#dbeafe;color:#173f6b}
+@media(max-width:650px){
+.memo-product[data-page=list] .statuses{max-height:none}
+.memo-product[data-page=list] .statuses [data-routine=true]{display:none!important}
+.memo-product[data-page=list] .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([hidden]))){display:none}
+html[data-product-layout] body:has(.memo-product[data-page=list])>footer{display:block}
+html[data-product-layout] body:has(.memo-product[data-page=list])>footer #obi{min-height:0;padding:10px 14px}
+html[data-product-layout] body:has(.memo-product[data-page=list])>footer .footer-title{font-size:16px}
+html[data-product-layout] body:has(.memo-product[data-page=list])>footer .footer-tagline{font-size:11px}
+.memo-product[data-page=list] .tag-controls>.tag-search-row{grid-row:2}
+.memo-product[data-page=list] .tag-controls>.tag-chip-strip,.memo-product[data-page=list] .tag-controls>.cloud-filter-wrap{grid-row:3}
+.memo-product[data-page=list] .sort-control>.sort-caption,.memo-product[data-page=list] .sort-control select{grid-row:4}
+}
+@media(max-width:380px){
+.memo-product[data-page=list] .sort-control>.sort-caption{grid-row:4}
+.memo-product[data-page=list] .sort-control select{grid-row:5}
+}

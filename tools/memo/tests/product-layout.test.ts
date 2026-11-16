@@ -26,6 +26,31 @@ async function fakeProduct(context: BrowserContext, mode: string) {
   const page = await context.newPage(); page.setDefaultTimeout(3000); await page.goto(url); return page;
 }
 
+it.each(['local', 'cloud'])('一覧の新規作成は青・hoverは薄青で文字コントラストを保つ：%s', async mode => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    let page;
+    if (mode === 'cloud') page = await fakeProduct(context, 'cloud-assign-edit');
+    else { const url = await prepareProductPreview(context, root, false); page = await context.newPage(); await page.goto(url); }
+    const create = page.locator(mode === 'cloud' ? '.cloud-actions>button:first-child' : '#new'); await create.waitFor();
+    await expect.poll(() => create.isEnabled()).toBe(true);
+    await expect.poll(() => page.locator('.memo-product').getAttribute('data-page')).toBe('list');
+    await page.mouse.move(0, 0);
+    const normal = await create.evaluate(node => ({ bg: getComputedStyle(node).backgroundColor, fg: getComputedStyle(node).color }));
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/list-create-normal-${mode}.png`, root)) });
+    await create.hover();
+    const hover = await create.evaluate(node => ({ bg: getComputedStyle(node).backgroundColor, fg: getComputedStyle(node).color }));
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/list-create-hover-${mode}.png`, root)) });
+    expect(normal).toEqual({ bg: 'rgb(39, 94, 157)', fg: 'rgb(255, 255, 255)' });
+    expect(hover).toEqual({ bg: 'rgb(219, 234, 254)', fg: 'rgb(23, 63, 107)' });
+    const luminance = (rgb: string) => rgb.match(/\d+/g)!.map(Number).map(value => { const s = value / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }).reduce((sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i]!, 0);
+    for (const colors of [normal, hover]) {
+      const a = luminance(colors.bg), b = luminance(colors.fg);
+      expect((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toBeGreaterThanOrEqual(4.5);
+    }
+  } finally { await context.close(); }
+}, 15000);
+
 it.each([[320, 568], [390, 667], [568, 320]])('縦に短いスマホでも操作領域をスクロールして一覧へ到達できる：%s×%s', async (width, height) => {
   const context = await browser.newContext({ viewport: { width: width!, height: height! }, serviceWorkers: 'block' });
   try {
@@ -84,6 +109,10 @@ it.each([1200, 800, 650, 390, 320])('local切替領域とview別スクロール�
       localStorage.setItem(key, JSON.stringify(data));
     });
     await page.reload(); await page.locator('#cards li').first().waitFor();
+    expect(await page.locator('body > footer').isVisible()).toBe(true);
+    expect(await page.locator('body > footer').count()).toBe(1);
+    expect(await page.locator('body > footer .footer-title').textContent()).toBe('Kana Tsuichihara Portfolio');
+    if (width <= 650) expect(await page.locator('body > footer').evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(80);
     const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     const toggle = await page.locator('#trash-view').boundingBox(), top = await page.locator('#cards').evaluate(node => node.getBoundingClientRect().top);
     await page.locator('#cards').evaluate(node => { node.scrollTop = 420; });
@@ -113,11 +142,16 @@ it.each([1200, 800, 650, 390, 320])('local切替領域とview別スクロール�
         return { caption: getComputedStyle(document.querySelector('.sort-caption')!).fontWeight,
           heading: getComputedStyle(document.querySelector('.tag-controls h2')!).fontWeight,
           select: r('#sort').left, clear: r('#clear-tag-filters').left,
-          tap: Array.from(document.querySelectorAll('.list-operation-group button:not([hidden])')).every(node => node.getBoundingClientRect().height >= 44) };
+          tap: Array.from(document.querySelectorAll('.list-operation-group button:not([hidden])')).every(node => node.getBoundingClientRect().height >= 44),
+          headerBottom: r('.tag-controls .section-heading').bottom, searchTop: r('.tag-search-row').top, searchBottom: r('.tag-search-row').bottom,
+          tagsTop: r('.tag-chip-strip').top, tagsBottom: r('.tag-chip-strip').bottom, sortTop: r('.sort-caption').top };
       });
       expect(result.caption).toBe(result.heading); expect(result.tap).toBe(true);
       expect(await page.locator('#page-title').evaluate(node => node.getBoundingClientRect().height)).toBeLessThan(40);
       if (width > 380) expect(result.select).toBe(result.clear);
+      expect(result.searchTop).toBeGreaterThanOrEqual(result.headerBottom);
+      expect(result.tagsTop).toBeGreaterThanOrEqual(result.searchBottom);
+      expect(result.sortTop).toBeGreaterThanOrEqual(result.tagsBottom);
     }
     await page.screenshot({ path: fileURLToPath(new URL(`.product/switch-local-${width}.png`, root)) });
   } finally { await context.close(); }
@@ -196,16 +230,16 @@ it('headed cloud製品画面も6幅で追従し、PC7項目とスマホ境界を
   } finally { await context.close(); await headed.close(); }
 }, 20000);
 
-it('PCの定型通知を省略してもlocal/cloudのUNKNOWNは操作後も表示する', async () => {
-  for (const mode of ['cloud-edit-signed-out', 'cloud-failure']) {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 950 }, serviceWorkers: 'block' });
+it.each([1440, 390, 320])('定型通知を省略してもlocal/cloudのエラー・UNKNOWNは操作後も表示する：幅%s', async width => {
+  for (const failure of ['unknown', 'rejected', 'cloud']) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
     try {
-      const page = await fakeProduct(context, mode);
-      if (mode === 'cloud-edit-signed-out') {
+      const page = await fakeProduct(context, failure === 'cloud' ? 'cloud-failure' : 'cloud-edit-signed-out');
+      if (failure !== 'cloud') {
         await page.locator('#new').waitFor();
         expect(await page.locator('.statuses').isVisible()).toBe(false);
-        await page.evaluate('fixture.failWrites()'); await page.evaluate('fixture.saveTag()');
-        await page.locator('#save-status').filter({ hasText: '保存結果は不明' }).waitFor();
+        await page.evaluate(failure === 'unknown' ? 'fixture.failWrites()' : 'fixture.failReads(true)'); await page.evaluate('fixture.saveTag()');
+        await page.locator('#save-status').filter({ hasText: failure === 'unknown' ? '保存結果は不明' : '拒否' }).waitFor();
         await page.locator('#product-auth-open').click();
         await page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
         expect(await page.locator('#save-status').isVisible()).toBe(true);
@@ -273,12 +307,18 @@ it('hidden属性だけの変更でもページタイトルが現在のviewへ追
     const url = await prepareProductPreview(context, root, false), page = await context.newPage();
     await page.goto(url); await page.locator('#new').waitFor({ state: 'visible' });
     await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ一覧');
+    await page.evaluate(() => {
+      const notice = document.createElement('p'); notice.id = 'voice-scope-probe'; notice.dataset.voiceRoutine = 'true'; notice.textContent = '定型通知の表示範囲を確認';
+      document.querySelector('.statuses')!.append(notice);
+    });
+    expect(await page.locator('#voice-scope-probe').isVisible()).toBe(false);
     // 子要素の追加・削除やinert変更に頼らず、既存viewの表示属性だけを変更する。
     for (const [id, title] of [['detail-view', 'メモ詳細'], ['editor-view', 'メモ編集'], ['list-view', 'メモ一覧']]) {
       await page.evaluate(id => {
         for (const view of ['list-view', 'detail-view', 'editor-view']) document.getElementById(view)!.hidden = view !== id;
       }, id!);
       await expect.poll(() => page.locator('#page-title').textContent()).toBe(title);
+      expect(await page.locator('#voice-scope-probe').isVisible()).toBe(id !== 'list-view');
     }
   } finally { await context.close(); }
 }, 15000);
@@ -336,7 +376,7 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     expect(await page.locator('#detail-view').isVisible()).toBe(true);
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-detail-${width}.png`, root)) });
     await page.locator('#back').click();
-    if (width === 1440) expect(await page.locator('#save-status').isVisible()).toBe(false);
+    expect(await page.locator('#save-status').isVisible()).toBe(false);
     let raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     expect(JSON.parse(raw!).memos[0].title).toBe('画面確認の合成メモ');
     await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
