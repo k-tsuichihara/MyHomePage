@@ -17,6 +17,12 @@ export function mountProductLayout(doc: Document) {
     if (dialog.querySelector('[data-close-dialog]')?.closest('[inert]') || dialog.querySelector('[aria-busy="true"]')) event.preventDefault();
   };
   doc.addEventListener('click', click); doc.addEventListener('cancel', blockBusyClose, true);
+  // 成功通知だけを次の明示操作で閉じる。処理結果・error/UNKNOWNの保持には触れない。
+  const dismissSuccess = () => {
+    if (!win.matchMedia('(min-width: 651px)').matches) return;
+    doc.querySelectorAll<HTMLElement>('[data-notice="succeeded"]').forEach(node => { if (!node.hidden) node.hidden = true; });
+  };
+  doc.addEventListener('click', dismissSuccess); doc.addEventListener('input', dismissSuccess);
   const search = (id: string, target: string) => {
     const input = doc.getElementById(id) as HTMLInputElement | null;
     if (!input) return;
@@ -60,7 +66,7 @@ export function mountProductLayout(doc: Document) {
   const scope = doc.querySelector('.memo-product');
   if (scope) observer.observe(scope, { childList: true, subtree: true, attributes: true, attributeFilter: ['inert', 'hidden'] });
   if (confirm) observer.observe(confirm, { attributes: true, attributeFilter: ['hidden'] });
-  const cleanup = () => { observer.disconnect(); doc.removeEventListener('click', click); doc.removeEventListener('cancel', blockBusyClose, true); confirm?.removeEventListener('cancel', cancel); };
+  const cleanup = () => { observer.disconnect(); doc.removeEventListener('click', click); doc.removeEventListener('click', dismissSuccess); doc.removeEventListener('input', dismissSuccess); doc.removeEventListener('cancel', blockBusyClose, true); confirm?.removeEventListener('cancel', cancel); };
   win.addEventListener('pagehide', event => { if (!event.persisted) cleanup(); });
   update(); return cleanup;
 }

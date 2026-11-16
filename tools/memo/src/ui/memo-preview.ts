@@ -138,6 +138,14 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
 
   function render() {
     const state = controller.getState(), busy = state.write.kind === 'writing', ready = state.read.kind === 'ready';
+    if (doc.documentElement.dataset.productLayout === 'review2') {
+      const saveNotice = element('save-status');
+      if (saveNotice.dataset.notice !== state.write.kind) saveNotice.hidden = false;
+      saveNotice.dataset.notice = state.write.kind;
+      saveNotice.dataset.routine = String(state.write.kind === 'idle');
+      element('read-status').dataset.routine = String(state.read.kind === 'ready' || state.read.kind === 'idle');
+      element('draft-status').dataset.routine = String(!state.editor || !isDirty(state.editor));
+    }
     text('save-status', state.write.kind === 'writing' ? '保存処理中：追加入力は保持します。'
       : state.write.kind === 'succeeded' ? state.write.deletedCount === undefined ? '送信した内容の保存は成功しました。'
         : state.write.deletedCount === 0 ? '削除対象は0件です。書込は行っていません。' : `${state.write.deletedCount}件の完全削除が成功しました。`

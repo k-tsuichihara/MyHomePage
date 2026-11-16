@@ -74,3 +74,24 @@ html[data-product-layout] body:has(.memo-product) .memo-page{padding:12px 14px}.
 .memo-product .memo-cards li,.memo-product #product-cloud-items li{grid-template-columns:minmax(0,1fr) 65px;padding:12px;gap:4px}
 .memo-product .card-preview{grid-column:1/-1;grid-row:2}.memo-product .card-meta{grid-column:1/-1;grid-row:3}.memo-product .card-meta time{font-size:10px}
 }
+
+/* Q05 PC一覧の配置調整。スマホの配置・既存操作ガードは維持する。 */
+@media(min-width:651px){
+.memo-product{position:relative}
+.memo-product .product-heading{align-items:flex-start;min-height:138px}
+.memo-product .detail-navigation{display:contents}
+.memo-product .detail-navigation #back{align-self:flex-start;margin-bottom:10px}
+.memo-product #product-auth-open{min-width:250px}
+.memo-product .detail-navigation [data-open-dialog=backup-dialog],.memo-product .detail-navigation #reload{position:absolute;right:0;width:250px}
+.memo-product .detail-navigation [data-open-dialog=backup-dialog]{top:50px}
+.memo-product .detail-navigation #reload{top:98px}
+html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-state,html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-trash-state{display:none}
+.memo-product .statuses [data-routine=true]{display:none!important}
+.memo-product .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([hidden]))){display:none}
+.memo-product .voice-memo-button{background:#bd283b;color:white;border-color:#bd283b}
+.memo-product .voice-memo-button:hover{background:#9f2031}
+.memo-product .tag-controls>.section-heading{justify-content:flex-start;gap:12px}
+.memo-product .tag-controls>.section-heading h2{margin:0}
+.memo-product .tag-chip-strip,.memo-product .cloud-filter-wrap{margin-top:12px}
+.memo-product .sort-control select{appearance:none;padding-right:42px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath d='m2 2 5 5 5-5' fill='none' stroke='%2352647b' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center}
+}

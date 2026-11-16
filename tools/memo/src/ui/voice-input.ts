@@ -30,6 +30,10 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
   const buttons: HTMLButtonElement[] = [];
   for (const [id, label] of [['list-view', '新規音声メモ'], ['detail-view', '音声で本文へ追記'], ['editor-view', '音声で本文へ追記']]) {
     const button = doc.createElement('button'); button.type = 'button'; button.textContent = label!;
+    if (id === 'list-view' && doc.documentElement.dataset.productLayout === 'review2') {
+      const icon = doc.createElement('span'); icon.textContent = '🎙'; icon.setAttribute('aria-hidden', 'true');
+      button.className = 'voice-memo-button'; button.setAttribute('aria-label', '音声メモ'); button.replaceChildren(icon, ' 音声メモ');
+    }
     button.onclick = () => { void voice.start(); };
     const slot = doc.getElementById(id === 'list-view' ? 'list-voice-slot' : id === 'detail-view' ? 'detail-voice-slot' : 'editor-voice-slot');
     (slot ?? doc.getElementById(id!))!.append(button); buttons.push(button);
