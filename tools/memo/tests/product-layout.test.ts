@@ -26,6 +26,125 @@ async function fakeProduct(context: BrowserContext, mode: string) {
   const page = await context.newPage(); page.setDefaultTimeout(3000); await page.goto(url); return page;
 }
 
+it.each([[320, 568], [390, 667], [568, 320]])('縦に短いスマホでも操作領域をスクロールして一覧へ到達できる：%s×%s', async (width, height) => {
+  const context = await browser.newContext({ viewport: { width: width!, height: height! }, serviceWorkers: 'block' });
+  try {
+    const url = await prepareProductPreview(context, root, false), page = await context.newPage();
+    await page.goto(url); await page.locator('#new').waitFor();
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('短い画面の合成メモ');
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor(); await page.locator('#back').click();
+    const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    expect(await page.locator('#cards').evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(160);
+    const main = page.locator('body > main'), box = await main.boundingBox();
+    await page.mouse.move(box!.x + 20, box!.y + 30); await page.mouse.wheel(0, 2000);
+    await expect.poll(() => main.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    const cards = await page.locator('#cards').boundingBox();
+    expect(cards!.y).toBeGreaterThanOrEqual(box!.y);
+    expect(cards!.y + cards!.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/short-local-${width}-${height}.png`, root)) });
+    await page.locator('#cards button.open-card').first().click(); await page.locator('#detail-title').filter({ hasText: '短い画面の合成メモ' }).waitFor();
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(raw);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each([[320, 568], [568, 320]])('短いスマホのcloud一覧へも縦スクロールで到達できる：%s×%s', async (width, height) => {
+  const context = await browser.newContext({ viewport: { width: width!, height: height! }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-assign-edit'), rows = page.locator('#product-cloud-items');
+    await rows.waitFor();
+    expect(await rows.evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(160);
+    const main = page.locator('body > main'), box = await main.boundingBox();
+    await page.mouse.move(box!.x + 20, box!.y + 30); await page.mouse.wheel(0, 2000);
+    await expect.poll(() => main.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    const list = await rows.boundingBox();
+    expect(list!.y).toBeGreaterThanOrEqual(box!.y);
+    expect(list!.y + list!.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/short-cloud-${width}-${height}.png`, root)) });
+    await rows.locator('button.open-card').first().click();
+    await page.getByText('クラウドメモ詳細（読取専用）', { exact: true }).waitFor();
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each([1200, 800, 650, 390, 320])('local切替領域とview別スクロールを保持しスマホ操作をまとめる：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const url = await prepareProductPreview(context, root, false), page = await context.newPage();
+    await page.goto(url); await page.locator('#new').waitFor();
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('合成スクロール'); await page.locator('#save').click();
+    await page.locator('#detail-view').waitFor();
+    await page.evaluate(() => {
+      const key = 'myhomepage.memo.data.v2', data = JSON.parse(localStorage.getItem(key)!);
+      const seed = data.memos[0];
+      data.memos = Array.from({ length: 60 }, (_, index) => ({ ...seed, id: crypto.randomUUID(), title: `合成 ${index}`, lastRequestId: null,
+        deletedAt: index < 30 ? null : seed.updatedAt }));
+      localStorage.setItem(key, JSON.stringify(data));
+    });
+    await page.reload(); await page.locator('#cards li').first().waitFor();
+    const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    const toggle = await page.locator('#trash-view').boundingBox(), top = await page.locator('#cards').evaluate(node => node.getBoundingClientRect().top);
+    await page.locator('#cards').evaluate(node => { node.scrollTop = 420; });
+    await page.locator('#trash-view').click(); await page.locator('#count').filter({ hasText: 'ゴミ箱' }).waitFor();
+    expect(await page.locator('#normal-view').boundingBox()).toEqual(toggle);
+    expect(await page.locator('#cards').evaluate(node => node.scrollTop)).toBe(0);
+    expect(await page.locator('#cards').evaluate(node => node.getBoundingClientRect().top)).toBe(top);
+    await page.locator('#cards').evaluate(node => { node.scrollTop = 230; });
+    await page.locator('#normal-view').click(); await page.locator('#count').filter({ hasText: '通常メモ' }).waitFor();
+    await expect.poll(() => page.locator('#cards').evaluate(node => node.scrollTop)).toBe(420);
+    expect(await page.locator('#trash-view').boundingBox()).toEqual(toggle);
+    await page.locator('#search').fill('合成'); await page.locator('#sort').selectOption('created-asc');
+    await page.locator('#trash-view').click(); await page.locator('#count').filter({ hasText: 'ゴミ箱' }).waitFor();
+    await expect.poll(() => page.locator('#cards').evaluate(node => node.scrollTop)).toBe(230);
+    expect(await page.evaluate(() => scrollY)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(raw);
+    const group = page.getByRole('group', { name: '一覧の操作', exact: true });
+    expect(await group.getByRole('button', { name: '通常一覧', exact: true }).isVisible()).toBe(true);
+    expect(await group.getByRole('button', { name: 'バックアップ・復元', exact: true }).isVisible()).toBe(true);
+    expect(await group.getByRole('button', { name: '再読み込み', exact: true }).isVisible()).toBe(true);
+    if (width <= 650) {
+      expect(await page.locator('#list-voice-slot button').evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgb(189, 40, 59)');
+      expect(await page.locator('#list-voice-slot button').evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+      const result = await page.evaluate(() => {
+        const r = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+        return { caption: getComputedStyle(document.querySelector('.sort-caption')!).fontWeight,
+          heading: getComputedStyle(document.querySelector('.tag-controls h2')!).fontWeight,
+          select: r('#sort').left, clear: r('#clear-tag-filters').left,
+          tap: Array.from(document.querySelectorAll('.list-operation-group button:not([hidden])')).every(node => node.getBoundingClientRect().height >= 44) };
+      });
+      expect(result.caption).toBe(result.heading); expect(result.tap).toBe(true);
+      expect(await page.locator('#page-title').evaluate(node => node.getBoundingClientRect().height)).toBeLessThan(40);
+      if (width > 380) expect(result.select).toBe(result.clear);
+    }
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/switch-local-${width}.png`, root)) });
+  } finally { await context.close(); }
+}, 15000);
+
+it.each([1200, 390, 320])('cloud既存ListContextの切替位置・スクロールを維持する：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-list-scroll-views');
+    const rows = page.locator('#product-cloud-items'); await rows.waitFor();
+    const toggle = await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).boundingBox();
+    await rows.evaluate(node => { node.scrollTop = 420; });
+    await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
+    expect(await page.getByRole('button', { name: 'クラウド通常一覧', exact: true }).boundingBox()).toEqual(toggle);
+    await rows.evaluate(node => { node.scrollTop = 230; });
+    await page.getByRole('button', { name: 'クラウド通常一覧', exact: true }).click();
+    await expect.poll(() => rows.evaluate(node => node.scrollTop)).toBe(420);
+    await page.getByRole('button', { name: 'クラウドゴミ箱', exact: true }).click();
+    await expect.poll(() => rows.evaluate(node => node.scrollTop)).toBe(230);
+    expect(await page.evaluate(() => scrollY)).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/switch-cloud-${width}.png`, root)) });
+  } finally { await context.close(); }
+}, 15000);
+
 it('headed cloud製品画面も6幅で追従し、PC7項目とスマホ境界を維持する', async () => {
   const headed = await chromium.launch({ headless: false, proxy: { server: 'http://127.0.0.1:9' } });
   const context = await headed.newContext({ viewport: null, serviceWorkers: 'block' });

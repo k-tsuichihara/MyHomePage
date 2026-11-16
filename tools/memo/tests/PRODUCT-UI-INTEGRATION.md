@@ -1,6 +1,23 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
-## PC一覧の追加6項目（現行配置）
+## 一覧切替位置とスマホ配置（現行）
+
+短いスマホのレビュー回帰：320×568 / 390×667 / 568×320pxでは一覧が6pxまで潰れることをChromiumで再現した。650px以下ではmainを必要時に縦スクロール可能にし、一覧に`min(240px, 50dvh)`の最低高さを確保する。収まる画面の既存flex配置、PC、ListContext/切替位置保持は維持する。スクロールバー出現時にも長い操作ラベルが窮屈にならないよう、操作ボタンのmin-content幅を維持する。
+
+修正後は上記local3寸法とcloud320×568 / 568×320pxで、実ホイールによるmainスクロール、一覧の領域確保・画面内到達・メモ詳細への遷移、横はみ出しなし、local保存値不変、cloud追加RPC/writeなしを確認する。合成画像はignored `.product/short-local-*` / `short-cloud-*`だけへ保存する。
+このレビュー修正後のtypecheck、製品/preview関連27件（短い画面5件を含む）、Playwright E2E83件、local/cloud build、`git diff --check`はPASS。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT・公開・マージ未実施。
+
+PCでゴミ箱だけが右側、通常一覧が元のツールバーに表示される位置差を解消する。localは両ボタンを既存バックアップ/再読込と同じ操作groupへまとめ、同寸法・同位置で切り替える。DOMは同じlocal app配下で、既存handler/inert/離脱・保存ガードを維持する。移動した一覧切替入口は詳細/編集中には表示しない。
+
+localの切替要求が毎回scrollTop=0だった点は、UIが通常/ゴミ箱それぞれの位置だけを保持し、既存queryへ渡す形へ修正する。位置の型は既存ListContext.scrollTopを利用し、検索条件・結果・データ鮮度はcontrollerを正本とする。切替前に未反映のscroll RAFを止めて実位置を捕捉し、view変更後の描画でcontrollerの位置を適用する。新しい結果cache・永続Storage・navigation状態機械は追加しない。localの既存query条件の共有は変更しない。cloudは既存normal/trashのListContextとrememberScrollをそのまま利用し、切替groupの配置だけを揃える。
+
+スマホではlocalの切替/バックアップ/再読込を8px間隔で折り返す。新規/音声は2列、音声はマイク付き赤背景。タグ見出しと管理を同じ行で近接させ、タグ検索と「すべて」に余白を確保する。並び替えは太字にし、390px以上ではselectと絞込解除の左端を揃え、380px以下ではselectを全幅の次行へ送る。cloudのmobile絞込解除は短い表示にし、既存aria-labelとhandlerは維持する。主要ボタンを44px以上とし、320pxでは見出しと保存先を別行にして不自然な改行を防ぐ。cloudへlocalバックアップ等の操作は追加しない。
+
+回帰ではlocal各30件・cloudの既存合成snapshotを使い、通常420px/ゴミ箱230pxの個別位置、切替ボタンとページの座標、local一覧上端、検索・並び替え後の往復、無書込を確認する。PC1200/800px、スマホ650/390/320pxと既存headed幅検証を使う。スクリーンショットはignored `.product/switch-local-*` / `switch-cloud-*`へ保存しGit/公開へ含めない。
+
+AI Gate：全Vitest 59ファイル/1,939件、Playwright E2E83件がPASS。最終のスマホタップ高さ・2列調整後もtypecheck、製品/preview関連22件、local/cloud product build、`git diff --check`をPASS。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT・公開・マージ未実施。
+
+## PC一覧の追加6項目（PR #108時点）
 
 本節をPR #106時点の縦配置からの承認済み調整として適用する。draw.ioの固定上部操作・タグ見出し/管理・並び替えの責務は維持し、正本ファイル自体は変更しない。
 

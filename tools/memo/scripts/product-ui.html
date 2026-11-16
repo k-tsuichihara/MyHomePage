@@ -38,8 +38,12 @@
 </section>
 <nav class="detail-navigation" aria-label="メモ操作">
 <button id="back">← 一覧へ</button>
+<div class="list-operation-group" role="group" aria-label="一覧の操作">
+<button id="trash-view">ゴミ箱</button>
+<button id="normal-view">通常一覧</button>
 <button data-open-dialog="backup-dialog">バックアップ・復元</button>
 <button id="reload">再読み込み</button>
+</div>
 </nav>
 <section id="list-view" class="memo-list-layout">
 <div class="list-controls">
@@ -48,8 +52,6 @@
 <span class="visually-hidden">検索</span>
 <input id="search" type="search" placeholder="タイトル・本文・タグ名で検索…">
 </label>
-<button id="trash-view">ゴミ箱</button>
-<button id="normal-view">通常一覧</button>
 <button id="new" class="primary">＋ 新規作成</button>
 <div id="list-voice-slot">
 </div>

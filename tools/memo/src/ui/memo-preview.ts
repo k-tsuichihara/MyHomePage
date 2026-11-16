@@ -3,6 +3,7 @@ import type { ControllerCommand } from '../local-app-state';
 import { isDirty } from '../editor-state';
 import { renderMemoDetail } from './memo-detail-content';
 import { normalizeMemoInput } from '../input';
+import type { ListContext } from '../navigation-state';
 export interface VoiceEditBridge { append?: (session: string, text: string, isCurrent: () => boolean) => Promise<boolean> }
 
 type Controller = ReturnType<typeof createLocalMemoController>;
@@ -30,6 +31,9 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
   let composing = false, lastGeneration = -1, lastRoute = '', lastSession = '';
   let listSignature = '', filterSignature = '', editorTagSignature = '', managerSignature = '';
   let feedback = '', displayedToken: number | null = null, frame = 0, stopped = false;
+  // 条件・結果はcontrollerのListContextを正本とし、view別に表示位置だけを保持する。
+  const listScroll: Record<'normal' | 'trash', ListContext['scrollTop']> = { normal: 0, trash: 0 };
+  let renderedView: 'normal' | 'trash' | undefined;
   const text = (id: string, value: string) => { element(id).textContent = value; };
   const button = (label: string, action: () => void, disabled = false) => {
     const node = doc.createElement('button'); node.type = 'button'; node.textContent = label;
@@ -94,7 +98,11 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     void send({ kind: 'mutate', operation: { kind: 'empty-trash', targets: state.data?.memos.filter(row => row.deletedAt !== null).map(row => ({ id: row.id, revision: row.revision })) ?? [] } });
   });
   for (const [id, view] of [['trash-view', 'trash'], ['normal-view', 'normal']] as const) bind(id, () => {
-    void send({ kind: 'query', options: { ...controller.getState().list?.result.query, view }, scrollTop: 0 });
+    const current = controller.getState().list;
+    if (!current) return;
+    win.cancelAnimationFrame(scrollFrame);
+    listScroll[current.result.query.view] = cards.scrollTop;
+    void send({ kind: 'query', options: { ...current.result.query, view }, scrollTop: listScroll[view] });
   });
   for (const [id, accepted] of [['confirm-yes', true], ['confirm-no', false]] as const) bind(id, () => {
     // 表示時のtokenだけを送る。編集で失効した確認を最新tokenへ勝手に差し替えない。
@@ -165,8 +173,8 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     element<HTMLButtonElement>('save').disabled = busy || !ready || composing;
     element('empty-trash').hidden = state.storageVersion !== 3 || state.list?.result.query.view !== 'trash';
     if (doc.getElementById('list-voice-slot')) {
-      element('normal-view').hidden = state.list?.result.query.view !== 'trash';
-      element('trash-view').hidden = state.list?.result.query.view === 'trash';
+      element('normal-view').hidden = state.route.kind !== 'list' || state.list?.result.query.view !== 'trash';
+      element('trash-view').hidden = state.route.kind !== 'list' || state.list?.result.query.view === 'trash';
     }
     element<HTMLButtonElement>('empty-trash').disabled = busy || !ready || composing;
     element('permanent-delete').hidden = true;
@@ -259,6 +267,8 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
       }
       cards.replaceChildren(fragment); cards.scrollTop = scroll;
     }
+    const view = state.list?.result.query.view;
+    if (view && view !== renderedView) { cards.scrollTop = state.list?.scrollTop ?? 0; renderedView = view; }
     const managerKey = JSON.stringify([state.data?.tags, state.usage]);
     if (managerKey !== managerSignature) {
       managerSignature = managerKey; const previous = managed.value;

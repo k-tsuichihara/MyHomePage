@@ -81,8 +81,10 @@ const snapshot = () => {
       ({ id: `00000000-0000-4000-8000-000000000${suffix}`, user_id: value.user.id, name: name!, created_at: at('10'), revision: 1 }));
     result.memoTags = [['101', '103'], ['201', '103'], ['204', '103'], ['202', '105'], ['203', '105'], ['204', '105'], ['206', '105'], ['102', '103'], ['102', '107']].map(([m, t]) =>
       ({ memo_id: `00000000-0000-4000-8000-000000000${m}`, tag_id: `00000000-0000-4000-8000-000000000${t}`, user_id: value.user.id }));
-    if (mode === 'cloud-list-scroll') for (let index = 0; index < 40; index++) result.memos.push(
+    if (mode.startsWith('cloud-list-scroll')) for (let index = 0; index < 40; index++) result.memos.push(
       row(String(400 + index), `Scroll ${String(index).padStart(2, '0')}`, 'scroll body', '10', '10', null));
+    if (mode === 'cloud-list-scroll-views') for (let index = 0; index < 30; index++) result.memos.push(
+      { ...row(String(600 + index), `Trash ${index}`, 'scroll body', '10', '10', null), deleted_at: at('14') });
   }
   return result;
 };
