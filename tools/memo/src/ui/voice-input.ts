@@ -14,7 +14,7 @@ export function createVoiceControls(doc: Document, controller: VoiceEditorPort, 
     'invalid-input': '認識結果が上限または入力条件を超えたため追記しません。手入力を続けてください。', stopped: '音声入力を停止しました。入力は保持しています。',
   };
   const stop = doc.createElement('button'); stop.type = 'button'; stop.textContent = '音声入力を停止';
-  const voice = createVoiceInput(controller, Native ? () => new Native() : undefined, value => { status.textContent = messages[value]; stop.disabled = value !== 'listening'; }, now,
+  const voice = createVoiceInput(controller, Native ? () => new Native() : undefined, value => { status.textContent = messages[value]; status.dataset.voiceRoutine = String(value === 'idle' || value === 'stopped'); stop.disabled = value !== 'listening'; }, now,
     (session, text, isCurrent) => bridge.append?.(session, text, isCurrent) ?? Promise.resolve(false));
   stop.disabled = true; stop.onclick = () => voice.stop();
   const notice = doc.createElement('p'); notice.textContent = '音声入力はブラウザの認識サービスを利用します。音声が外部サービスへ送信される場合があります。アプリは録音を保存しません。開始はボタン操作時だけです。';
