@@ -172,7 +172,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({ name: 'detail-restore.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
     await page.getByRole('region', { name: '追加型復元', exact: true }).getByRole('checkbox').first().waitFor();
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeBackup);
-    await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
+    await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
     // 実製品compositionの同一storeで削除→読取専用プレビュー→単件回復を確認する。
     await page.locator('#back').click();
     await page.locator('#cards summary').first().click();
@@ -206,7 +206,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await restoreArea.getByRole('button', { name: '追加内容を確認', exact: true }).click();
     await restoreArea.getByRole('button', { name: '確認して復元', exact: true }).click();
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('myhomepage.memo.data.v2')!).memos.length === 2);
-    await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
+    await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
     await page.locator('#back').click();
     await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = false; });
     await page.getByRole('button', { name: '音声メモ', exact: true }).click();
