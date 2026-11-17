@@ -2,7 +2,7 @@
 
 ## メモ一覧UI最終4項目（現行）
 
-スマホ一覧の最終2点：650px以下の一覧だけ、タグ検索input/labelを行全幅へ広げてタグ管理ボタンの右端に揃え、絞込解除は次行の右側へ置く。タグ一覧→並び替えの順序は維持する。selectには既存PCと同じappearance:none、padding-right:42px、SVG矢印の右16px余白を適用する。PC用ルール・詳細/モーダル・機能契約は変更しない。local/cloud各320/390/650/1200pxで幅・余白・検索入力/解除/並び替え・追加RPC/writeなしを確認。typecheck、製品/preview関連35件、Playwright E2E83件、local/cloud build、差分チェックはPASS。合成画像はignored `.product/final-tag-*`のみ。実通信・Human UAT・公開は未実施。
+スマホ一覧の最終2点：650px以下の一覧だけ、タグ検索と絞込解除を横並びにし、解除ボタンの右端をタグ管理ボタンの右端に揃える。オーナーレビューに従い全幅input＋次行解除の案を取り下げ、解除ボタンに必要な幅と10pxの間隔を確保した残りを検索欄に使う。タグ一覧→並び替えの順序は維持する。selectには既存PCと同じappearance:none、padding-right:42px、SVG矢印の右16px余白を適用する。PC用ルール・詳細/モーダル・機能契約は変更しない。local/cloud各320/390/650/1200pxで幅・余白・検索入力/解除/並び替え・追加RPC/writeなしを確認。typecheck、製品/preview関連35件、Playwright E2E83件、local/cloud build、差分チェックはPASS。合成画像はignored `.product/final-tag-*`のみ。実通信・Human UAT・公開は未実施。
 
 レビュー回帰：スマホの成功通知を閉じる条件がlocal一覧だけだったため、既存のcloud editor/detail表示属性からも一覧を判定する。local/cloudのスマホ一覧でclick/input後に成功通知だけが閉じ、rejected/UNKNOWNは残ることを確認する。処理結果の分類・保存契約や詳細/編集中の表示方針は変更しない。今回のtypecheck、製品/preview関連33件、Playwright E2E83件、local/cloud build、差分チェックはPASS。実通信・Human UAT・公開は未実施。
 

@@ -46,8 +46,9 @@ it.each(['local', 'cloud'])('スマホ一覧のタグ検索幅・矢印余白と
       expect(metrics.appearance).toBe('none'); expect(metrics.padding).toBe('42px');
       expect(metrics.arrow).toContain('data:image/svg+xml'); expect(metrics.position).toBe('calc(100% - 16px) 50%'); expect(metrics.repeat).toBe('no-repeat');
       if (width <= 650) {
-        expect(Math.abs(metrics.input.right - metrics.manager.right)).toBeLessThanOrEqual(1);
-        expect(metrics.reset.top - metrics.input.bottom).toBeGreaterThanOrEqual(10);
+        expect(Math.abs(metrics.reset.right - metrics.manager.right)).toBeLessThanOrEqual(1);
+        expect(metrics.reset.top).toBe(metrics.input.top);
+        expect(metrics.reset.left - metrics.input.right).toBeGreaterThanOrEqual(10);
         expect(metrics.sort.top).toBeGreaterThan(metrics.reset.bottom);
       } else {
         expect(metrics.reset.top).toBe(metrics.input.top);
@@ -187,7 +188,6 @@ it.each([1200, 800, 650, 390, 320])('local切替領域とview別スクロール�
       });
       expect(result.caption).toBe(result.heading); expect(result.tap).toBe(true);
       expect(await page.locator('#page-title').evaluate(node => node.getBoundingClientRect().height)).toBeLessThan(40);
-      if (width > 380) expect(result.select).toBe(result.clear);
       expect(result.searchTop).toBeGreaterThanOrEqual(result.headerBottom);
       expect(result.tagsTop).toBeGreaterThanOrEqual(result.searchBottom);
       expect(result.sortTop).toBeGreaterThanOrEqual(result.tagsBottom);
