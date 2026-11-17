@@ -1,4 +1,6 @@
 /* タグ管理の2領域と行編集。メモ一覧のフィルターには適用しない。 */
+.product-dialog:has(>.tag-manager-content)>.dialog-heading h2{font-size:22px;line-height:1.4}
+.tag-manager-content>section>h3{margin-bottom:14px}
 .tag-manager-content .tag-create-form,.tag-manager-content .tag-row-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
 .tag-manager-content .tag-row-form{grid-template-columns:minmax(0,1fr) auto auto;grid-column:1/-1;margin:0}
 .tag-manager-content .tag-manager-columns,.memo-product .tag-manager-content :is(#tag-manager-rows,.tag-manager-rows)>.tag-manager-row{display:grid;grid-template-columns:minmax(0,1fr) 90px 64px 64px;gap:10px;align-items:center}
