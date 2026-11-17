@@ -1,5 +1,15 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## タグ管理モーダルの2領域UI（現行オーナー決定）
+
+上部は「タグの新規作成」の入力＋追加だけで作成し、下部は「登録済みタグ」の検索・タグ名・使用メモ数・編集/削除を表示する。編集は対象行だけを入力/保存/キャンセルへ切り替える。下部「閉じる」は削除し、右上×/Escapeを使用する。PCは列を揃え、650px以下は名前・件数・操作を縦に整理する。既存draw.ioのタグ管理構成は今回の明示決定で置き換えるが、一覧・詳細/編集・バックアップモーダルは変更しない。
+
+`ui/tag-manager-view.ts`はUI入力と行編集だけを共用し、タグの検証・重複・件数計算・保存結果の状態機械は持たない。localは既存controllerのsave-tag/delete-tag、cloudは既存C04 saveTag/deleteTagへ委譲する。改名の既存確認と単件削除確認を維持し、削除によるゴミ箱内を含む全関連の解除は既存storage/RPCだけが担当する。cloud送信後は従来どおりsnapshot全体を失効し、一覧反映には明示再読取が必要（自動load/楽観更新なし）。UNKNOWN・競合・Auth/generation・disposeの契約を変更しない。
+
+新UIからlocal/cloudの追加・行編集保存/取消・削除確認/取消、使用件数0/1、検索、PC/390/320px、横はみ出しなし、下部閉じる不在、×/Escape、local保存busyのclose/二重操作防止、cloudの古いボタン・UNKNOWN後の再送禁止を既存fixtureで検証する。合成画像はignored `.product/tag-manager-*`のみ。実Supabase/Auth/RPC/DB/SQL通信・Human UAT・公開は行わない。
+
+AI Gate：Vitest全59ファイル/1,964件、最終の製品layout/preview関連47件、Playwright E2E83件、typecheck、local/cloud product build、`git diff --check`はPASS。実機の操作感・実クラウドでの受入は未実施。
+
 ## バックアップ・復元モーダルの配置調整
 
 P2レビュー対応：`product-html.test.ts`にも下部「閉じる」を参照する2か所が残っていたため、既存右上×のアクセシブル名へ更新した。typecheckとVitest全59ファイル/1,955件がPASSし、normalケースの後続の単件回復・追加復元まで到達することを確認。製品コードの追加変更はない。
