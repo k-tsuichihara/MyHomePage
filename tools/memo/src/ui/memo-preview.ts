@@ -4,6 +4,7 @@ import { isDirty } from '../editor-state';
 import { renderMemoDetail } from './memo-detail-content';
 import { normalizeMemoInput } from '../input';
 import type { ListContext } from '../navigation-state';
+import { mountTagManagerView } from './tag-manager-view';
 export interface VoiceEditBridge { append?: (session: string, text: string, isCurrent: () => boolean) => Promise<boolean> }
 
 type Controller = ReturnType<typeof createLocalMemoController>;
@@ -131,18 +132,31 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
       if (!state.confirmation && state.route.kind === 'list' && state.read.kind === 'ready' && cards.scrollTop !== state.list?.scrollTop) void query();
     });
   });
+  const productTags = doc.getElementById('product-tag-manager');
+  const tagManager = productTags ? mountTagManagerView(doc, productTags, {
+    local: true,
+    canStart: () => !stopped && !composing && controller.getState().write.kind !== 'writing' && controller.getState().read.kind === 'ready',
+    save: async (tag, name) => {
+      if (tag && !win.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return false;
+      await send({ kind: 'mutate', operation: { kind: 'save-tag', id: tag?.id ?? win.crypto.randomUUID(), name, expectedRevision: tag?.revision ?? null } });
+      return controller.getState().write.kind === 'succeeded' && !feedback;
+    },
+    remove: tag => { void send({ kind: 'mutate', operation: { kind: 'delete-tag', id: tag.id, expectedRevision: tag.revision } }); },
+  }) : null;
   const managed = element<HTMLSelectElement>('managed-tag'), tagName = element<HTMLInputElement>('tag-name');
-  doc.getElementById('tag-new')?.addEventListener('click', () => { managed.value = ''; tagName.value = ''; tagName.focus(); });
-  managed.addEventListener('change', () => { tagName.value = controller.getState().data?.tags.find(tag => tag.id === managed.value)?.name ?? ''; });
-  element('tag-form').addEventListener('submit', event => {
-    event.preventDefault(); const state = controller.getState(), tag = state.data?.tags.find(row => row.id === managed.value);
-    if (doc.getElementById('tag-manager-rows') && tag && !win.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return;
-    void send({ kind: 'mutate', operation: { kind: 'save-tag', id: tag?.id ?? win.crypto.randomUUID(), name: tagName.value, expectedRevision: tag?.revision ?? null } });
-  });
-  bind('tag-delete', () => {
-    const tag = controller.getState().data?.tags.find(row => row.id === managed.value);
-    if (tag) void send({ kind: 'mutate', operation: { kind: 'delete-tag', id: tag.id, expectedRevision: tag.revision } });
-  });
+  if (!tagManager) {
+    doc.getElementById('tag-new')?.addEventListener('click', () => { managed.value = ''; tagName.value = ''; tagName.focus(); });
+    managed.addEventListener('change', () => { tagName.value = controller.getState().data?.tags.find(tag => tag.id === managed.value)?.name ?? ''; });
+    element('tag-form').addEventListener('submit', event => {
+      event.preventDefault(); const state = controller.getState(), tag = state.data?.tags.find(row => row.id === managed.value);
+      if (doc.getElementById('tag-manager-rows') && tag && !win.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return;
+      void send({ kind: 'mutate', operation: { kind: 'save-tag', id: tag?.id ?? win.crypto.randomUUID(), name: tagName.value, expectedRevision: tag?.revision ?? null } });
+    });
+    bind('tag-delete', () => {
+      const tag = controller.getState().data?.tags.find(row => row.id === managed.value);
+      if (tag) void send({ kind: 'mutate', operation: { kind: 'delete-tag', id: tag.id, expectedRevision: tag.revision } });
+    });
+  }
 
   function render() {
     const state = controller.getState(), busy = state.write.kind === 'writing', ready = state.read.kind === 'ready';
@@ -165,9 +179,11 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     const errorMessage = feedback || (state.editorIssue ? `編集中データの不整合：${state.editorIssue}。入力は保持しています。` : '');
     text('error', errorMessage);
     // 同じ既存判定結果をmodal内でも通知する。検証や保存の状態は追加しない。
-    const tagError = doc.getElementById('tag-error'); if (tagError) tagError.textContent = errorMessage;
+    const tagError = doc.getElementById('tag-error'); if (tagError) tagError.textContent = errorMessage
+      || (state.write.kind === 'unknown' || state.write.kind === 'rejected' ? element('save-status').textContent : '') || '';
+    productTags?.setAttribute('aria-busy', String(busy));
     for (const id of ['new', 'back', 'edit', 'duplicate', 'previous', 'next', 'tag-save', 'tag-delete', 'clear-tag-filters']) {
-      element<HTMLButtonElement>(id).disabled = busy || !ready || composing;
+      const node = doc.getElementById(id) as HTMLButtonElement | null; if (node) node.disabled = busy || !ready || composing;
     }
     element<HTMLButtonElement>('reload').disabled = busy || composing;
     element<HTMLButtonElement>('save').disabled = busy || !ready || composing;
@@ -270,7 +286,8 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     const view = state.list?.result.query.view;
     if (view && view !== renderedView) { cards.scrollTop = state.list?.scrollTop ?? 0; renderedView = view; }
     const managerKey = JSON.stringify([state.data?.tags, state.usage]);
-    if (managerKey !== managerSignature) {
+    tagManager?.update(state.data?.tags ?? [], new Map(state.usage.map(value => [value.tagId, value.count])), busy || !ready, busy || !ready || composing);
+    if (!tagManager && managerKey !== managerSignature) {
       managerSignature = managerKey; const previous = managed.value;
       const empty = doc.createElement('option'); empty.value = ''; empty.textContent = '新規タグ'; managed.replaceChildren(empty);
       for (const tag of state.data?.tags ?? []) { const option = doc.createElement('option'); option.value = tag.id; option.textContent = tag.name; managed.append(option); }

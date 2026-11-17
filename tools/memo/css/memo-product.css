@@ -1,3 +1,19 @@
+/* タグ管理の2領域と行編集。メモ一覧のフィルターには適用しない。 */
+.tag-manager-content .tag-create-form,.tag-manager-content .tag-row-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center}
+.tag-manager-content .tag-row-form{grid-template-columns:minmax(0,1fr) auto auto;grid-column:1/-1;margin:0}
+.tag-manager-content .tag-manager-columns,.memo-product .tag-manager-content :is(#tag-manager-rows,.tag-manager-rows)>.tag-manager-row{display:grid;grid-template-columns:minmax(0,1fr) 90px 64px 64px;gap:10px;align-items:center}
+.tag-manager-content .tag-manager-columns{margin-top:16px;color:#68768a;font-size:13px}
+.tag-manager-content .tag-manager-row>span{overflow-wrap:anywhere}
+.tag-manager-content .tag-manager-row{padding:12px 0;border-bottom:1px solid #e0e6ed}
+@media(max-width:650px){
+.tag-manager-content .tag-create-form{grid-template-columns:minmax(0,1fr)}
+.tag-manager-content .tag-manager-columns{display:none}
+.memo-product .tag-manager-content :is(#tag-manager-rows,.tag-manager-rows)>.tag-manager-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.tag-manager-content .tag-manager-row>span{grid-column:1/-1}
+.tag-manager-content .tag-row-form{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.tag-manager-content .tag-row-form input{grid-column:1/-1}
+.tag-manager-content button{min-height:44px}
+}
 /* バックアップ・復元内だけの見出しと操作グループ間隔。 */
 #backup-dialog>.dialog-heading h2{font-size:22px;line-height:1.4}
 #backup-dialog section[aria-label="保存領域喪失時の初期復元"]>div>button:last-child{margin-inline-start:24px}

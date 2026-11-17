@@ -340,6 +340,185 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
   } finally { await context.close(); }
 }, 15000);
 
+it.each([1200, 390, 320])('localタグ管理は上部追加・行編集/取消・検索・既存削除確認を使う：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
+    await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'タグ管理', exact: true });
+    expect(await dialog.getByRole('button', { name: '閉じる', exact: true }).count()).toBe(0);
+    const create = dialog.getByRole('region', { name: 'タグの新規作成', exact: true });
+    for (const name of ['仕事', '勉強']) {
+      await create.getByLabel('新規タグ名').fill(name); await create.getByRole('button', { name: '＋追加', exact: true }).click();
+      await dialog.getByRole('group', { name: `タグ「${name}」`, exact: true }).waitFor();
+    }
+    const row = dialog.getByRole('group', { name: 'タグ「仕事」', exact: true });
+    expect(await row.getByText('0件', { exact: true }).isVisible()).toBe(true);
+    const before = await page.evaluate('fixture.calls.writes');
+    await dialog.getByLabel('管理タグを検索').fill('仕事');
+    expect(await dialog.getByRole('group', { name: 'タグ「勉強」', exact: true }).isVisible()).toBe(false);
+    await dialog.getByLabel('管理タグを検索').fill('');
+    await row.getByRole('button', { name: '編集', exact: true }).click();
+    expect(await dialog.getByRole('group', { name: 'タグ「勉強」', exact: true }).getByRole('button', { name: '編集', exact: true }).isVisible()).toBe(true);
+    expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/tag-manager-edit-${width}.png`, root)) });
+    await row.getByLabel('変更後のタグ名').fill('破棄する入力'); await row.getByRole('button', { name: 'キャンセル', exact: true }).click();
+    expect(await page.evaluate('fixture.calls.writes')).toBe(before);
+    await row.getByRole('button', { name: '編集', exact: true }).click(); await row.getByLabel('変更後のタグ名').fill('業務');
+    page.once('dialog', value => void value.accept()); await row.getByRole('button', { name: '保存', exact: true }).click();
+    const renamed = dialog.getByRole('group', { name: 'タグ「業務」', exact: true }); await renamed.waitFor();
+    await renamed.getByRole('button', { name: '削除', exact: true }).click();
+    await page.locator('#confirm-no').click(); expect(await renamed.isVisible()).toBe(true);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(Number(before) + 1);
+    expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/tag-manager-local-${width}.png`, root)) });
+    await renamed.getByRole('button', { name: '削除', exact: true }).click(); await page.locator('#confirm-yes').click();
+    await expect.poll(() => dialog.getByRole('group', { name: 'タグ「業務」', exact: true }).count()).toBe(0);
+    await dialog.getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click(); expect(await dialog.isVisible()).toBe(false);
+    await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click(); await page.keyboard.press('Escape'); expect(await dialog.isVisible()).toBe(false);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(Number(before) + 2);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each(['new', 'edit', 'search'])('localタグ管理のIME中は%s入力とフォーカスを保持し操作だけを止める', async target => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
+    await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'タグ管理', exact: true });
+    await dialog.getByLabel('新規タグ名').fill('仕事'); await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+    const row = dialog.getByRole('group', { name: 'タグ「仕事」', exact: true }); await row.waitFor();
+    if (target === 'edit') await row.getByRole('button', { name: '編集', exact: true }).click();
+    const input = dialog.getByLabel(target === 'new' ? '新規タグ名' : target === 'edit' ? '変更後のタグ名' : '管理タグを検索', { exact: true });
+    const before = await page.evaluate('fixture.calls.writes');
+    await input.focus(); await input.evaluate(node => Object.assign(window, { tagIMEProbe: node }));
+    await input.dispatchEvent('compositionstart', { data: '' });
+    expect(await input.isEnabled()).toBe(true);
+    expect(await input.evaluate(node => document.activeElement === node && Reflect.get(window, 'tagIMEProbe') === node)).toBe(true);
+    await input.evaluate(node => { const input = node as HTMLInputElement; input.value = '仕事中'; input.setSelectionRange(3, 3); });
+    await input.dispatchEvent('input', { data: '中', inputType: 'insertCompositionText', isComposing: true });
+    expect(await input.inputValue()).toBe('仕事中');
+    expect(await input.evaluate(node => document.activeElement === node && (node as HTMLInputElement).selectionStart === 3)).toBe(true);
+    expect(await dialog.locator('.tag-manager-content button').evaluateAll(nodes => nodes.every(node => (node as HTMLButtonElement).disabled))).toBe(true);
+    // disabledボタンを迂回したsubmitでも、変換途中の値を保存しない。
+    if (target !== 'search') await input.evaluate(node => node.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(await page.evaluate('fixture.calls.writes')).toBe(before);
+    await input.dispatchEvent('compositionend', { data: '仕事中' });
+    expect(await input.isEnabled()).toBe(true);
+    expect(await input.evaluate(node => document.activeElement === node)).toBe(true);
+    expect(await dialog.getByRole('button', { name: '＋追加', exact: true }).isEnabled()).toBe(true);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each(['success', 'rejected', 'unknown', 'pending', 'cancel'])('cloudタグ入力エラー後の削除%sでも共有通知を保持する', async outcome => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, `cloud-tag-delete-${outcome === 'cancel' ? 'success' : outcome}`);
+    await page.locator('#product-cloud-items').waitFor(); await page.getByRole('button', { name: 'タグ管理', exact: true }).last().click();
+    const dialog = page.getByRole('dialog', { name: 'クラウドタグ管理', exact: true });
+    await dialog.getByLabel('新規タグ名').fill('   '); await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: 'タグ名を確認してください。' }).waitFor();
+    await dialog.getByRole('group', { name: 'タグ「既存クラウドタグ」', exact: true }).getByRole('button', { name: '削除', exact: true }).click();
+    expect(await page.locator('#product-session > #product-cloud-trash-state').count()).toBe(1);
+    if (outcome === 'cancel') {
+      await page.getByRole('button', { name: 'タグ削除をキャンセル', exact: true }).click();
+      expect(await page.locator('#product-session > #product-cloud-trash-state').count()).toBe(1);
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    } else {
+      await page.getByRole('button', { name: '削除する', exact: true }).click();
+      const status = page.locator('#product-session > #product-cloud-trash-state');
+      if (outcome === 'pending') {
+        await status.filter({ hasText: '処理中' }).waitFor(); await page.evaluate('fixture.releaseState()');
+      }
+      await status.filter({ hasText: outcome === 'unknown' ? 'UNKNOWN' : outcome === 'rejected' ? '拒否' : '要求の成功を確認' }).waitFor();
+      expect(await status.isVisible()).toBe(true);
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_delete_tag']);
+    }
+    expect(await page.locator('#product-cloud-trash-state').count()).toBe(1);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await context.close(); }
+}, 15000);
+
+it('localタグ保存busy中は既存closeガードで×/Escapeと二重操作を止める', async () => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
+    await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'タグ管理', exact: true });
+    await dialog.getByLabel('新規タグ名').fill('待機するタグ'); await page.evaluate('fixture.holdWrite()');
+    await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+    await expect.poll(() => dialog.locator('[aria-busy=true]').count()).toBe(1);
+    await dialog.getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click(); expect(await dialog.isVisible()).toBe(true);
+    await page.keyboard.press('Escape'); expect(await dialog.isVisible()).toBe(true);
+    expect(await dialog.getByRole('button', { name: '＋追加', exact: true }).isDisabled()).toBe(true);
+    await page.evaluate('fixture.releaseWrite()'); await dialog.getByRole('group', { name: 'タグ「待機するタグ」', exact: true }).waitFor();
+    expect(await page.evaluate('fixture.calls.writes')).toBe(1);
+    await dialog.getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click(); expect(await dialog.isVisible()).toBe(false);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each(['create', 'rename', 'delete'])('cloudタグ管理の%sは既存C04要求だけを1回送りsnapshotを失効する', async operation => {
+  const context = await browser.newContext({ viewport: { width: operation === 'rename' ? 1200 : 320, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, operation === 'delete' ? 'cloud-tag-delete-success' : 'cloud-tag-success');
+    await page.locator('#product-cloud-items').waitFor(); await page.getByRole('button', { name: 'タグ管理', exact: true }).last().click();
+    const dialog = page.getByRole('dialog', { name: 'クラウドタグ管理', exact: true });
+    const row = dialog.getByRole('group', { name: 'タグ「既存クラウドタグ」', exact: true });
+    expect(await row.getByText('1件', { exact: true }).isVisible()).toBe(true);
+    await dialog.getByLabel('管理タグを検索').fill('一致しない'); expect(await row.isVisible()).toBe(false);
+    await dialog.getByLabel('管理タグを検索').fill(''); expect(await row.isVisible()).toBe(true);
+    expect(await dialog.getByRole('button', { name: '閉じる', exact: true }).count()).toBe(0);
+    expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/tag-manager-cloud-${operation}.png`, root)) });
+    if (operation === 'create') {
+      await dialog.getByLabel('新規タグ名').fill('新しいタグ'); await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+    } else if (operation === 'rename') {
+      await row.getByRole('button', { name: '編集', exact: true }).click(); await row.getByLabel('変更後のタグ名').fill('破棄する入力');
+      await row.getByRole('button', { name: 'キャンセル', exact: true }).click();
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+      await row.getByRole('button', { name: '編集', exact: true }).click(); await row.getByLabel('変更後のタグ名').fill('改名タグ');
+      page.once('dialog', value => void value.accept()); await row.getByRole('button', { name: '保存', exact: true }).click();
+    } else {
+      await row.getByRole('button', { name: '削除', exact: true }).click(); await page.getByRole('button', { name: 'タグ削除をキャンセル', exact: true }).click();
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+      await page.getByRole('button', { name: 'タグ管理', exact: true }).last().click();
+      await dialog.getByRole('group', { name: 'タグ「既存クラウドタグ」', exact: true }).getByRole('button', { name: '削除', exact: true }).click();
+      await page.getByRole('button', { name: '削除する', exact: true }).click();
+    }
+    await page.locator('#product-cloud-trash-state').filter({ hasText: '要求の成功を確認' }).waitFor();
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', operation === 'delete' ? 'memo_delete_tag' : 'memo_save_tag']);
+    expect(await page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    expect(await page.locator('#product-cloud-trash-state').textContent()).toContain('明示再読取');
+    const args = await page.evaluate('fixture.stateArgs()') as Record<string, unknown>;
+    expect(Object.keys(args).sort()).toEqual(operation === 'delete' ? ['p_expected_revision', 'p_id'] : ['p_expected_revision', 'p_id', 'p_name']);
+    expect(args.p_expected_revision).toBe(operation === 'create' ? null : 1);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each(['stale', 'unknown'])('新しいcloudタグ管理UIでも%s後の旧追加ボタンから再送しない', async kind => {
+  const context = await browser.newContext({ viewport: { width: 390, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, kind === 'unknown' ? 'cloud-tag-unknown' : 'cloud-tag-success');
+    await page.locator('#product-cloud-items').waitFor(); await page.getByRole('button', { name: 'タグ管理', exact: true }).last().click();
+    const dialog = page.getByRole('dialog', { name: 'クラウドタグ管理', exact: true });
+    await dialog.getByLabel('新規タグ名').fill('元の要求');
+    await dialog.getByRole('button', { name: '＋追加', exact: true }).evaluate(node => Object.assign(window, { oldTagAdd: node }));
+    if (kind === 'unknown') {
+      await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+      await page.locator('#product-cloud-trash-state').filter({ hasText: 'UNKNOWN' }).waitFor();
+    } else {
+      await page.evaluate('fixture.refreshAuth()');
+      await expect.poll(() => page.locator('#product-cloud-snapshot').textContent()).toBe('');
+    }
+    await page.evaluate('oldTagAdd.click()');
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(kind === 'unknown' ? ['memo_load_snapshot', 'memo_save_tag'] : ['memo_load_snapshot']);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await context.close(); }
+}, 15000);
+
 it.each([1200, 390, 320])('バックアップモーダルの配置と×/Escape・読取中close防止を維持する：幅%s', async width => {
   const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
   try {
@@ -500,12 +679,12 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     await page.locator('#tag-name').fill('仕事'); await page.locator('#tag-save').click();
     await page.locator('#tag-manager-rows').getByText('仕事', { exact: true }).waitFor();
     raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
-    await page.locator('#tag-manager-rows').getByRole('button', { name: '名前を変更', exact: true }).click();
-    await page.locator('#tag-name').fill('変更をキャンセルする名前');
-    page.once('dialog', dialog => void dialog.dismiss()); await page.locator('#tag-save').click();
+    await page.locator('#tag-manager-rows').getByRole('button', { name: '編集', exact: true }).click();
+    await page.getByLabel('変更後のタグ名', { exact: true }).fill('変更をキャンセルする名前');
+    await page.locator('#tag-manager-rows').getByRole('button', { name: 'キャンセル', exact: true }).click();
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(raw);
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-tags-${width}.png`, root)) });
-    await page.getByRole('dialog', { name: 'タグ管理', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
+    await page.getByRole('dialog', { name: 'タグ管理', exact: true }).getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click();
     await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).click();
     expect(await backup.getByLabel('バックアップJSONを選択').count()).toBe(1);
     expect(await backup.getByLabel('単件回復のバックアップJSON').count()).toBe(1);
@@ -563,17 +742,15 @@ it.each([1440, 390])('同じ製品HTMLのfake cloud配置：幅%s', async width 
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-cloud-${width}.png`, root)) });
     await page.getByRole('button', { name: 'タグ管理', exact: true }).last().click();
     expect(await page.getByRole('dialog', { name: 'クラウドタグ管理', exact: true }).isVisible()).toBe(true);
-    await page.getByRole('button', { name: 'タグを作成', exact: true }).click();
-    const tagDialog = page.getByRole('dialog', { name: 'クラウドタグの編集', exact: true });
+    const tagDialog = page.getByRole('dialog', { name: 'クラウドタグ管理', exact: true });
     const beforeTag = await page.evaluate('fixture.rpcNames.slice()');
     for (const invalid of ['   ', 'あ'.repeat(31), '禁止\u007f']) {
-      await tagDialog.getByLabel('クラウドのタグ名').fill(invalid);
-      await tagDialog.getByRole('button', { name: '作成', exact: true }).click();
+      await tagDialog.getByLabel('新規タグ名').fill(invalid);
+      await tagDialog.getByRole('button', { name: '＋追加', exact: true }).click();
       await tagDialog.getByRole('status').filter({ hasText: 'タグ名を確認してください。' }).waitFor();
     }
     expect(await page.evaluate('fixture.rpcNames.slice()')).toEqual(beforeTag);
-    await tagDialog.getByRole('button', { name: 'タグ編集をキャンセル', exact: true }).click();
-    expect(await page.locator('#product-session > #product-cloud-trash-state').count()).toBe(1);
+    await tagDialog.getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click();
     if (width === 1440) {
       await page.getByLabel('クラウドの並び順', { exact: true }).selectOption('created-asc');
       expect(await page.getByLabel('クラウドの並び順', { exact: true }).inputValue()).toBe('created-asc');

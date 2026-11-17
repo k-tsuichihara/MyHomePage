@@ -149,28 +149,8 @@
 <h2>タグ管理</h2>
 <button type="button" data-close-dialog="tag-manager" aria-label="タグ管理を閉じる">×</button>
 </div>
-<p>タグの名前変更・削除・新規作成</p>
-<input id="tag-manager-search" type="search" aria-label="管理タグを検索" placeholder="タグを検索…">
-<button id="tag-new" type="button">＋ 新規作成</button>
-<div class="tag-table-heading">
-<span>タグ名</span>
-<span>使用メモ数</span>
-</div>
-<div id="tag-manager-rows">
-</div>
-<form id="tag-form">
 <p id="tag-error" role="alert"></p>
-<label>管理するタグ<select id="managed-tag">
-<option value="">新規タグ</option>
-</select>
-</label>
-<label>タグ名<input id="tag-name">
-</label>
-<button id="tag-save" type="submit">タグを保存</button>
-<button id="tag-delete" type="button">タグを削除</button>
-</form>
-<p>タグ削除時は関連する全メモ（ゴミ箱内を含む）からタグを外します。確認後に実行します。</p>
-<button type="button" data-close-dialog="tag-manager">閉じる</button>
+<div id="product-tag-manager"></div>
 </dialog>
 <dialog id="backup-dialog" aria-label="バックアップ・復元" class="product-dialog">
 <div class="dialog-heading">

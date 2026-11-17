@@ -68,7 +68,7 @@ it('local製品previewはウィンドウ6幅の内部領域まで追従する（
       for (const name of ['あ'.repeat(30), 'い'.repeat(30), 'う'.repeat(30)]) {
         await page.locator('#tag-name').fill(name); await page.locator('#tag-save').click();
       }
-      await page.getByRole('dialog', { name: 'タグ管理', exact: true }).getByRole('button', { name: '閉じる', exact: true }).click();
+      await page.getByRole('dialog', { name: 'タグ管理', exact: true }).getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click();
       await page.locator('#new').click();
       await page.locator('#memo-title').fill('横幅を確認する長いタイトル'.repeat(6));
       await page.locator('#memo-body').fill('long-unbroken-body-'.repeat(50));

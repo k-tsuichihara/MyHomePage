@@ -5,6 +5,7 @@ import { countTagUsage } from '../tag-usage';
 import type { ListContext } from '../navigation-state';
 import type { CloudTarget } from '../cloud-rpc-types';
 import { openProductDialog } from './product-dialog';
+import { mountTagManagerView } from './tag-manager-view';
 
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
 export function mountProductSnapshot(doc: Document, parent: HTMLElement,
@@ -36,6 +37,8 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     node.onclick = action; return node;
   };
   const confirmView = (...nodes: HTMLElement[]) => {
+    // 入力検証でmodal内へ移した共有通知を、確認画面のDOM置換に巻き込まない。
+    releaseTagFeedback();
     if (!productLayout) { root.replaceChildren(...nodes); return; }
     const dialog = doc.createElement('dialog'); dialog.className = 'product-dialog'; dialog.setAttribute('aria-label', 'クラウド操作の確認');
     dialog.append(...nodes); dialog.addEventListener('cancel', event => { event.preventDefault(); nodes[nodes.length - 1]?.click(); });
@@ -272,46 +275,76 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     root.append(count, rows); root.hidden = false;
     renderRows(); rows.onscroll = rememberScroll;
     if (tagEditor || deleteTag) {
-      const manager = doc.createElement('div');
-      if (tagEditor) {
-        const create = button('タグを作成', () => { if (root.contains(create)) editTag(null, token); });
-        manager.append(create);
-      }
-      const tags = doc.createElement('ul'); tags.setAttribute('aria-label', 'クラウドタグ一覧');
-      if (productLayout) tags.className = 'cloud-tag-rows';
-      value.tags.forEach(tag => {
-        const row = doc.createElement('li'); row.append(text('p', tag.name), text('p', `使用 ${usage.get(uuidKey(tag.id)) ?? 0}件`));
+      if (!productLayout) {
+        const manager = doc.createElement('div');
         if (tagEditor) {
-          const rename = button('名前を変更', () => { if (root.contains(rename)) editTag(tag, token); });
-          row.append(rename);
+          const create = button('タグを作成', () => { if (root.contains(create)) editTag(null, token); });
+          manager.append(create);
         }
-        if (deleteTag) {
-          const remove = button('削除', () => {
-            if (!root.contains(remove) || !current(token)) return;
+        const tags = doc.createElement('ul'); tags.setAttribute('aria-label', 'クラウドタグ一覧');
+        value.tags.forEach(tag => {
+          const row = doc.createElement('li'); row.append(text('p', tag.name), text('p', `使用 ${usage.get(uuidKey(tag.id)) ?? 0}件`));
+          if (tagEditor) {
+            const rename = button('名前を変更', () => { if (root.contains(rename)) editTag(tag, token); });
+            row.append(rename);
+          }
+          if (deleteTag) {
+            const remove = button('削除', () => {
+              if (!root.contains(remove) || !current(token)) return;
+              const confirm = button('削除する', () => {
+                if (!root.contains(confirm)) return;
+                const latest = current(token); if (!latest) return;
+                if (!hasTag(latest, tag)) { clear(); return; }
+                if (deleteTag(tag, active!.valid)) clear();
+              });
+              confirmView(text('p', `タグ『${tag.name}』を削除します。`),
+                text('p', 'メモとの関連も解除されます。メモ自体は削除しません。'), confirm,
+                button('タグ削除をキャンセル', () => list(token)));
+            });
+            row.append(remove);
+          }
+          tags.append(row);
+        });
+        manager.append(tags);
+        root.append(manager);
+      }
+      if (productLayout) {
+        const dialog = doc.createElement('dialog'); dialog.className = 'product-dialog'; dialog.setAttribute('aria-label', 'クラウドタグ管理');
+        const heading = doc.createElement('div'); heading.className = 'dialog-heading';
+        const close = button('×', () => dialog.close()); close.setAttribute('aria-label', 'タグ管理を閉じる'); heading.append(text('h2', 'タグ管理'), close);
+        const content = doc.createElement('div'); dialog.append(heading, content);
+        const canStart = () => !!current(token) && (!tagEditor || tagEditor.canStart());
+        const managerView = mountTagManagerView(doc, content, {
+          canStart,
+          save: tagEditor ? (tag, name) => {
+            if (!current(token) || !tagEditor?.canStart() || (tag && !hasTag(value, tag))) return false;
+            if (tag && !doc.defaultView!.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return false;
+            // 入力検証の通知は既存と同じ要素。送信開始後は既存hostがsnapshotを失効させる。
+            if (tagEditor.feedback) content.append(tagEditor.feedback);
+            if (tagEditor.save(tag, name, active!.valid)) clear();
+            return false;
+          } : undefined,
+          remove: deleteTag ? tag => {
+            if (!current(token) || (tagEditor && !tagEditor.canStart()) || !hasTag(value, tag)) return;
+            // 既存の単件削除確認を利用し、対象ID/name/revisionを固定する。
             const confirm = button('削除する', () => {
               if (!root.contains(confirm)) return;
-              const latest = current(token); if (!latest) return;
-              if (!hasTag(latest, tag)) { clear(); return; }
+              const latest = current(token); if (!latest || !hasTag(latest, tag)) return;
               if (deleteTag(tag, active!.valid)) clear();
             });
             confirmView(text('p', `タグ『${tag.name}』を削除します。`),
               text('p', 'メモとの関連も解除されます。メモ自体は削除しません。'), confirm,
               button('タグ削除をキャンセル', () => list(token)));
-          });
-          row.append(remove);
-        }
-        tags.append(row);
-      });
-      manager.append(tags);
-      if (productLayout) {
-        const dialog = doc.createElement('dialog'); dialog.className = 'product-dialog'; dialog.setAttribute('aria-label', 'クラウドタグ管理');
-        const search = doc.createElement('input'); search.type = 'search'; search.placeholder = 'タグを検索…'; search.setAttribute('aria-label', '管理するクラウドタグを検索');
-        search.oninput = () => Array.from(tags.children).forEach(row => { (row as HTMLElement).hidden = !(row.textContent ?? '').toLocaleLowerCase().includes(search.value.toLocaleLowerCase()); });
-        dialog.append(text('h2', 'タグ管理'), search, manager, button('閉じる', () => dialog.close()));
-        const open = button('タグ管理', () => { if (root.contains(open) && current(token)) openProductDialog(dialog); });
+          } : undefined,
+        });
+        const counts = new Map(value.tags.map(tag => [tag.id, usage.get(uuidKey(tag.id)) ?? 0]));
+        managerView.update(value.tags, counts, false);
+        const open = button('タグ管理', () => {
+          if (root.contains(open) && canStart()) { managerView.update(value.tags, counts, false); openProductDialog(dialog); }
+        });
         if (tagHeading) tagHeading.append(open); else root.append(open);
         root.append(dialog);
-      } else root.append(manager);
+      }
     }
     if (emptyTrash) {
       const targets = Object.freeze(value.memos.filter(memo => memo.deletedAt !== null)
