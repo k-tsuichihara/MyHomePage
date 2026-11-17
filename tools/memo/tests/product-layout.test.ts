@@ -26,6 +26,45 @@ async function fakeProduct(context: BrowserContext, mode: string) {
   const page = await context.newPage(); page.setDefaultTimeout(3000); await page.goto(url); return page;
 }
 
+it.each(['local', 'cloud'])('スマホ一覧のタグ検索幅・矢印余白とPC配置を維持する：%s', async mode => {
+  for (const width of [320, 390, 650, 1200]) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, mode === 'cloud' ? 'cloud-assign-edit' : 'cloud-edit-signed-out');
+      await page.locator(mode === 'cloud' ? '#product-cloud-items' : '#new').waitFor();
+      await expect.poll(() => page.locator('.memo-product').getAttribute('data-page')).toBe('list');
+      const controls = page.locator(mode === 'cloud' ? '#product-cloud-snapshot' : '#list-view');
+      const search = controls.locator('.tag-search-row input'), reset = controls.locator('.tag-search-row button');
+      const select = controls.locator('.sort-control select');
+      const metrics = await controls.evaluate(node => {
+        const rect = (selector: string) => { const r = node.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
+        const style = getComputedStyle(node.querySelector('.sort-control select')!);
+        return { input: rect('.tag-search-row input'), manager: rect('.section-heading button'), reset: rect('.tag-search-row button'),
+          sort: rect('.sort-control select'), appearance: style.appearance, padding: style.paddingRight,
+          arrow: style.backgroundImage, position: style.backgroundPosition, repeat: style.backgroundRepeat };
+      });
+      expect(metrics.appearance).toBe('none'); expect(metrics.padding).toBe('42px');
+      expect(metrics.arrow).toContain('data:image/svg+xml'); expect(metrics.position).toBe('calc(100% - 16px) 50%'); expect(metrics.repeat).toBe('no-repeat');
+      if (width <= 650) {
+        expect(Math.abs(metrics.input.right - metrics.manager.right)).toBeLessThanOrEqual(1);
+        expect(metrics.reset.top - metrics.input.bottom).toBeGreaterThanOrEqual(10);
+        expect(metrics.sort.top).toBeGreaterThan(metrics.reset.bottom);
+      } else {
+        expect(metrics.reset.top).toBe(metrics.input.top);
+        expect(metrics.sort.left).toBe(metrics.reset.left); expect(metrics.sort.right - metrics.sort.left).toBe(250);
+      }
+      const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+      await search.fill('合成'); await search.fill(''); await reset.click(); await select.selectOption('created-asc');
+      expect(await select.inputValue()).toBe('created-asc');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(raw);
+      expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(mode === 'cloud' ? ['memo_load_snapshot'] : []);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/final-tag-${mode}-${width}.png`, root)) });
+    } finally { await context.close(); }
+  }
+}, 20000);
+
 it.each(['local', 'cloud'])('一覧の新規作成は青・hoverは薄青で文字コントラストを保つ：%s', async mode => {
   const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
   try {
