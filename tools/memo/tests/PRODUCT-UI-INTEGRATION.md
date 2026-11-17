@@ -2,6 +2,8 @@
 
 ## タグ管理モーダルの2領域UI（現行オーナー決定）
 
+最終表示調整（PR #113マージ後）：タグ管理だけの最上部見出しをバックアップと同じ22pxにし、小見出し17pxとの階層を付ける。両領域の小見出し下は14pxに統一。説明文は「タグ削除時は関連する全メモ（ゴミ箱内を含む）からタグを外します。」へ短縮し、削除確認処理自体は維持する。local/cloud各1200/390/320pxでサイズ・実測余白一致・全文・横はみ出しなしを検証。関連Vitest57件、Playwright E2E83件、typecheck、local/cloud product build、差分チェックPASS。合成画像はignored `.product/tag-dialog-final-*`のみ。実通信・Human UAT・公開・マージ未実施。
+
 P2レビュー回帰：入力禁止と操作禁止を分離し、localタグの新規入力/行編集/検索でIME変換中も入力欄・DOM・フォーカス・選択位置を保持する。既存composing判定でボタンとsubmitを抑止し、busy/未読込時の入力禁止は維持する。また確認画面へのDOM置換前に既存`releaseTagFeedback()`を呼び、cloudタグの入力エラー後でも削除の処理中/成功/拒否/UNKNOWN/キャンセル通知を共有要素のまま保持する。合成compositionイベントでの確認であり、実IMEの操作感は未受入。
 
 レビュー修正後のAI Gate：Vitest全59ファイル/1,972件（製品layout50件を含む）、Playwright E2E83件、typecheck、local/cloud product build、差分チェックPASS。実通信・Human UAT・公開・マージ未実施。

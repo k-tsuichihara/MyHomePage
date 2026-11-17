@@ -32,7 +32,7 @@ export function mountTagManagerView(doc: Document, root: HTMLElement, actions: {
   const rows = doc.createElement('div'); rows.className = 'tag-manager-rows';
   if (actions.local) rows.id = 'tag-manager-rows';
   registered.append(text('h3', '登録済みタグ'), search, labels, rows);
-  const notice = doc.createElement('p'); notice.textContent = 'タグ削除時は関連する全メモ（ゴミ箱内を含む）からタグを外します。確認後に実行します。';
+  const notice = doc.createElement('p'); notice.textContent = 'タグ削除時は関連する全メモ（ゴミ箱内を含む）からタグを外します。';
   root.append(create, registered, notice);
   let signature = '', tags: readonly Tag[] = [], usage = new Map<string, number>(), disabled = false, operationsDisabled = false;
   let editing: Tag | null = null;

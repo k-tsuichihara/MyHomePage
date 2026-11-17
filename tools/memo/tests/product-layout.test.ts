@@ -340,6 +340,37 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
   } finally { await context.close(); }
 }, 15000);
 
+it.each(['local', 'cloud'])('タグ管理の見出し階層と2領域の余白・短い説明文を揃える：%s', async mode => {
+  for (const width of [1200, 390, 320]) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, mode === 'cloud' ? 'cloud-tag-delete-success' : 'cloud-edit-signed-out');
+      await page.locator(mode === 'cloud' ? '#product-cloud-items' : '#new').waitFor();
+      await page.getByRole('button', { name: 'タグ管理', exact: true }).last().click();
+      const dialog = page.getByRole('dialog', { name: mode === 'cloud' ? 'クラウドタグ管理' : 'タグ管理', exact: true });
+      const metrics = await dialog.evaluate(node => {
+        const sections = node.querySelectorAll('.tag-manager-content>section');
+        const gap = (section: Element) => section.querySelector('input')!.getBoundingClientRect().top - section.querySelector('h3')!.getBoundingClientRect().bottom;
+        return { title: getComputedStyle(node.querySelector('.dialog-heading h2')!).fontSize,
+          sub: getComputedStyle(sections[0]!.querySelector('h3')!).fontSize,
+          createGap: gap(sections[0]!), registeredGap: gap(sections[1]!), overflow: node.scrollWidth > node.clientWidth };
+      });
+      expect(metrics.title).toBe('22px'); expect(metrics.sub).toBe('17px');
+      expect(metrics.createGap).toBeGreaterThanOrEqual(14);
+      expect(Math.abs(metrics.createGap - metrics.registeredGap)).toBeLessThanOrEqual(1);
+      expect(metrics.overflow).toBe(false);
+      const notice = dialog.locator('.tag-manager-content>p');
+      expect(await notice.textContent()).toBe('タグ削除時は関連する全メモ（ゴミ箱内を含む）からタグを外します。');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/tag-dialog-final-${mode}-${width}.png`, root)) });
+      await dialog.getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click();
+      expect(await dialog.isVisible()).toBe(false);
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(mode === 'cloud' ? ['memo_load_snapshot'] : []);
+      expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    } finally { await context.close(); }
+  }
+}, 15000);
+
 it.each([1200, 390, 320])('localタグ管理は上部追加・行編集/取消・検索・既存削除確認を使う：幅%s', async width => {
   const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
   try {
