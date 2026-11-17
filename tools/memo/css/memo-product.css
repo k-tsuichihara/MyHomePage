@@ -163,6 +163,9 @@ html[data-product-layout] body:has(.memo-product[data-page=list])>footer #obi{mi
 html[data-product-layout] body:has(.memo-product[data-page=list])>footer .footer-title{font-size:16px}
 html[data-product-layout] body:has(.memo-product[data-page=list])>footer .footer-tagline{font-size:11px}
 .memo-product[data-page=list] .tag-controls>.tag-search-row{grid-row:2}
+.memo-product[data-page=list] .tag-controls>.tag-search-row{grid-template-columns:minmax(0,1fr) auto}
+.memo-product[data-page=list] .tag-search-row>button{justify-self:end}
+.memo-product[data-page=list] .sort-control select{appearance:none;padding-right:42px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10' viewBox='0 0 14 10'%3E%3Cpath d='m2 2 5 5 5-5' fill='none' stroke='%2352647b' stroke-width='2'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 16px center}
 .memo-product[data-page=list] .tag-controls>.tag-chip-strip,.memo-product[data-page=list] .tag-controls>.cloud-filter-wrap{grid-row:3}
 .memo-product[data-page=list] .sort-control>.sort-caption,.memo-product[data-page=list] .sort-control select{grid-row:4}
 }
