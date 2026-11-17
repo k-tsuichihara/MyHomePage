@@ -34,14 +34,17 @@ export function mountTagManagerView(doc: Document, root: HTMLElement, actions: {
   registered.append(text('h3', '登録済みタグ'), search, labels, rows);
   const notice = doc.createElement('p'); notice.textContent = 'タグ削除時は関連する全メモ（ゴミ箱内を含む）からタグを外します。確認後に実行します。';
   root.append(create, registered, notice);
-  let signature = '', tags: readonly Tag[] = [], usage = new Map<string, number>(), disabled = false;
+  let signature = '', tags: readonly Tag[] = [], usage = new Map<string, number>(), disabled = false, operationsDisabled = false;
   let editing: Tag | null = null;
   const filter = () => { Array.from(rows.children).forEach((row, index) => {
     const tag = tags[index];
     (row as HTMLElement).hidden = !!tag && !tag.name.toLocaleLowerCase().includes(search.value.toLocaleLowerCase());
   }); };
   search.oninput = filter;
-  const lock = () => root.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach(node => { node.disabled = disabled; });
+  // IME変換中は操作だけを止め、入力欄のフォーカスと変換中文字列を維持する。
+  const lock = () => root.querySelectorAll<HTMLInputElement | HTMLButtonElement>('input,button').forEach(node => {
+    node.disabled = disabled || (node.tagName === 'BUTTON' && operationsDisabled);
+  });
   const renderRows = () => {
     rows.replaceChildren();
     for (const tag of tags) {
@@ -65,8 +68,8 @@ export function mountTagManagerView(doc: Document, root: HTMLElement, actions: {
     }
     filter(); lock();
   };
-  return { update(value: readonly Tag[], counts: ReadonlyMap<string, number>, blocked: boolean) {
-    disabled = blocked;
+  return { update(value: readonly Tag[], counts: ReadonlyMap<string, number>, blocked: boolean, blockOperations = blocked) {
+    disabled = blocked; operationsDisabled = blockOperations;
     const next = JSON.stringify([value, [...counts]]);
     if (signature !== next) { signature = next; tags = value; usage = new Map(counts); editing = null; renderRows(); }
     lock();

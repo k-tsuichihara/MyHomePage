@@ -286,7 +286,7 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     const view = state.list?.result.query.view;
     if (view && view !== renderedView) { cards.scrollTop = state.list?.scrollTop ?? 0; renderedView = view; }
     const managerKey = JSON.stringify([state.data?.tags, state.usage]);
-    tagManager?.update(state.data?.tags ?? [], new Map(state.usage.map(value => [value.tagId, value.count])), busy || !ready || composing);
+    tagManager?.update(state.data?.tags ?? [], new Map(state.usage.map(value => [value.tagId, value.count])), busy || !ready, busy || !ready || composing);
     if (!tagManager && managerKey !== managerSignature) {
       managerSignature = managerKey; const previous = managed.value;
       const empty = doc.createElement('option'); empty.value = ''; empty.textContent = '新規タグ'; managed.replaceChildren(empty);

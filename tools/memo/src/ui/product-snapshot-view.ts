@@ -37,6 +37,8 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     node.onclick = action; return node;
   };
   const confirmView = (...nodes: HTMLElement[]) => {
+    // 入力検証でmodal内へ移した共有通知を、確認画面のDOM置換に巻き込まない。
+    releaseTagFeedback();
     if (!productLayout) { root.replaceChildren(...nodes); return; }
     const dialog = doc.createElement('dialog'); dialog.className = 'product-dialog'; dialog.setAttribute('aria-label', 'クラウド操作の確認');
     dialog.append(...nodes); dialog.addEventListener('cancel', event => { event.preventDefault(); nodes[nodes.length - 1]?.click(); });

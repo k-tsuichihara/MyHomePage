@@ -381,6 +381,66 @@ it.each([1200, 390, 320])('localタグ管理は上部追加・行編集/取消�
   } finally { await context.close(); }
 }, 15000);
 
+it.each(['new', 'edit', 'search'])('localタグ管理のIME中は%s入力とフォーカスを保持し操作だけを止める', async target => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
+    await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'タグ管理', exact: true });
+    await dialog.getByLabel('新規タグ名').fill('仕事'); await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+    const row = dialog.getByRole('group', { name: 'タグ「仕事」', exact: true }); await row.waitFor();
+    if (target === 'edit') await row.getByRole('button', { name: '編集', exact: true }).click();
+    const input = dialog.getByLabel(target === 'new' ? '新規タグ名' : target === 'edit' ? '変更後のタグ名' : '管理タグを検索', { exact: true });
+    const before = await page.evaluate('fixture.calls.writes');
+    await input.focus(); await input.evaluate(node => Object.assign(window, { tagIMEProbe: node }));
+    await input.dispatchEvent('compositionstart', { data: '' });
+    expect(await input.isEnabled()).toBe(true);
+    expect(await input.evaluate(node => document.activeElement === node && Reflect.get(window, 'tagIMEProbe') === node)).toBe(true);
+    await input.evaluate(node => { const input = node as HTMLInputElement; input.value = '仕事中'; input.setSelectionRange(3, 3); });
+    await input.dispatchEvent('input', { data: '中', inputType: 'insertCompositionText', isComposing: true });
+    expect(await input.inputValue()).toBe('仕事中');
+    expect(await input.evaluate(node => document.activeElement === node && (node as HTMLInputElement).selectionStart === 3)).toBe(true);
+    expect(await dialog.locator('.tag-manager-content button').evaluateAll(nodes => nodes.every(node => (node as HTMLButtonElement).disabled))).toBe(true);
+    // disabledボタンを迂回したsubmitでも、変換途中の値を保存しない。
+    if (target !== 'search') await input.evaluate(node => node.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    expect(await page.evaluate('fixture.calls.writes')).toBe(before);
+    await input.dispatchEvent('compositionend', { data: '仕事中' });
+    expect(await input.isEnabled()).toBe(true);
+    expect(await input.evaluate(node => document.activeElement === node)).toBe(true);
+    expect(await dialog.getByRole('button', { name: '＋追加', exact: true }).isEnabled()).toBe(true);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each(['success', 'rejected', 'unknown', 'pending', 'cancel'])('cloudタグ入力エラー後の削除%sでも共有通知を保持する', async outcome => {
+  const context = await browser.newContext({ serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, `cloud-tag-delete-${outcome === 'cancel' ? 'success' : outcome}`);
+    await page.locator('#product-cloud-items').waitFor(); await page.getByRole('button', { name: 'タグ管理', exact: true }).last().click();
+    const dialog = page.getByRole('dialog', { name: 'クラウドタグ管理', exact: true });
+    await dialog.getByLabel('新規タグ名').fill('   '); await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+    await dialog.getByRole('status').filter({ hasText: 'タグ名を確認してください。' }).waitFor();
+    await dialog.getByRole('group', { name: 'タグ「既存クラウドタグ」', exact: true }).getByRole('button', { name: '削除', exact: true }).click();
+    expect(await page.locator('#product-session > #product-cloud-trash-state').count()).toBe(1);
+    if (outcome === 'cancel') {
+      await page.getByRole('button', { name: 'タグ削除をキャンセル', exact: true }).click();
+      expect(await page.locator('#product-session > #product-cloud-trash-state').count()).toBe(1);
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    } else {
+      await page.getByRole('button', { name: '削除する', exact: true }).click();
+      const status = page.locator('#product-session > #product-cloud-trash-state');
+      if (outcome === 'pending') {
+        await status.filter({ hasText: '処理中' }).waitFor(); await page.evaluate('fixture.releaseState()');
+      }
+      await status.filter({ hasText: outcome === 'unknown' ? 'UNKNOWN' : outcome === 'rejected' ? '拒否' : '要求の成功を確認' }).waitFor();
+      expect(await status.isVisible()).toBe(true);
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_delete_tag']);
+    }
+    expect(await page.locator('#product-cloud-trash-state').count()).toBe(1);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await context.close(); }
+}, 15000);
+
 it('localタグ保存busy中は既存closeガードで×/Escapeと二重操作を止める', async () => {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   try {

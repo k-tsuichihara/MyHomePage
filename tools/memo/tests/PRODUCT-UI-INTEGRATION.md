@@ -2,6 +2,10 @@
 
 ## タグ管理モーダルの2領域UI（現行オーナー決定）
 
+P2レビュー回帰：入力禁止と操作禁止を分離し、localタグの新規入力/行編集/検索でIME変換中も入力欄・DOM・フォーカス・選択位置を保持する。既存composing判定でボタンとsubmitを抑止し、busy/未読込時の入力禁止は維持する。また確認画面へのDOM置換前に既存`releaseTagFeedback()`を呼び、cloudタグの入力エラー後でも削除の処理中/成功/拒否/UNKNOWN/キャンセル通知を共有要素のまま保持する。合成compositionイベントでの確認であり、実IMEの操作感は未受入。
+
+レビュー修正後のAI Gate：Vitest全59ファイル/1,972件（製品layout50件を含む）、Playwright E2E83件、typecheck、local/cloud product build、差分チェックPASS。実通信・Human UAT・公開・マージ未実施。
+
 上部は「タグの新規作成」の入力＋追加だけで作成し、下部は「登録済みタグ」の検索・タグ名・使用メモ数・編集/削除を表示する。編集は対象行だけを入力/保存/キャンセルへ切り替える。下部「閉じる」は削除し、右上×/Escapeを使用する。PCは列を揃え、650px以下は名前・件数・操作を縦に整理する。既存draw.ioのタグ管理構成は今回の明示決定で置き換えるが、一覧・詳細/編集・バックアップモーダルは変更しない。
 
 `ui/tag-manager-view.ts`はUI入力と行編集だけを共用し、タグの検証・重複・件数計算・保存結果の状態機械は持たない。localは既存controllerのsave-tag/delete-tag、cloudは既存C04 saveTag/deleteTagへ委譲する。改名の既存確認と単件削除確認を維持し、削除によるゴミ箱内を含む全関連の解除は既存storage/RPCだけが担当する。cloud送信後は従来どおりsnapshot全体を失効し、一覧反映には明示再読取が必要（自動load/楽観更新なし）。UNKNOWN・競合・Auth/generation・disposeの契約を変更しない。
