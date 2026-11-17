@@ -340,6 +340,52 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
   } finally { await context.close(); }
 }, 15000);
 
+it.each(['local', 'cloud'])('スマホのタグ列タイトルと名前/件数を同じ行に揃えPC配置を維持する：%s', async mode => {
+  for (const width of [1200, 650, 390, 320]) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, mode === 'cloud' ? 'cloud-tag-delete-success' : 'cloud-edit-signed-out');
+      await page.locator(mode === 'cloud' ? '#product-cloud-items' : '#new').waitFor();
+      await page.getByRole('button', { name: 'タグ管理', exact: true }).last().click();
+      const dialog = page.getByRole('dialog', { name: mode === 'cloud' ? 'クラウドタグ管理' : 'タグ管理', exact: true });
+      if (mode === 'local') {
+        await dialog.getByLabel('新規タグ名').fill('長いタグ名'.repeat(6));
+        await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+      }
+      const row = dialog.locator('.tag-manager-row').first(); await row.waitFor();
+      expect(await dialog.locator('.tag-manager-columns').isVisible()).toBe(true);
+      expect(await dialog.locator('.tag-manager-columns').allTextContents()).toEqual(['タグ名使用メモ数']);
+      const metrics = await dialog.evaluate(node => {
+        const rect = (selector: string) => { const r = node.querySelector(selector)!.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, center: (r.top + r.bottom) / 2 }; };
+        const style = getComputedStyle(node.querySelector('.tag-manager-columns')!);
+        return { headerName: rect('.tag-manager-columns>span:first-child'), headerCount: rect('.tag-manager-columns>span:nth-child(2)'),
+          name: rect('.tag-manager-row>span:first-child'), count: rect('.tag-manager-row>span:nth-child(2)'),
+          edit: rect('.tag-manager-row>button'), search: rect('input[type=search]'),
+          font: style.fontSize, color: style.color, overflow: node.scrollWidth > node.clientWidth };
+      });
+      expect(metrics.font).toBe('13px'); expect(metrics.color).toBe('rgb(104, 118, 138)');
+      expect(metrics.headerName.top).toBeGreaterThan(metrics.search.bottom);
+      expect(Math.abs(metrics.name.left - metrics.headerName.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(metrics.count.left - metrics.headerCount.left)).toBeLessThanOrEqual(1);
+      expect(Math.abs(metrics.name.center - metrics.count.center)).toBeLessThanOrEqual(1);
+      expect(metrics.overflow).toBe(false);
+      if (width <= 650) expect(metrics.edit.top).toBeGreaterThanOrEqual(Math.max(metrics.name.bottom, metrics.count.bottom));
+      else expect(Math.abs(metrics.edit.center - metrics.name.center)).toBeLessThanOrEqual(1);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/tag-columns-${mode}-${width}.png`, root)) });
+      const before = await page.evaluate('fixture.rpcNames.slice()');
+      const writes = await page.evaluate('fixture.calls.writes');
+      await row.getByRole('button', { name: '編集', exact: true }).click();
+      expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/tag-columns-edit-${mode}-${width}.png`, root)) });
+      await row.getByRole('button', { name: 'キャンセル', exact: true }).click();
+      expect(await page.evaluate('fixture.rpcNames.slice()')).toEqual(before);
+      expect(await page.evaluate('fixture.calls.writes')).toBe(writes);
+      expect(await page.evaluate('fixture.calls.fetch')).toBe(0);
+    } finally { await context.close(); }
+  }
+}, 20000);
+
 it.each(['local', 'cloud'])('タグ管理の見出し階層と2領域の余白・短い説明文を揃える：%s', async mode => {
   for (const width of [1200, 390, 320]) {
     const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
