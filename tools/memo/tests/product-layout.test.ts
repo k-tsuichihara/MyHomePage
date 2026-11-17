@@ -340,6 +340,49 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
   } finally { await context.close(); }
 }, 15000);
 
+it.each([1200, 390, 320])('バックアップモーダルの配置と×/Escape・読取中close防止を維持する：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out');
+    await page.locator('#new').waitFor();
+    const backup = page.getByRole('dialog', { name: 'バックアップ・復元', exact: true });
+    const open = page.getByRole('button', { name: 'バックアップ・復元', exact: true });
+    await open.click();
+    expect(await backup.getByRole('button', { name: '閉じる', exact: true }).count()).toBe(0);
+    expect(await backup.locator('[data-close-dialog]').count()).toBe(1);
+    const diagnose = backup.getByRole('button', { name: '初期復元の保存状況を診断', exact: true });
+    const normal = backup.getByRole('button', { name: '初期復元を終了して通常利用', exact: true });
+    const a = (await diagnose.boundingBox())!, b = (await normal.boundingBox())!;
+    if (width > 650) {
+      expect(b.y).toBe(a.y); expect(b.x - (a.x + a.width)).toBeGreaterThanOrEqual(24);
+    } else expect(b.y - (a.y + a.height)).toBeGreaterThanOrEqual(20);
+    expect(await backup.locator('.dialog-heading h2').evaluate(node => getComputedStyle(node).fontSize)).toBe('22px');
+    expect(await backup.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/backup-dialog-${width}.png`, root)) });
+    const close = backup.getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true });
+    await close.click(); expect(await backup.isVisible()).toBe(false);
+    await open.click(); await page.keyboard.press('Escape'); expect(await backup.isVisible()).toBe(false);
+    await open.click();
+    // 実ファイルやStorageを使わず、既存の読取busy/inertガードへ入る。
+    await page.evaluate(() => {
+      const original = File.prototype.arrayBuffer;
+      File.prototype.arrayBuffer = function () { return new Promise<ArrayBuffer>(resolve => {
+        Object.assign(window, { finishBackupFile: () => { File.prototype.arrayBuffer = original; resolve(new TextEncoder().encode('{}').buffer); } });
+      }); };
+    });
+    await backup.getByLabel('初期復元のバックアップJSON', { exact: true }).setInputFiles({ name: 'fake.json', mimeType: 'application/json', buffer: Buffer.from('{}') });
+    await expect.poll(() => close.evaluate(node => !!node.closest('[inert]'))).toBe(true);
+    await close.dispatchEvent('click'); expect(await backup.isVisible()).toBe(true);
+    await page.keyboard.press('Escape'); expect(await backup.isVisible()).toBe(true);
+    await page.evaluate('finishBackupFile()');
+    await expect.poll(() => close.evaluate(node => !!node.closest('[inert]'))).toBe(false);
+    await close.click(); expect(await backup.isVisible()).toBe(false);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+  } finally { await context.close(); }
+}, 15000);
+
 it('初期復元UNKNOWNから認証画面を閉じて回復操作へ戻れる', async () => {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   try {
@@ -354,7 +397,7 @@ it('初期復元UNKNOWNから認証画面を閉じて回復操作へ戻れる', 
     await page.evaluate('fixture.failWrites()');
     await page.getByRole('button', { name: '確認して初期復元', exact: true }).click();
     await backup.getByText(/初期復元の結果は不明/).waitFor();
-    await backup.getByRole('button', { name: '閉じる', exact: true }).click();
+    await backup.getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
     const auth = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
     for (const method of ['button', 'escape']) {
       await page.locator('#product-auth-open').click();
@@ -433,7 +476,7 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     const backup = page.getByRole('dialog', { name: 'バックアップ・復元', exact: true });
     expect(await backup.isVisible()).toBe(true);
     expect(await backup.getByLabel('初期復元のバックアップJSON').count()).toBe(1);
-    await backup.getByRole('button', { name: '閉じる', exact: true }).click();
+    await backup.getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
     await page.locator('#new').click();
     await page.locator('#memo-title').fill('画面確認の合成メモ'); await page.locator('#memo-body').fill('日本語の本文を保存します。');
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-editor-${width}.png`, root)) });
@@ -469,7 +512,7 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     await backup.getByRole('button', { name: 'JSONバックアップを作成' }).click();
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-backup-${width}.png`, root)) });
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(raw);
-    await backup.getByRole('button', { name: '閉じる', exact: true }).click();
+    await backup.getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
     // 新旧データではなく、この専用Contextで作ったメモだけを複製して描画用件数を用意する。
     await page.evaluate(() => {
       const data = JSON.parse(localStorage.getItem('myhomepage.memo.data.v2')!);

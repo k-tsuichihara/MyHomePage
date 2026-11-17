@@ -1,5 +1,13 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## バックアップ・復元モーダルの配置調整
+
+P2レビュー対応：`product-html.test.ts`にも下部「閉じる」を参照する2か所が残っていたため、既存右上×のアクセシブル名へ更新した。typecheckとVitest全59ファイル/1,955件がPASSし、normalケースの後続の単件回復・追加復元まで到達することを確認。製品コードの追加変更はない。
+
+最新main（PR #111マージ後）から、モーダル下部の重複した「閉じる」だけを削除し、既存の右上×を維持する。見出しは22px、初期復元の診断と通常利用の間隔はPC横24px・スマホ縦20px。CSSは`#backup-dialog`内だけで、一覧・詳細・タグ管理や復元の処理/安全契約は変更しない。
+
+AI Gate：1200/390/320pxでボタン配置・見出し・横はみ出しなし・下部ボタン不在・×/Escapeで閉じることを確認する。既存初期復元のFile読取を遅延させ、busy時に×へのclickイベントとEscapeの両方が拒否され、完了後は閉じられることを確認（0書込）。製品/preview関連38件、backup/初期復元/追加復元/単件回復/product app関連179件、Playwright E2E83件、typecheck、local/cloud product build、`git diff --check`はPASS。既存の4機能への到達・初期復元UNKNOWN回復・一覧/検索/タグ/並び替えも回帰範囲に含む。画像はignored `.product/backup-dialog-*`のみ。実Supabase/Auth/RPC/DB/SQL通信0件、Human UAT・公開・マージ未実施。実機の操作感は未確認。
+
 ## メモ一覧UI最終4項目（現行）
 
 スマホ一覧の最終2点：650px以下の一覧だけ、タグ検索と絞込解除を横並びにし、解除ボタンの右端をタグ管理ボタンの右端に揃える。オーナーレビューに従い全幅input＋次行解除の案を取り下げ、解除ボタンに必要な幅と10pxの間隔を確保した残りを検索欄に使う。タグ一覧→並び替えの順序は維持する。selectには既存PCと同じappearance:none、padding-right:42px、SVG矢印の右16px余白を適用する。PC用ルール・詳細/モーダル・機能契約は変更しない。local/cloud各320/390/650/1200pxで幅・余白・検索入力/解除/並び替え・追加RPC/writeなしを確認。typecheck、製品/preview関連35件、Playwright E2E83件、local/cloud build、差分チェックはPASS。合成画像はignored `.product/final-tag-*`のみ。実通信・Human UAT・公開は未実施。

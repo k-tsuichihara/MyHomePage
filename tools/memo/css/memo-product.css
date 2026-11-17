@@ -1,3 +1,9 @@
+/* バックアップ・復元内だけの見出しと操作グループ間隔。 */
+#backup-dialog>.dialog-heading h2{font-size:22px;line-height:1.4}
+#backup-dialog section[aria-label="保存領域喪失時の初期復元"]>div>button:last-child{margin-inline-start:24px}
+@media(max-width:650px){
+#backup-dialog section[aria-label="保存領域喪失時の初期復元"]>div>button:last-child{display:block;margin:20px 0 0}
+}
 /* 新製品候補のメモ領域だけに適用し、共通ヘッダー・フッターを変更しない。 */
 html[data-product-layout] body:has(.memo-product){height:100dvh;overflow:hidden;display:flex;flex-direction:column;background:#f7f9fc;color:#273449}
 html[data-product-layout] body:has(.memo-product)>header,html[data-product-layout] body:has(.memo-product)>footer{flex:0 0 auto}html[data-product-layout] body:has(.memo-product)>main{flex:1;min-height:0}
