@@ -9,9 +9,8 @@
 .tag-manager-content .tag-manager-row{padding:12px 0;border-bottom:1px solid #e0e6ed}
 @media(max-width:650px){
 .tag-manager-content .tag-create-form{grid-template-columns:minmax(0,1fr)}
-.tag-manager-content .tag-manager-columns{display:none}
+.tag-manager-content .tag-manager-columns{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .memo-product .tag-manager-content :is(#tag-manager-rows,.tag-manager-rows)>.tag-manager-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-.tag-manager-content .tag-manager-row>span{grid-column:1/-1}
 .tag-manager-content .tag-row-form{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .tag-manager-content .tag-row-form input{grid-column:1/-1}
 .tag-manager-content button{min-height:44px}
