@@ -3,7 +3,7 @@ import type { VoiceRecognition, VoiceStatus, VoiceEditorPort } from '../voice-in
 import type { createLocalMemoController } from '../local-memo-controller';
 import type { VoiceEditBridge } from './memo-preview';
 
-/** 一覧と同じ音声ボタンの見た目をPCだけに適用する。認識操作は変更しない。 */
+/** 一覧の音声スタイルを利用する表示装飾。適用幅は製品CSSへ委ね、認識操作は変更しない。 */
 export function decoratePcVoiceButton(doc: Document, button: HTMLButtonElement) {
   button.classList.add('pc-voice-button');
   const icon = doc.createElement('span'); icon.className = 'pc-only'; icon.setAttribute('aria-hidden', 'true'); icon.textContent = '🎙 ';
@@ -47,8 +47,11 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
     (slot ?? doc.getElementById(id!))!.append(button); buttons.push(button);
   }
   (doc.getElementById('editor-voice-controls-slot') ?? doc.getElementById('memo-app'))!.append(voice.section);
+  const editorFooter = doc.querySelector('#editor-view .editor-footer');
+  const stop = voice.section.querySelector('button');
+  if (editorFooter && stop && doc.documentElement.dataset.productLayout === 'review2') editorFooter.prepend(stop);
   // 非対応時はeditorへ遷移しないため、通知は一覧・詳細からも見える共通領域へ置く。
   (doc.querySelector('#memo-app .statuses') ?? doc.getElementById('memo-app'))!.append(voice.status);
-  return Object.assign(() => { voice.dispose(); voice.status.remove(); buttons.forEach(button => button.remove()); },
+  return Object.assign(() => { voice.dispose(); voice.status.remove(); if (editorFooter) stop?.remove(); buttons.forEach(button => button.remove()); },
     { stop: () => voice.stop() });
 }
