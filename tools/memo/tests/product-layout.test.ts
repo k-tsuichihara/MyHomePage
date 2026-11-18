@@ -103,6 +103,9 @@ it.each([[320, 568], [390, 667], [568, 320]])('縦に短いスマホでも操作
     const main = page.locator('body > main'), box = await main.boundingBox();
     await page.mouse.move(box!.x + 20, box!.y + 30); await page.mouse.wheel(0, 2000);
     await expect.poll(() => main.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    // 戻る位置によって既にscrollTop>0のことがあるため、非同期wheelの完了を一覧の到達で待つ。
+    await expect.poll(async () => { const cards = (await page.locator('#cards').boundingBox())!; return cards.y + cards.height; })
+      .toBeLessThanOrEqual(box!.y + box!.height + 1);
     const cards = await page.locator('#cards').boundingBox();
     expect(cards!.y).toBeGreaterThanOrEqual(box!.y);
     expect(cards!.y + cards!.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
@@ -338,6 +341,71 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
     expect(await page.locator('#product-cloud-trash-state').isVisible()).toBe(false);
     expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_change_state', 'memo_load_snapshot']);
   } finally { await context.close(); }
+}, 15000);
+
+it.each([1200, 390, 320])('編集の定型通知だけを隠しスマホの操作順を反転する：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
+    const order = async () => {
+      const boxes = await page.evaluate(() => {
+        const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left }; };
+        return { back: rect('#back'), backup: rect('[data-open-dialog=backup-dialog]'), reload: rect('#reload') };
+      });
+      if (width <= 650) {
+        expect(boxes.reload.bottom).toBeLessThan(boxes.backup.top); expect(boxes.backup.bottom).toBeLessThan(boxes.back.top);
+      } else {
+        expect(boxes.backup.top).toBe(boxes.reload.top); expect(boxes.backup.left).toBeLessThan(boxes.reload.left);
+      }
+    };
+    const initialOrder = await page.locator('.list-operation-group').evaluate(node => getComputedStyle(node).flexDirection);
+    await page.locator('#new').click();
+    await expect.poll(() => page.locator('.memo-product').getAttribute('data-page')).toBe('edit');
+    expect(await page.locator('#save-status').textContent()).toBe('まだ保存操作は行っていません。');
+    expect(await page.locator('#save-status').isVisible()).toBe(false);
+    expect(await page.locator('#read-status').isVisible()).toBe(false);
+    await order();
+    await page.locator('#memo-title').fill('未保存の合成メモ'); await page.locator('#memo-body').fill('保持する本文');
+    expect(await page.locator('#draft-status').isVisible()).toBe(true);
+    await page.locator('#back').click(); await page.locator('#confirmation').waitFor(); await page.locator('#confirm-no').click();
+    expect(await page.locator('#memo-body').inputValue()).toBe('保持する本文');
+    await page.locator('#editor-voice-slot button').click();
+    expect(await page.getByRole('status').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).isVisible()).toBe(true);
+    await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).click();
+    const backup = page.getByRole('dialog', { name: 'バックアップ・復元', exact: true });
+    expect(await backup.isVisible()).toBe(true); await backup.getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
+    expect(await page.locator('#memo-body').inputValue()).toBe('保持する本文');
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/mobile-editor-notice-order-${width}.png`, root)) });
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor();
+    await expect.poll(() => page.locator('.memo-product').getAttribute('data-page')).toBe('detail'); await order();
+    await page.locator('#back').click(); await page.locator('#list-view').waitFor();
+    await expect.poll(() => page.locator('.memo-product').getAttribute('data-page')).toBe('list');
+    expect(await page.locator('.list-operation-group').evaluate(node => getComputedStyle(node).flexDirection)).toBe(initialOrder);
+    await page.locator('#reload').click(); await page.locator('#cards button.open-card').first().waitFor();
+    expect(await page.evaluate('fixture.calls.writes')).toBe(1); expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each([1200, 390, 320])('編集通知の抑制後も実fake保存のエラー/拒否/UNKNOWNを表示する：幅%s', async width => {
+  for (const failure of ['invalid', 'rejected', 'unknown']) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor(); await page.locator('#new').click();
+      await page.locator('#memo-title').fill(failure === 'invalid' ? 'あ'.repeat(101) : '合成メモ'); await page.locator('#memo-body').fill('残す本文');
+      if (failure !== 'invalid') await page.evaluate(failure === 'unknown' ? 'fixture.failWrites()' : 'fixture.failReads(true)');
+      await page.locator('#save').click();
+      const notice = page.locator(failure === 'invalid' ? '#error' : '#save-status');
+      await notice.filter({ hasText: failure === 'invalid' ? '入力を確認' : failure === 'unknown' ? '保存結果は不明' : '拒否' }).waitFor();
+      expect(await notice.isVisible()).toBe(true);
+      expect(await page.locator('.statuses').isVisible()).toBe(true);
+      expect(await page.locator('#memo-body').inputValue()).toBe('残す本文');
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/mobile-editor-${failure}-${width}.png`, root)) });
+      expect(await page.evaluate('fixture.calls.writes')).toBe(failure === 'unknown' ? 1 : 0);
+      expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+    } finally { await context.close(); }
+  }
 }, 15000);
 
 it.each(['local', 'cloud'])('全幅の編集画面で上部ナビと左右の停止/保存・前回表示を維持する：%s', async mode => {
