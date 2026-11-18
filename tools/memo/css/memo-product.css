@@ -6,6 +6,7 @@
 @media(min-width:651px){
 .memo-product .pc-only{display:inline}.memo-product .mobile-only{display:none}
 .memo-product #detail-view,.memo-product #editor-view{display:flex;flex-direction:column}
+.memo-product #detail-body{flex-shrink:0}
 .memo-product .detail-actions:has(#previous),.memo-product .detail-actions:has(#editor-previous){order:2;margin-top:16px}
 .memo-product #next,.memo-product #editor-next{order:2;margin-left:auto}
 .memo-product #duplicate,.memo-product #editor-duplicate{order:1}

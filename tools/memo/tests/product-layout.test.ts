@@ -340,6 +340,37 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
   } finally { await context.close(); }
 }, 15000);
 
+it.each([1200, 900, 651, 390])('長いlocal本文は操作へ重ならず詳細内をスクロールして読める：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 800 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
+    const content = Array.from({ length: 100 }, (_, index) => `長文${index}：${'折り返す本文'.repeat(10)}`).join('\n');
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('長文の合成メモ'); await page.locator('#memo-body').fill(content);
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor();
+    const before = await page.evaluate('fixture.calls.writes');
+    const metrics = await page.locator('#detail-view').evaluate(node => {
+      const body = node.querySelector('#detail-body')!;
+      const rect = body.getBoundingClientRect();
+      return { height: rect.height, bottom: rect.bottom, client: body.clientHeight, scroll: body.scrollHeight,
+        editing: node.querySelector('#edit')!.getBoundingClientRect().top,
+        voice: node.querySelector('#detail-voice-slot')!.getBoundingClientRect().top,
+        nav: node.querySelector('#previous')!.getBoundingClientRect().top, viewport: node.clientHeight };
+    });
+    expect(metrics.height).toBeGreaterThan(metrics.viewport);
+    expect(metrics.scroll).toBeLessThanOrEqual(metrics.client + 1);
+    expect(metrics.bottom).toBeLessThanOrEqual(metrics.editing);
+    expect(metrics.bottom).toBeLessThanOrEqual(metrics.voice);
+    if (width > 650) expect(metrics.bottom).toBeLessThanOrEqual(metrics.nav);
+    expect(await page.locator('#detail-body').textContent()).toBe(content);
+    await page.locator('#edit').scrollIntoViewIfNeeded();
+    expect(await page.locator('#detail-view').evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/long-detail-${width}.png`, root)) });
+    await page.locator('#edit').click(); expect(await page.locator('#memo-body').inputValue()).toBe(content);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(before);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+  } finally { await context.close(); }
+}, 15000);
+
 it.each([1200, 900, 390])('local詳細/編集のPC表示を調整しスマホ・保存契約を維持する：幅%s', async width => {
   const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
   try {
