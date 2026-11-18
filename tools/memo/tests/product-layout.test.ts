@@ -354,7 +354,7 @@ it.each([1200, 650, 390, 320])('編集の定型通知だけを隠しスマホは
       });
       if (width <= 650) {
         expect(boxes.reload.top).toBe(boxes.backup.top);
-        expect(boxes.backup.left - boxes.reload.right).toBeGreaterThanOrEqual(8);
+        expect(boxes.reload.left - boxes.backup.right).toBeGreaterThanOrEqual(8);
         expect(Math.max(boxes.reload.bottom, boxes.backup.bottom)).toBeLessThan(boxes.back.top);
       } else {
         expect(boxes.backup.top).toBe(boxes.reload.top); expect(boxes.backup.left).toBeLessThan(boxes.reload.left);

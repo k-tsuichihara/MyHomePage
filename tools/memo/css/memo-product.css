@@ -55,7 +55,7 @@
 .memo-product[data-page=edit] .statuses [data-routine=true]{display:none!important}
 .memo-product[data-page=edit] .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([hidden]))){display:none}
 .memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation{flex-direction:column-reverse}
-.memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation .list-operation-group{flex-direction:row-reverse;flex-wrap:nowrap}
+.memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation .list-operation-group{flex-direction:row;flex-wrap:nowrap}
 .memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation .list-operation-group button{flex:1 1 auto;width:auto}
 }
 /* タグ管理の2領域と行編集。メモ一覧のフィルターには適用しない。 */
