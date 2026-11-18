@@ -130,7 +130,7 @@ Q04 Step 4第6単位：通常cloudメモ1件のゴミ箱移動を既存C04 chang
 | Q02 | 合成メモリUI・ブラウザE2E | 完了 | [ブラウザ契約](../tools/memo/tests/BROWSER-UI.md)、tests/browser/、PR #12以降 | 過去記録83件PASS。実OS日本語IME・実端末受入とは別 |
 | Q03 | 隔離ChromiumのStorage/Web Locks・形式/切替試験 | 完了 | [永続化](../tools/memo/tests/LOCAL-PERSISTENCE.md)、Phase B、[切替設計](../tools/memo/tests/RELEASE-TRANSITION.md)、PR #14・#15・#17・#26 | 過去記録22/16/20件PASS。容量・再起動は記録範囲に限定 |
 | Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 完了 | PR #102、既存Q04実行記録、オーナー完了判断 | 個人利用v1.1.0の技術ゲートとしてCOMPLETE。既存S04/Q04-READ/Case13/Case6と製品Auth/D05/logout観測を再利用。single-rpc・完全response provenanceは未認定のまま延期。追加Human Gate・実通信は行わない。主要操作/実マイク等はQ05へ |
-| Q05 | 実機・IME・主要操作・ドラフト保護等の最小UAT | 未着手 | 現行layout_review2.drawio、製品UI統合契約、オーナー判断 | 正式開始前。レイアウト未完成時のlocal確認は参考結果で、正式UAT PASSへ計上しない。PC/スマホの製品レイアウトとバックアップ・復元モーダルをAI Gateで完成後に受入へ渡す。実マイク/配信環境の確認は別途承認された段階で扱う |
+| Q05 | 実機・IME・主要操作・ドラフト保護等の最小UAT | 未着手 | [Human UAT計画・進捗正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)、現行layout_review2.drawio、製品UI統合契約、オーナー判断 | 正式開始前。レイアウト未完成時のlocal確認は参考結果で、正式UAT PASSへ計上しない。PC/スマホの製品レイアウトとバックアップ・復元モーダルをAI Gateで完成後に受入へ渡す。実マイク/配信環境の確認は別途承認された段階で扱う |
 
 ## 7. 本番移行・公開
 
