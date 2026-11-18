@@ -651,3 +651,5 @@ AI Gateは既存memo-query/tag-usage単体を全回帰で再利用する。製�
 最終AI Gate：typecheck、Vitest 56ファイル/1846件（製品Chromium236件、うちB1追加11件）、既存Playwright E2E83件、product build、git diff --checkはPASS。E2E初回は83件の個別成功後にsandbox内のサーバー終了処理が完了しなかったため中断し、設定変更なしの通常権限で83件PASS・終了コード0を確認した。実Supabase/Auth/RPC/DB/SQL通信は0件。
 
 **B1はAI実装/検証の完了候補、レビュー待ち。既知のfake/offline未結線はB2 cloudメモ複製・B3 cloud音声入力の2機能群。** 上の第13単位時点のB=3は履歴とし、本節が現在状態の正本。B2/B3には着手せず次の別承認を待つ。C03/C04/C05/Q04 Step 4全体は進行中、実製品接続/受入・single-rpcは未完了。実Supabase/Auth/RPC/DB/SQL・cleanup・Human Gate・公開は行わない。
+
+PR #119追加調整：スマホの詳細・編集にもPCと同じ共通HTMLフッターを表示する。一覧で既存のコンパクトな余白・文字サイズを再利用し、320/390/650/1200pxの詳細・編集往復でフッター1件・表示文言・横はみ出しなしを確認する。

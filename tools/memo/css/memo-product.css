@@ -241,10 +241,10 @@ html[data-product-layout] body:has(.memo-product)>main{overflow-y:auto}
 .memo-product[data-page=list] .statuses{max-height:none}
 .memo-product[data-page=list] .statuses [data-routine=true]{display:none!important}
 .memo-product[data-page=list] .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([hidden]))){display:none}
-html[data-product-layout] body:has(.memo-product[data-page=list])>footer{display:block}
-html[data-product-layout] body:has(.memo-product[data-page=list])>footer #obi{min-height:0;padding:10px 14px}
-html[data-product-layout] body:has(.memo-product[data-page=list])>footer .footer-title{font-size:16px}
-html[data-product-layout] body:has(.memo-product[data-page=list])>footer .footer-tagline{font-size:11px}
+html[data-product-layout] body:has(.memo-product)>footer{display:block}
+html[data-product-layout] body:has(.memo-product)>footer #obi{min-height:0;padding:10px 14px}
+html[data-product-layout] body:has(.memo-product)>footer .footer-title{font-size:16px}
+html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-size:11px}
 .memo-product[data-page=list] .tag-controls>.tag-search-row{grid-row:2}
 .memo-product[data-page=list] .tag-controls>.tag-search-row{grid-template-columns:minmax(0,1fr) auto}
 .memo-product[data-page=list] .tag-search-row>button{justify-self:end}

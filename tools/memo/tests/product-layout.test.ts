@@ -360,6 +360,10 @@ it.each([1200, 650, 390, 320])('編集の定型通知だけを隠しスマホは
         expect(boxes.backup.top).toBe(boxes.reload.top); expect(boxes.backup.left).toBeLessThan(boxes.reload.left);
       }
       expect(boxes.reload.fits).toBe(true); expect(boxes.backup.fits).toBe(true); expect(boxes.back.fits).toBe(true);
+      expect(await page.locator('body > footer').isVisible()).toBe(true);
+      expect(await page.locator('body > footer').count()).toBe(1);
+      expect(await page.locator('body > footer .footer-title').textContent()).toBe('Kana Tsuichihara Portfolio');
+      if (width <= 650) expect(await page.locator('body > footer').evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(80);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     };
     const initialOrder = await page.locator('.list-operation-group').evaluate(node => getComputedStyle(node).flexDirection);
