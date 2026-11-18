@@ -49,14 +49,14 @@
 .memo-product #memo-form>.section-heading>label,.memo-product #product-cloud-editor>.pc-cloud-body-heading>span{flex-basis:100%}
 .memo-product #editor-voice-slot,.memo-product #product-cloud-editor>.pc-cloud-body-heading>.pc-voice-button{margin-left:auto;white-space:nowrap}
 }
-/* スマホの編集通知はPCと同じ定型分類だけを省略する。詳細/編集の操作順は縦に反転。 */
+/* スマホの編集通知はPCと同じ定型分類だけを省略する。詳細/編集は上段2操作・下段戻る。 */
 @media(max-width:650px){
 .memo-product[data-page=edit] .statuses{max-height:none}
 .memo-product[data-page=edit] .statuses [data-routine=true]{display:none!important}
 .memo-product[data-page=edit] .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([hidden]))){display:none}
 .memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation{flex-direction:column-reverse}
-.memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation .list-operation-group{flex-direction:column-reverse;flex-wrap:nowrap}
-.memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation .list-operation-group button{flex:0 0 auto;width:100%}
+.memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation .list-operation-group{flex-direction:row;flex-wrap:nowrap}
+.memo-product:is([data-page=edit],[data-page=detail]) .detail-navigation .list-operation-group button{flex:1 1 auto;width:auto}
 }
 /* タグ管理の2領域と行編集。メモ一覧のフィルターには適用しない。 */
 .product-dialog:has(>.tag-manager-content)>.dialog-heading h2{font-size:22px;line-height:1.4}
@@ -241,10 +241,10 @@ html[data-product-layout] body:has(.memo-product)>main{overflow-y:auto}
 .memo-product[data-page=list] .statuses{max-height:none}
 .memo-product[data-page=list] .statuses [data-routine=true]{display:none!important}
 .memo-product[data-page=list] .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([hidden]))){display:none}
-html[data-product-layout] body:has(.memo-product[data-page=list])>footer{display:block}
-html[data-product-layout] body:has(.memo-product[data-page=list])>footer #obi{min-height:0;padding:10px 14px}
-html[data-product-layout] body:has(.memo-product[data-page=list])>footer .footer-title{font-size:16px}
-html[data-product-layout] body:has(.memo-product[data-page=list])>footer .footer-tagline{font-size:11px}
+html[data-product-layout] body:has(.memo-product)>footer{display:block}
+html[data-product-layout] body:has(.memo-product)>footer #obi{min-height:0;padding:10px 14px}
+html[data-product-layout] body:has(.memo-product)>footer .footer-title{font-size:16px}
+html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-size:11px}
 .memo-product[data-page=list] .tag-controls>.tag-search-row{grid-row:2}
 .memo-product[data-page=list] .tag-controls>.tag-search-row{grid-template-columns:minmax(0,1fr) auto}
 .memo-product[data-page=list] .tag-search-row>button{justify-self:end}

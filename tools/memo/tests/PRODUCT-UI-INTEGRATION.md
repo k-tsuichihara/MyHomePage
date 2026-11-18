@@ -4,11 +4,11 @@
 
 650px以下の編集画面で、既存`data-routine=true`のidle/読込完了/clean通知だけをPC同様に省略する。未保存の追加編集・入力エラー・拒否・UNKNOWN・読込失敗・音声非対応等は維持し、通知領域を無条件に非表示にしない。重要な複数行メッセージを切らないよう編集時の高さ制限を外す。未保存検知/確認や保存状態の分類は変更しない。
 
-詳細/編集の既存3ボタンはスマホだけ「再読み込み→バックアップ・復元→一覧へ」の縦順に反転する。390pxで横並びだった操作群もこの順へ揃える。PCの配置と完成済み一覧の操作群は未変更で、DOM/handler/ガードはそのまま使用する。
+詳細/編集の既存3ボタンはスマホだけ上段「バックアップ・復元」「再読み込み」の横並び、下段「一覧へ」とする（PR #119の追加調整でPCと左右順を統一）。上段は文字数に応じた自然幅を基に利用可能幅を分け合い、既存8pxの間隔と折り返しなしを維持する。PCの配置と完成済み一覧の操作群は未変更で、DOM/handler/ガードはそのまま使用する。
 
 1200/390/320pxで定型通知非表示、dirty警告と音声非対応表示、実fake保存のinvalid/rejected/UNKNOWN表示、未保存取消による本文保持、backup開閉・明示保存/再読込の回帰、詳細/編集での順序とPCの既存横配置、一覧へ戻った際の元配置・横はみ出しなしを検証する。短い横向き画面の既存試験は、既にscrollTop>0の場合もあるためwheel完了を一覧の画面内到達で待つよう同期条件だけを補足し、元の到達assertを維持する。合成画像はignored `.product/mobile-editor-*`のみ。実通信・Human UAT・公開・マージ未実施。
 
-AI Gate：製品layout/preview関連Vitest76件、Playwright E2E83件、typecheck、local/cloud product build、差分チェックPASS。実機の操作感は未受入。
+追加調整のAI Gate：320/390/650/1200pxの詳細/編集で2段配置・ボタン内文字の非overflow・ページの横はみ出しなし・PCの既存順を確認。製品layout/preview関連Vitest77件、Playwright E2E83件、typecheck、local/cloud product build、差分チェックPASS。画像はignored `.product/mobile-editor-notice-order-*` / `mobile-detail-two-actions-*`のみ。実機の操作感は未受入。
 
 ## 編集画面の操作配置（PC/スマホ共通・現行）
 
@@ -651,3 +651,5 @@ AI Gateは既存memo-query/tag-usage単体を全回帰で再利用する。製�
 最終AI Gate：typecheck、Vitest 56ファイル/1846件（製品Chromium236件、うちB1追加11件）、既存Playwright E2E83件、product build、git diff --checkはPASS。E2E初回は83件の個別成功後にsandbox内のサーバー終了処理が完了しなかったため中断し、設定変更なしの通常権限で83件PASS・終了コード0を確認した。実Supabase/Auth/RPC/DB/SQL通信は0件。
 
 **B1はAI実装/検証の完了候補、レビュー待ち。既知のfake/offline未結線はB2 cloudメモ複製・B3 cloud音声入力の2機能群。** 上の第13単位時点のB=3は履歴とし、本節が現在状態の正本。B2/B3には着手せず次の別承認を待つ。C03/C04/C05/Q04 Step 4全体は進行中、実製品接続/受入・single-rpcは未完了。実Supabase/Auth/RPC/DB/SQL・cleanup・Human Gate・公開は行わない。
+
+PR #119追加調整：スマホの詳細・編集にもPCと同じ共通HTMLフッターを表示する。一覧で既存のコンパクトな余白・文字サイズを再利用し、320/390/650/1200pxの詳細・編集往復でフッター1件・表示文言・横はみ出しなしを確認する。
