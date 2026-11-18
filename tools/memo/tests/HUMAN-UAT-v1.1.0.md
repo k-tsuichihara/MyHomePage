@@ -227,7 +227,7 @@ Human独立ケースを作らない：入力境界・Unicode／正規化・タ�
 | backup／各復元の正常・異常・不明・非破壊性 | [出力](LOCAL-BACKUP-EXPORT.md)・[追加](LOCAL-RESTORE.md)・[初期](INITIAL-RESTORE.md)・[単件回復](DELETED-RECOVERY.md)、対応Vitest・`tests/browser`のPlaywright |
 | DB権限・既存実通信技術ゲート | [Q04実行記録](../../memo-db-test/Q04-RESULTS.md)、Release PlanのS04/Q04 COMPLETE。再試験しない |
 
-直近PR #119の追加調整では関連Vitest72件、Playwright83件、typecheck、local/cloud build、diff checkのPASSが報告済み。過去の全Vitest記録と直近の関連回帰を混同せず、自動試験をHuman PASSに換算しない。
+PR #119の配置修正（`754cd96`）では関連Vitest77件（製品レイアウト＋preview）、フッター追加修正（`b04457d`）では製品レイアウトVitest72件のPASSがそれぞれ報告済み。両時点ともPlaywright83件、typecheck、local/cloud build、diff checkはPASS。77件と72件は実行範囲の異なる記録であり、フッター修正後に77件を再実行したとは扱わない。過去の全Vitest記録と各時点の関連回帰を混同せず、自動試験をHuman PASSに換算しない。
 
 ## Q05完了判断と後続工程
 
