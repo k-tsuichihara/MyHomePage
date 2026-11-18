@@ -1,37 +1,53 @@
-/* 詳細・編集のPC表示だけ。スマホは既存ラベル・配置を維持する。 */
+/* 詳細はPC限定、編集は下記の共通ルールでPC/スマホの表示を揃える。 */
 .memo-product .pc-only{display:none}
 @media(max-width:650px){
 .memo-product button.pc-voice-button{--voice-background:white;--voice-color:#284766;--voice-border:#c8d1de;--voice-hover:#edf3fb}
 }
 @media(min-width:651px){
 .memo-product .pc-only{display:inline}.memo-product .mobile-only{display:none}
-.memo-product #detail-view,.memo-product #editor-view{display:flex;flex-direction:column}
+.memo-product #detail-view{display:flex;flex-direction:column}
 .memo-product #detail-body{flex-shrink:0}
-.memo-product .detail-actions:has(#previous),.memo-product .detail-actions:has(#editor-previous){order:2;margin-top:16px}
-.memo-product #next,.memo-product #editor-next{order:2;margin-left:auto}
-.memo-product #duplicate,.memo-product #editor-duplicate{order:1}
-.memo-product #memo-form{display:grid;padding-top:14px;flex:0 0 auto}
-.memo-product #memo-form>label{order:0}.memo-product #memo-form>fieldset{order:1}
-.memo-product #memo-form>.section-heading{order:2}
-.memo-product #editor-voice-controls-slot,.memo-product #editor-voice-controls-slot>[data-voice-controls]{display:contents}
-.memo-product #memo-form .voice-service-notice{order:3}
-.memo-product #memo-body{order:4}.memo-product #editor-voice-controls-slot button{order:5}
-.memo-product #memo-form>.editor-footer{order:6;justify-content:flex-end}
-.memo-product #lengths,.memo-product .editor-footer>p{display:none}
-.memo-product .editor-tag-hint{font-size:12px;color:#68768a}
-.memo-product #product-cloud-editor{display:flex;flex-direction:column}
-.memo-product #product-cloud-editor>.pc-title-field{margin-top:14px}
-.memo-product #product-cloud-editor>.pc-cloud-body-heading{order:2}
-.memo-product #product-cloud-editor>.pc-cloud-body-field{order:4}
-.memo-product #product-cloud-editor>[data-voice-controls]{display:contents}
-.memo-product #product-cloud-editor .voice-service-notice{order:3}
-.memo-product #product-cloud-editor>button,.memo-product #product-cloud-editor>[role=group],.memo-product #product-cloud-editor>[role=status]{order:5}
+.memo-product .detail-actions:has(#previous){order:2;margin-top:16px}
+.memo-product #next{order:2;margin-left:auto}
+.memo-product #duplicate{order:1}
 .memo-product #product-cloud-snapshot[data-view=detail]{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 .memo-product #product-cloud-snapshot[data-view=detail]>*{grid-column:1/-1}
 .memo-product #product-cloud-snapshot .pc-cloud-detail-nav{display:contents}
 .memo-product .pc-cloud-detail-nav>button:first-child{grid-column:1;order:10;justify-self:start}
 .memo-product #product-cloud-snapshot>.pc-cloud-duplicate{grid-column:2;order:11;justify-self:center}
 .memo-product .pc-cloud-detail-nav>button:last-child{grid-column:3;order:12;justify-self:end}
+}
+/* 編集画面のみ、端末幅を問わず上部ナビと停止/保存のフッターを使う。 */
+.memo-product #editor-view{display:flex;flex-direction:column}
+.memo-product #editor-view>.detail-actions{flex-wrap:nowrap;gap:8px;margin:0}
+.memo-product #editor-next{margin-left:auto}
+.memo-product #memo-form{display:grid;padding-top:14px;flex:0 0 auto}
+.memo-product #memo-form>label{order:0}.memo-product #memo-form>fieldset{order:1}
+.memo-product #memo-form>.section-heading{order:2}
+.memo-product #editor-voice-controls-slot,.memo-product #editor-voice-controls-slot>[data-voice-controls]{display:contents}
+.memo-product #memo-form .voice-service-notice{order:3}
+.memo-product #memo-body{order:4}
+.memo-product #memo-form>.editor-footer{order:5;justify-content:space-between;flex-wrap:nowrap;gap:12px}
+.memo-product #lengths,.memo-product #editor-view .editor-footer>p{display:none}
+.memo-product #editor-view .editor-tag-hint{font-size:12px;color:#68768a}
+.memo-product #editor-view .pc-only,.memo-product #product-cloud-editor .pc-only,.memo-product[data-page=edit] #back .pc-only{display:inline}
+.memo-product #editor-view .mobile-only,.memo-product #product-cloud-editor .mobile-only,.memo-product[data-page=edit] #back .mobile-only{display:none}
+.memo-product #editor-view button.pc-voice-button,.memo-product #product-cloud-editor button.pc-voice-button{--voice-background:initial;--voice-color:initial;--voice-border:initial;--voice-hover:initial}
+.memo-product #editor-view .editor-footer button,.memo-product .cloud-editor-footer button{flex:0 0 auto;width:auto;white-space:nowrap}
+.memo-product #product-cloud-editor{display:flex;flex-direction:column}
+.memo-product #product-cloud-editor>.pc-title-field{margin-top:14px}
+.memo-product #product-cloud-editor>.editor-tag-hint{font-size:12px;color:#68768a}
+.memo-product #product-cloud-editor>.pc-cloud-body-heading{order:2}
+.memo-product #product-cloud-editor>.pc-cloud-body-field{order:4}
+.memo-product #product-cloud-editor>[data-voice-controls]{display:contents}
+.memo-product #product-cloud-editor .voice-service-notice{order:3}
+.memo-product #product-cloud-editor>.cloud-editor-footer{order:5;display:flex;justify-content:space-between;flex-wrap:nowrap;gap:12px;margin-top:16px}
+.memo-product #product-cloud-editor>button,.memo-product #product-cloud-editor>[role=group],.memo-product #product-cloud-editor>[role=status]{order:6}
+@media(max-width:650px){
+.memo-product #editor-view>.detail-actions button{font-size:12px;padding:8px 6px;min-width:44px;min-height:44px;white-space:nowrap}
+.memo-product #memo-form>.section-heading,.memo-product #product-cloud-editor>.pc-cloud-body-heading{flex-wrap:wrap;gap:8px}
+.memo-product #memo-form>.section-heading>label,.memo-product #product-cloud-editor>.pc-cloud-body-heading>span{flex-basis:100%}
+.memo-product #editor-voice-slot,.memo-product #product-cloud-editor>.pc-cloud-body-heading>.pc-voice-button{margin-left:auto;white-space:nowrap}
 }
 /* タグ管理の2領域と行編集。メモ一覧のフィルターには適用しない。 */
 .product-dialog:has(>.tag-manager-content)>.dialog-heading h2{font-size:22px;line-height:1.4}

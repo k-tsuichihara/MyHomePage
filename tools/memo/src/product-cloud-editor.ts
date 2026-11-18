@@ -104,7 +104,10 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     setPcButtonLabel(doc, voiceStart, '音声で本文へ追記'); decoratePcVoiceButton(doc, voiceStart);
     setPcButtonLabel(doc, close, '< 一覧へ');
     bodyLabel.firstChild?.remove(); bodyHeading.append(bodyText, voiceStart);
-    const stop = voice.section.querySelector('button'); if (stop) { stop.textContent = '停止'; bodyHeading.append(stop); }
+    const stop = voice.section.querySelector('button');
+    const footer = doc.createElement('div'); footer.className = 'cloud-editor-footer editor-footer';
+    if (stop) footer.append(stop);
+    save.textContent = '保存する'; footer.append(save); root.append(footer);
     bodyLabel.before(bodyHeading);
     bodyHeading.classList.add('pc-cloud-body-heading'); bodyLabel.classList.add('pc-cloud-body-field');
     root.append(voice.section);

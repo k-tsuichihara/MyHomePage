@@ -1,6 +1,18 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
-## PCメモ詳細・編集の表示調整
+## 編集画面の操作配置（PC/スマホ共通・現行）
+
+localの既存「前のメモ→複製→次のメモ」をタイトル入力上へ戻し、次を右端に配置する。狭い幅では44px以上の操作領域を保ちつつ文字サイズ/余白を調整して一行に収める。cloud編集に前後移動機能は新設しない。local/cloudとも既存の停止buttonを実要素のまま保存と同じfooterへ移し、停止を左端・保存を右端・自然幅・12px以上の間隔で一行に置く。停止/保存のhandlerは変更せず、localのdisposeでは移動した停止buttonも解放する。cloudの保存ラベルも「保存する」へ揃える。
+
+編集画面ではスマホにも`< 一覧へ`、14pxのタイトル余白、12pxのタグ補足、一覧と共通の赤い音声追記ボタン、文字数/離脱補足の非表示、認識サービス説明を追記と本文の間へ配置する方針を適用する。詳細画面のスマホ表示・PC詳細の下部ナビ・長文スクロール、完成済み一覧/各モーダルは変更しない。保存上限・未保存確認・voice/C04/C05/Auth/UNKNOWN等の既存契約を維持する。
+
+スマホでは本文見出しと音声追記ボタンを段分けし、長い追記ラベルを不自然に折り返さない。停止/保存は一行を維持する。
+
+local/cloud各1200/900/390/320pxで上部ナビ、停止/保存の端揃え/同一行/文字切れなし、補足・説明の位置、横はみ出しなしを検証する。既存fake認識器で開始→停止が1回ずつ動き追加writeなし、明示保存だけがlocal write1回またはcloud memo_save1回となることを確認。画像はignored `.product/editor-actions-*`のみ。実通信・実マイク・Human UAT・公開・マージ未実施。
+
+AI Gate：Vitest全59ファイル/1,987件、最終の製品layout/preview関連70件、Playwright E2E83件、typecheck、local/cloud product build、差分チェックPASS。実機の操作感・実クラウド受入は未実施。
+
+## PCメモ詳細・編集の表示調整（PR #116時点）
 
 P2長文回帰：PCの縦flex化でlocal本文が180pxへ縮み、後続操作に重なることを1200/900/651pxの100行本文で再現した。PC限定で`#detail-body`に`flex-shrink:0`を指定し、内容高を維持する。390pxは従来の表示を維持する。4幅で本文のclientHeight/scrollHeight、編集/音声/ナビとの非重複、詳細内スクロールから編集へ進めること、本文一致、追加write/RPCなしを確認。修正後の関連Vitest68件・Playwright E2E83件・typecheck・local/cloud build・差分チェックPASS。画像はignored `.product/long-detail-*`のみ。実通信・Human UAT・公開・マージ未実施。
 
