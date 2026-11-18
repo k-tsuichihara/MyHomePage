@@ -343,20 +343,24 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
   } finally { await context.close(); }
 }, 15000);
 
-it.each([1200, 390, 320])('編集の定型通知だけを隠しスマホの操作順を反転する：幅%s', async width => {
+it.each([1200, 650, 390, 320])('編集の定型通知だけを隠しスマホは上段2操作・下段一覧へにする：幅%s', async width => {
   const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
   try {
     const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
     const order = async () => {
       const boxes = await page.evaluate(() => {
-        const rect = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left }; };
+        const rect = (selector: string) => { const node = document.querySelector(selector)!; const r = node.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, fits: node.scrollWidth <= node.clientWidth }; };
         return { back: rect('#back'), backup: rect('[data-open-dialog=backup-dialog]'), reload: rect('#reload') };
       });
       if (width <= 650) {
-        expect(boxes.reload.bottom).toBeLessThan(boxes.backup.top); expect(boxes.backup.bottom).toBeLessThan(boxes.back.top);
+        expect(boxes.reload.top).toBe(boxes.backup.top);
+        expect(boxes.backup.left - boxes.reload.right).toBeGreaterThanOrEqual(8);
+        expect(Math.max(boxes.reload.bottom, boxes.backup.bottom)).toBeLessThan(boxes.back.top);
       } else {
         expect(boxes.backup.top).toBe(boxes.reload.top); expect(boxes.backup.left).toBeLessThan(boxes.reload.left);
       }
+      expect(boxes.reload.fits).toBe(true); expect(boxes.backup.fits).toBe(true); expect(boxes.back.fits).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     };
     const initialOrder = await page.locator('.list-operation-group').evaluate(node => getComputedStyle(node).flexDirection);
     await page.locator('#new').click();
@@ -379,6 +383,7 @@ it.each([1200, 390, 320])('編集の定型通知だけを隠しスマホの操�
     await page.screenshot({ path: fileURLToPath(new URL(`.product/mobile-editor-notice-order-${width}.png`, root)) });
     await page.locator('#save').click(); await page.locator('#detail-view').waitFor();
     await expect.poll(() => page.locator('.memo-product').getAttribute('data-page')).toBe('detail'); await order();
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/mobile-detail-two-actions-${width}.png`, root)) });
     await page.locator('#back').click(); await page.locator('#list-view').waitFor();
     await expect.poll(() => page.locator('.memo-product').getAttribute('data-page')).toBe('list');
     expect(await page.locator('.list-operation-group').evaluate(node => getComputedStyle(node).flexDirection)).toBe(initialOrder);
