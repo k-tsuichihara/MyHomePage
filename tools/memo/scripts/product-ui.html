@@ -37,7 +37,7 @@
 </p>
 </section>
 <nav class="detail-navigation" aria-label="メモ操作">
-<button id="back">← 一覧へ</button>
+<button id="back"><span class="mobile-only">← 一覧へ</span><span class="pc-only">&lt; 一覧へ</span></button>
 <div class="list-operation-group" role="group" aria-label="一覧の操作">
 <button id="trash-view">ゴミ箱</button>
 <button id="normal-view">通常一覧</button>
@@ -123,7 +123,7 @@
 <div class="tag-search-row">
 <input id="editor-tag-search" type="search" aria-label="選択タグを検索" placeholder="タグを検索…">
 </div>
-<p>タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。</p>
+<p class="editor-tag-hint">タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。</p>
 <div id="editor-tags" class="tag-chips">
 </div>
 </fieldset>

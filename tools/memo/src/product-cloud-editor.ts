@@ -7,7 +7,8 @@ import type { createMemoAuthSession, AuthContext } from './auth-session';
 import type { Memo, Tag } from './types';
 import { uuidKey } from './read-primitives';
 import { createDuplicateEditor } from './memo-duplicate';
-import { createVoiceControls } from './ui/voice-input';
+import { createVoiceControls, decoratePcVoiceButton } from './ui/voice-input';
+import { setPcButtonLabel } from './ui/product-dialog';
 import { normalizeMemoInput } from './input';
 
 /** 単件cloud編集の製品接続。保存/照合の判定はC04、編集/離脱は既存純粋関数へ委譲する。 */
@@ -89,19 +90,23 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   if (doc.documentElement.dataset.productLayout === 'review2') {
     const titleLabel = doc.createElement('label'); titleLabel.textContent = 'タイトル（最大100文字）';
     title.before(titleLabel); titleLabel.append(title);
+    titleLabel.className = 'pc-title-field';
     const bodyLabel = doc.createElement('label'); bodyLabel.textContent = '本文（最大10,000文字）';
     body.before(bodyLabel); bodyLabel.append(body);
     const heading = doc.createElement('h2'); heading.textContent = 'メモの作成・編集'; root.prepend(heading);
     const search = doc.createElement('input'); search.type = 'search'; search.setAttribute('aria-label', 'クラウドの選択タグを検索'); search.placeholder = 'タグを検索…';
     search.oninput = () => tagField.querySelectorAll('label').forEach(label => { label.hidden = !(label.textContent ?? '').toLocaleLowerCase().includes(search.value.toLocaleLowerCase()); });
-    const note = doc.createElement('p'); note.textContent = '編集中は既存タグを選択できます。タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。';
+    const note = doc.createElement('p'); note.className = 'editor-tag-hint'; note.textContent = '編集中は既存タグを選択できます。タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。';
     bodyLabel.before(search, note, tagField, tagNotice);
     const bodyHeading = doc.createElement('div'); bodyHeading.className = 'section-heading';
     const bodyText = doc.createElement('span'); bodyText.textContent = '本文（最大10,000文字）';
     voiceStart.textContent = '音声入力';
+    setPcButtonLabel(doc, voiceStart, '音声で本文へ追記'); decoratePcVoiceButton(doc, voiceStart);
+    setPcButtonLabel(doc, close, '< 一覧へ');
     bodyLabel.firstChild?.remove(); bodyHeading.append(bodyText, voiceStart);
     const stop = voice.section.querySelector('button'); if (stop) { stop.textContent = '停止'; bodyHeading.append(stop); }
     bodyLabel.before(bodyHeading);
+    bodyHeading.classList.add('pc-cloud-body-heading'); bodyLabel.classList.add('pc-cloud-body-field');
     root.append(voice.section);
     // 非対応時は新規editorが作られない。通知だけはcloud一覧からも見える位置に置く。
     parent.append(voice.status);

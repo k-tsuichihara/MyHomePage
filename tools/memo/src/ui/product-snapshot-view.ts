@@ -4,7 +4,7 @@ import { queryMemos } from '../memo-query';
 import { countTagUsage } from '../tag-usage';
 import type { ListContext } from '../navigation-state';
 import type { CloudTarget } from '../cloud-rpc-types';
-import { openProductDialog } from './product-dialog';
+import { openProductDialog, setPcButtonLabel } from './product-dialog';
 import { mountTagManagerView } from './tag-manager-view';
 
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
@@ -55,11 +55,13 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       button('クラウド一覧へ戻る', () => list(token)));
     if (productLayout) {
       root.classList.add('memo-detail-layout');
+      const back = root.querySelector('button')!; setPcButtonLabel(doc, back, '< 一覧へ');
       const ordered = active![active!.view].result.items.map(item => item.memo.id);
       const index = ordered.findIndex(value => uuidKey(value) === uuidKey(memo.id));
-      const nav = doc.createElement('nav'); nav.className = 'detail-actions'; nav.setAttribute('aria-label', 'クラウドの前後移動');
+      const nav = doc.createElement('nav'); nav.className = 'detail-actions pc-cloud-detail-nav'; nav.setAttribute('aria-label', 'クラウドの前後移動');
       for (const [target, label] of [[ordered[index - 1], '前のメモ'], [ordered[index + 1], '次のメモ']] as const) {
-        const move = button(label, () => { if (root.contains(move) && current(token) && target) detail(target, token); }); move.disabled = !target; nav.append(move);
+        const move = button(label, () => { if (root.contains(move) && current(token) && target) detail(target, token); }); move.disabled = !target;
+        setPcButtonLabel(doc, move, label === '前のメモ' ? '〈 前のメモ' : '次のメモ 〉'); nav.append(move);
       }
       root.prepend(nav);
     }
@@ -79,6 +81,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
         if (duplicate(selected, tagIds, active!.valid, latest.tags)) clear();
       });
+      if (productLayout) { copy.classList.add('pc-cloud-duplicate'); setPcButtonLabel(doc, copy, '複製'); }
       root.append(copy);
     }
     if (changeState) {
@@ -199,7 +202,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
             const item = button(label, () => {
               if (!root.contains(item) || !current(token)) return;
               rememberScroll(); detail(memo.id, token);
-              Array.from(root.querySelectorAll('button')).find(node => node.textContent === existing)?.click();
+              Array.from(root.querySelectorAll('button')).find(node => (node.dataset.presentationLabel ?? node.textContent) === existing)?.click();
             }); menu.append(item);
           };
           if (memo.deletedAt === null) {
