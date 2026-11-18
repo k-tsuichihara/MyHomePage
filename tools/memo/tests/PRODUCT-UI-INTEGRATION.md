@@ -1,5 +1,17 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## PCメモ詳細・編集の表示調整
+
+P2長文回帰：PCの縦flex化でlocal本文が180pxへ縮み、後続操作に重なることを1200/900/651pxの100行本文で再現した。PC限定で`#detail-body`に`flex-shrink:0`を指定し、内容高を維持する。390pxは従来の表示を維持する。4幅で本文のclientHeight/scrollHeight、編集/音声/ナビとの非重複、詳細内スクロールから編集へ進めること、本文一致、追加write/RPCなしを確認。修正後の関連Vitest68件・Playwright E2E83件・typecheck・local/cloud build・差分チェックPASS。画像はignored `.product/long-detail-*`のみ。実通信・Human UAT・公開・マージ未実施。
+
+651px以上だけ、一覧へのラベルを`< 一覧へ`にし、既存の前後移動/複製を「前のメモ→複製→次のメモ」の下部操作として配置する。localの既存矢印と半角スペース1個は維持し、cloudの詳細前後移動にもPC用ラベルだけを付ける。次ボタンは右端、タイトル上は14pxの余白、タグの補足文は12pxにする。localの文字数表示と離脱の補足文はPCだけ非表示にし、バリデーション/未保存確認は変更しない。
+
+音声の固定説明文は`createVoiceControls`が作る認識サービス/外部送信の説明と確認できるため、PCはCSSの表示順で追記ボタンと本文の間へ配置する。動的な失敗/非対応/上限通知は共通領域に残す。既存一覧の赤い音声ボタンスタイルを共用し、PC追記ボタンにも同じ配色/hover/アイコンを使う。650px以下は元の文言・配色・説明位置・補足表示を保持する。DOM要素とhandlerは同じで、認識/保存/タグ選択/離脱/複製・隣接対象判定は変更しない。cloud一覧の操作委譲は表示ラベル変更後も固定した元ラベルを参照し、複製を壊さない。cloud編集に存在しない前後移動機能は新設しない。
+
+local1200/900/390px・cloud1200/390pxで配置/余白/配色/説明位置/不要表示/スマホ維持と無追加write/RPCを検証する。既存の保存、101文字拒否、未保存離脱取消、cloud複製→新規editor・編集続行の契約を確認する。画像はignored `.product/pc-detail-*` / `pc-editor-*`だけへ保存する。実通信・Human UAT・公開・マージは行わない。
+
+AI Gate：Vitest全59ファイル/1,981件、最終の製品layout/preview関連64件、Playwright E2E83件、typecheck、local/cloud product build、差分チェックPASS。実機の操作感・実マイク・実クラウドの受入は未実施。
+
 ## タグ管理モーダルの2領域UI（現行オーナー決定）
 
 スマホ登録済みタグの列調整（PR #114マージ後）：650px以下でも既存PC用の「タグ名」「使用メモ数」見出しを表示し、同じ2列の名前/件数を横並び、編集/削除を次行へ配置する。PC用ルール・CRUDコードは変更しない。local/cloud各1200/650/390/320pxで列位置の一致、PCと共通の文字色/13px、検索下の見出し、長いタグ名と行編集の横はみ出しなし、編集取消で追加write/RPCなしを確認。関連Vitest59件、Playwright E2E83件、typecheck、local/cloud build、差分チェックPASS。画像はignored `.product/tag-columns-*`のみ。実通信・Human UAT・公開・マージ未実施。

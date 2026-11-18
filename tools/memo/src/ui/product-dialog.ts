@@ -3,6 +3,14 @@ export function openProductDialog(dialog: HTMLDialogElement) {
   if (!dialog.open && dialog.isConnected) dialog.showModal();
 }
 
+/** PC用の表示ラベルだけを差し替え、スマホと既存のクリック処理を維持する。 */
+export function setPcButtonLabel(doc: Document, button: HTMLButtonElement, label: string) {
+  button.dataset.presentationLabel = button.textContent ?? '';
+  const mobile = doc.createElement('span'); mobile.className = 'mobile-only'; mobile.textContent = button.textContent;
+  const pc = doc.createElement('span'); pc.className = 'pc-only'; pc.textContent = label;
+  button.replaceChildren(mobile, pc);
+}
+
 /** 入れ子モーダルでも、処理中のパネル以外を従来どおりinertにする。 */
 export function outsidePanel(root: HTMLElement, panel: HTMLElement): HTMLElement[] {
   const nodes: HTMLElement[] = [];

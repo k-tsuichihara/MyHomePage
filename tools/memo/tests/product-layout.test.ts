@@ -340,6 +340,130 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
   } finally { await context.close(); }
 }, 15000);
 
+it.each([1200, 900, 651, 390])('長いlocal本文は操作へ重ならず詳細内をスクロールして読める：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 800 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
+    const content = Array.from({ length: 100 }, (_, index) => `長文${index}：${'折り返す本文'.repeat(10)}`).join('\n');
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('長文の合成メモ'); await page.locator('#memo-body').fill(content);
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor();
+    const before = await page.evaluate('fixture.calls.writes');
+    const metrics = await page.locator('#detail-view').evaluate(node => {
+      const body = node.querySelector('#detail-body')!;
+      const rect = body.getBoundingClientRect();
+      return { height: rect.height, bottom: rect.bottom, client: body.clientHeight, scroll: body.scrollHeight,
+        editing: node.querySelector('#edit')!.getBoundingClientRect().top,
+        voice: node.querySelector('#detail-voice-slot')!.getBoundingClientRect().top,
+        nav: node.querySelector('#previous')!.getBoundingClientRect().top, viewport: node.clientHeight };
+    });
+    expect(metrics.height).toBeGreaterThan(metrics.viewport);
+    expect(metrics.scroll).toBeLessThanOrEqual(metrics.client + 1);
+    expect(metrics.bottom).toBeLessThanOrEqual(metrics.editing);
+    expect(metrics.bottom).toBeLessThanOrEqual(metrics.voice);
+    if (width > 650) expect(metrics.bottom).toBeLessThanOrEqual(metrics.nav);
+    expect(await page.locator('#detail-body').textContent()).toBe(content);
+    await page.locator('#edit').scrollIntoViewIfNeeded();
+    expect(await page.locator('#detail-view').evaluate(node => node.scrollTop)).toBeGreaterThan(0);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/long-detail-${width}.png`, root)) });
+    await page.locator('#edit').click(); expect(await page.locator('#memo-body').inputValue()).toBe(content);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(before);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each([1200, 900, 390])('local詳細/編集のPC表示を調整しスマホ・保存契約を維持する：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('PC表示のメモ'); await page.locator('#memo-body').fill('本文');
+    await page.locator('#save').click(); await page.locator('#detail-view').waitFor();
+    const before = await page.evaluate('fixture.calls.writes');
+    expect(await page.getByRole('button', { name: '〈 前のメモ', exact: true }).count()).toBe(1);
+    expect(await page.getByRole('button', { name: '次のメモ 〉', exact: true }).count()).toBe(1);
+    const rect = async (selector: string) => page.locator(selector).evaluate(node => { const r = node.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+    if (width > 650) {
+      expect(await page.getByRole('button', { name: '< 一覧へ', exact: true }).isVisible()).toBe(true);
+      const previous = await rect('#previous'), duplicate = await rect('#duplicate'), next = await rect('#next');
+      expect(previous.left).toBeLessThan(duplicate.left); expect(duplicate.right).toBeLessThan(next.left);
+      expect(next.right).toBe((await rect('#detail-view>.detail-actions:first-child')).right);
+      expect(previous.top).toBeGreaterThanOrEqual((await rect('#detail-body')).bottom);
+    } else expect(await page.getByRole('button', { name: '← 一覧へ', exact: true }).isVisible()).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/pc-detail-local-${width}.png`, root)) });
+    await page.locator('#edit').click(); await page.locator('#editor-view').waitFor();
+    const voice = page.locator('#editor-voice-slot button');
+    await page.mouse.move(0, 0);
+    expect(await voice.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(width > 650 ? 'rgb(189, 40, 59)' : 'rgb(255, 255, 255)');
+    expect(await page.locator('#lengths').isVisible()).toBe(width <= 650);
+    expect(await page.locator('.editor-footer>p').isVisible()).toBe(width <= 650);
+    if (width > 650) {
+      const previous = await rect('#editor-previous'), duplicate = await rect('#editor-duplicate'), next = await rect('#editor-next');
+      expect(previous.left).toBeLessThan(duplicate.left); expect(duplicate.right).toBeLessThan(next.left);
+      expect(next.right).toBe((await rect('#editor-view>.detail-actions')).right);
+      expect((await rect('#memo-form>label')).top - (await rect('#editor-view')).top).toBeGreaterThanOrEqual(32);
+      expect(await page.locator('#memo-form .editor-tag-hint').evaluate(node => getComputedStyle(node).fontSize)).toBe('12px');
+      const note = await rect('#editor-voice-controls-slot .voice-service-notice');
+      expect(note.top).toBeGreaterThanOrEqual((await rect('#editor-voice-slot')).bottom);
+      expect(note.bottom).toBeLessThanOrEqual((await rect('#memo-body')).top);
+      expect(await voice.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(await page.locator('#list-voice-slot button').evaluate(node => getComputedStyle(node).backgroundColor));
+      expect(await voice.evaluate(node => ({ color: getComputedStyle(node).color, border: getComputedStyle(node).borderColor }))).toEqual(
+        await page.locator('#list-voice-slot button').evaluate(node => ({ color: getComputedStyle(node).color, border: getComputedStyle(node).borderColor })));
+      await voice.hover(); expect(await voice.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgb(159, 32, 49)');
+      await page.mouse.move(0, 0);
+    } else {
+      expect(await page.locator('#editor-next').evaluate(node => getComputedStyle(node).order)).toBe('0');
+      expect((await rect('#editor-voice-controls-slot .voice-service-notice')).top).toBeGreaterThanOrEqual((await rect('#memo-body')).bottom);
+    }
+    expect(await page.evaluate('fixture.calls.writes')).toBe(before);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/pc-editor-local-${width}.png`, root)) });
+    if (width > 650) { await page.locator('#editor-next').scrollIntoViewIfNeeded(); await page.screenshot({ path: fileURLToPath(new URL(`.product/pc-editor-nav-local-${width}.png`, root)) }); }
+    await page.locator('#memo-title').fill('あ'.repeat(101)); await page.locator('#save').click();
+    await page.locator('#error').filter({ hasText: '入力を確認' }).waitFor();
+    expect(await page.evaluate('fixture.calls.writes')).toBe(before);
+    await page.locator('#memo-title').fill('未保存の変更'); await page.locator('#back').click();
+    await page.locator('#confirmation').waitFor(); await page.locator('#confirm-no').click();
+    expect(await page.locator('#memo-title').inputValue()).toBe('未保存の変更');
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each([1200, 390])('cloud詳細/編集のPC表示と複製・スマホ表示を維持する：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-assign-edit-success'); await page.locator('#product-cloud-items').waitFor();
+    await page.locator('#product-cloud-items button.open-card').first().click();
+    const snapshotRoot = page.locator('#product-cloud-snapshot');
+    if (width > 650) {
+      const previous = await snapshotRoot.getByRole('button', { name: '〈 前のメモ', exact: true }).boundingBox();
+      const duplicate = await snapshotRoot.getByRole('button', { name: '複製', exact: true }).boundingBox();
+      const next = await snapshotRoot.getByRole('button', { name: '次のメモ 〉', exact: true }).boundingBox();
+      expect(previous!.x).toBeLessThan(duplicate!.x); expect(duplicate!.x).toBeLessThan(next!.x);
+      expect(Math.abs(previous!.y - next!.y)).toBeLessThanOrEqual(1);
+      expect(await snapshotRoot.getByRole('button', { name: '< 一覧へ', exact: true }).isVisible()).toBe(true);
+    } else expect(await snapshotRoot.getByRole('button', { name: 'クラウド一覧へ戻る', exact: true }).isVisible()).toBe(true);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/pc-detail-cloud-${width}.png`, root)) });
+    await snapshotRoot.getByRole('button', { name: width > 650 ? '複製' : 'このクラウドメモを複製', exact: true }).click();
+    const editor = page.locator('#product-cloud-editor'); await editor.waitFor();
+    const voice = editor.getByRole('button', { name: width > 650 ? '音声で本文へ追記' : '音声入力', exact: true });
+    await page.mouse.move(0, 0);
+    expect(await voice.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(width > 650 ? 'rgb(189, 40, 59)' : 'rgb(255, 255, 255)');
+    if (width > 650) {
+      expect(await editor.locator('.editor-tag-hint').evaluate(node => getComputedStyle(node).fontSize)).toBe('12px');
+      expect(await editor.locator('.pc-title-field').evaluate(node => getComputedStyle(node).marginTop)).toBe('14px');
+      const note = await editor.locator('.voice-service-notice').boundingBox();
+      const body = await page.getByLabel('クラウドの本文', { exact: true }).boundingBox();
+      expect(note!.y + note!.height).toBeLessThanOrEqual(body!.y);
+      await editor.getByRole('button', { name: '< 一覧へ', exact: true }).click();
+    } else await editor.getByRole('button', { name: 'クラウド編集を閉じる', exact: true }).click();
+    await editor.getByRole('button', { name: 'クラウド編集を続ける', exact: true }).click();
+    expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toContain('クラウド');
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/pc-editor-cloud-${width}.png`, root)) });
+    await editor.evaluate(node => { node.scrollTop = 0; });
+    await page.screenshot({ path: fileURLToPath(new URL(`.product/pc-editor-top-cloud-${width}.png`, root)) });
+  } finally { await context.close(); }
+}, 15000);
+
 it.each(['local', 'cloud'])('スマホのタグ列タイトルと名前/件数を同じ行に揃えPC配置を維持する：%s', async mode => {
   for (const width of [1200, 650, 390, 320]) {
     const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });

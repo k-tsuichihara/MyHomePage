@@ -3,6 +3,13 @@ import type { VoiceRecognition, VoiceStatus, VoiceEditorPort } from '../voice-in
 import type { createLocalMemoController } from '../local-memo-controller';
 import type { VoiceEditBridge } from './memo-preview';
 
+/** 一覧と同じ音声ボタンの見た目をPCだけに適用する。認識操作は変更しない。 */
+export function decoratePcVoiceButton(doc: Document, button: HTMLButtonElement) {
+  button.classList.add('pc-voice-button');
+  const icon = doc.createElement('span'); icon.className = 'pc-only'; icon.setAttribute('aria-hidden', 'true'); icon.textContent = '🎙 ';
+  button.prepend(icon);
+}
+
 /** 製品候補だけの音声操作。起動時は認識器を生成せず、権限要求もしない。 */
 export function createVoiceControls(doc: Document, controller: VoiceEditorPort, bridge: VoiceEditBridge, now?: () => Date) {
   const win = doc.defaultView! as Window & { SpeechRecognition?: new () => VoiceRecognition; webkitSpeechRecognition?: new () => VoiceRecognition };
@@ -17,7 +24,7 @@ export function createVoiceControls(doc: Document, controller: VoiceEditorPort, 
   const voice = createVoiceInput(controller, Native ? () => new Native() : undefined, value => { status.textContent = messages[value]; status.dataset.voiceRoutine = String(value === 'idle' || value === 'stopped'); stop.disabled = value !== 'listening'; }, now,
     (session, text, isCurrent) => bridge.append?.(session, text, isCurrent) ?? Promise.resolve(false));
   stop.disabled = true; stop.onclick = () => voice.stop();
-  const notice = doc.createElement('p'); notice.textContent = '音声入力はブラウザの認識サービスを利用します。音声が外部サービスへ送信される場合があります。アプリは録音を保存しません。開始はボタン操作時だけです。';
+  const notice = doc.createElement('p'); notice.className = 'voice-service-notice'; notice.textContent = '音声入力はブラウザの認識サービスを利用します。音声が外部サービスへ送信される場合があります。アプリは録音を保存しません。開始はボタン操作時だけです。';
   section.append(notice, stop, status);
   const pagehide = () => voice.stop(); win.addEventListener('pagehide', pagehide);
   return { section, status, start: () => voice.start(), stop: () => voice.stop(), dispose() {
@@ -34,6 +41,7 @@ export function mountVoiceInput(doc: Document, controller: ReturnType<typeof cre
       const icon = doc.createElement('span'); icon.textContent = '🎙'; icon.setAttribute('aria-hidden', 'true');
       button.className = 'voice-memo-button'; button.setAttribute('aria-label', '音声メモ'); button.replaceChildren(icon, ' 音声メモ');
     }
+    if (id !== 'list-view' && doc.documentElement.dataset.productLayout === 'review2') decoratePcVoiceButton(doc, button);
     button.onclick = () => { void voice.start(); };
     const slot = doc.getElementById(id === 'list-view' ? 'list-voice-slot' : id === 'detail-view' ? 'detail-voice-slot' : 'editor-voice-slot');
     (slot ?? doc.getElementById(id!))!.append(button); buttons.push(button);
