@@ -1329,7 +1329,7 @@ it('B1検索はタイトル/本文/タグ名を既存queryへ渡し、タグOR�
     expect(await cloudTitles(page)).toEqual([]);
     await search.fill(''); await page.getByRole('button', { name: 'クラウドのタグ絞込を解除', exact: true }).click();
     expect((await cloudTitles(page)).length).toBe(7);
-    for (const label of ['赤タグ（使用 3件）', '青タグ（使用 4件）', '未使用タグ（使用 0件）', 'ゴミ箱だけタグ（使用 0件）']) await page.getByText(label, { exact: true }).waitFor();
+    for (const label of ['赤タグ（3件）', '青タグ（4件）', '未使用タグ（0件）', 'ゴミ箱だけタグ（0件）']) await page.getByText(label, { exact: true }).waitFor();
     expect(await probe(page, 'fixture.rpcNames')).toEqual(['memo_load_snapshot']);
     expect(await probe(page, 'fixture.state()')).toEqual(local); expect(await probe(page, 'fixture.stored()')).toEqual([]);
     expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);

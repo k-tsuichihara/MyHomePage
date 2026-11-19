@@ -140,7 +140,6 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     local: true,
     canStart: () => !stopped && !composing && controller.getState().write.kind !== 'writing' && controller.getState().read.kind === 'ready',
     save: async (tag, name) => {
-      if (tag && !win.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return false;
       await send({ kind: 'mutate', operation: { kind: 'save-tag', id: tag?.id ?? win.crypto.randomUUID(), name, expectedRevision: tag?.revision ?? null } });
       return controller.getState().write.kind === 'succeeded' && !feedback;
     },
@@ -152,7 +151,6 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     managed.addEventListener('change', () => { tagName.value = controller.getState().data?.tags.find(tag => tag.id === managed.value)?.name ?? ''; });
     element('tag-form').addEventListener('submit', event => {
       event.preventDefault(); const state = controller.getState(), tag = state.data?.tags.find(row => row.id === managed.value);
-      if (doc.getElementById('tag-manager-rows') && tag && !win.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return;
       void send({ kind: 'mutate', operation: { kind: 'save-tag', id: tag?.id ?? win.crypto.randomUUID(), name: tagName.value, expectedRevision: tag?.revision ?? null } });
     });
     bind('tag-delete', () => {
@@ -254,7 +252,7 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
           if (input.checked) ids.push(tag.id);
           void query(ids);
         });
-        label.append(input, `${tag.name}（使用 ${state.usage.find(row => row.tagId === tag.id)?.count ?? 0}件）`); fragment.append(label);
+        label.append(input, `${tag.name}（${state.usage.find(row => row.tagId === tag.id)?.count ?? 0}件）`); fragment.append(label);
       }
       element('filters').replaceChildren(fragment);
     }
@@ -276,7 +274,8 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
         const preview = doc.createElement('span'); preview.textContent = Array.from(memo.body).slice(0, 80).join('');
         preview.className = 'card-preview';
         const metadata = doc.createElement('span'); metadata.className = 'card-meta';
-        const tagNames = doc.createElement('span'); tagNames.textContent = tags.map(tag => tag.name).join('・');
+        const tagNames = doc.createElement('span'); tagNames.className = 'card-tags';
+        for (const tag of tags) { const chip = doc.createElement('span'); chip.className = 'card-tag'; const icon = doc.createElement('span'); icon.className = 'tag-icon'; icon.setAttribute('aria-hidden', 'true'); icon.textContent = '🏷'; chip.append(icon, ` ${tag.name}`); tagNames.append(chip); }
         const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新：${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; metadata.append(tagNames, updated);
         const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
         const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙'; summary.setAttribute('aria-label', 'メモの操作'); menu.append(summary);
@@ -292,7 +291,9 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
             void send({ kind: 'mutate', operation: { kind: 'permanent-delete', id: memo.id, expectedRevision: memo.revision } });
           }, busy || !ready));
         }
-        open.append(preview, metadata); row.append(open, pin, menu); fragment.append(row);
+        pin.hidden = !memo.pinnedAt;
+        if (doc.documentElement.dataset.productLayout === 'review2') caption.prepend(pin); else metadata.append(pin);
+        open.append(preview, metadata); row.append(open, menu); fragment.append(row);
       }
       cards.replaceChildren(fragment); cards.scrollTop = scroll;
     }

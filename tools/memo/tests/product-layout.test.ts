@@ -22,6 +22,107 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => { await browser?.close(); });
 
+it.each([320, 390, 650, 1200])('UAT-02追加：タグ折返しと縦scroll、複数タグでも日時位置を維持：幅%s', async width => {
+  for (const cloud of [false, true]) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, cloud ? 'cloud-list-many-tags' : 'cloud-edit-signed-out');
+      if (!cloud) {
+        await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
+        const dialog = page.getByRole('dialog', { name: 'タグ管理', exact: true });
+        for (let index = 0; index < 16; index++) {
+          await dialog.getByLabel('新規タグ名').fill(`折返し用タグ${index}`); await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+          await dialog.getByRole('group', { name: `タグ「折返し用タグ${index}」`, exact: true }).waitFor();
+        }
+        await dialog.getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click();
+        await page.locator('#new').click(); await page.locator('#memo-title').fill('タグ配置確認');
+        for (const input of await page.locator('#editor-tags input').all()) await input.check();
+        await page.locator('#save').click(); await waitSavedEditor(page); await page.locator('#back').click();
+      } else await page.locator('#product-cloud-items').waitFor();
+      const scroll = page.locator(cloud ? '.cloud-filter-wrap .tag-chips' : '.tag-chip-strip');
+      const layout = await scroll.evaluate(node => {
+        const tops = [...node.querySelectorAll('label')].map(label => label.getBoundingClientRect().top);
+        node.scrollTop = 50;
+        return { x: node.scrollWidth <= node.clientWidth, y: node.scrollHeight > node.clientHeight, moved: node.scrollTop > 0, height: node.clientHeight, rows: new Set(tops).size };
+      });
+      if (width <= 650) { expect(layout).toMatchObject({ x: true, y: true, moved: true }); expect(layout.height).toBeLessThanOrEqual(148); expect(layout.rows).toBeGreaterThan(3); }
+      else expect(layout.rows).toBe(1);
+      const card = page.locator(cloud ? '#product-cloud-items>li' : '#cards>li').filter({ has: page.locator('.card-tag') }).filter({ hasText: cloud ? 'Alpha title' : 'タグ配置確認' }).first();
+      const timing = await card.evaluate(node => {
+        const time = node.querySelector('time')!, tags = node.querySelector('.card-tags')!, open = node.querySelector('.open-card')!;
+        const position = () => ({ x: time.getBoundingClientRect().x - open.getBoundingClientRect().x, y: time.getBoundingClientRect().y - open.getBoundingClientRect().y });
+        const many = position(), height = node.getBoundingClientRect().height;
+        while (tags.children.length > 1) tags.lastElementChild!.remove();
+        const one = position();
+        const pin = node.querySelector<HTMLElement>('.pin-indicator')!;
+        return { many, one, height, smaller: node.getBoundingClientRect().height, hidden: pin.hidden, pinWidth: pin.getBoundingClientRect().width, icons: tags.querySelectorAll('.tag-icon').length };
+      });
+      expect(timing.many).toEqual(timing.one); expect(timing.height).toBeGreaterThanOrEqual(timing.smaller);
+      expect(timing).toMatchObject({ hidden: true, pinWidth: 0, icons: 1 });
+      expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/uat02-tags-${cloud ? 'cloud' : 'local'}-${width}.png`, root)) });
+    } finally { await context.close(); }
+  }
+}, 30000);
+
+it.each([1200, 390, 320])('UAT-02：cloudカードのタグアイコンとタイトル前のピンをoffline表示：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-list-success'); await page.locator('#product-cloud-items').waitFor();
+    expect(await page.locator('#product-cloud-items .card-tag .tag-icon').count()).toBeGreaterThan(0);
+    const card = page.locator('#product-cloud-items>li').filter({ has: page.locator('.pin-indicator[aria-label="ピン留め済み"]') }).first();
+    const geometry = await card.evaluate(node => {
+      const pin = node.querySelector<HTMLElement>('.pin-indicator')!, caption = node.querySelector('.card-title')!;
+      return { first: caption.firstChild === pin, size: Number.parseFloat(getComputedStyle(pin).fontSize) };
+    });
+    expect(geometry.first).toBe(true); expect(geometry.size).toBe(20);
+    await card.locator('summary').click(); expect(await page.locator('#product-cloud-editor').isVisible()).toBe(false);
+    await page.locator('#page-title').click(); await card.locator('.open-card').click(); expect(await page.locator('#product-cloud-editor').isVisible()).toBe(true);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each([1200, 390, 320])('UAT-02：タグ改名をnative dialogなしで保存し関連・再表示・カード表示を維持：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out');
+    await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
+    const dialog = page.getByRole('dialog', { name: 'タグ管理', exact: true });
+    await dialog.getByLabel('新規タグ名').fill('旧名称'); await dialog.getByRole('button', { name: '＋追加', exact: true }).click();
+    await dialog.getByRole('group', { name: 'タグ「旧名称」', exact: true }).waitFor();
+    await dialog.getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click();
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('関連メモ');
+    await page.locator('#editor-tags input').check(); await page.locator('#save').click(); await waitSavedEditor(page); await page.locator('#back').click();
+    const before = await page.evaluate("JSON.parse(fixture.stored().find(([key])=>key==='myhomepage.memo.data.v2')[1])") as { tags: { id: string }[]; memoTags: unknown[] };
+    await page.getByRole('button', { name: 'タグ管理', exact: true }).first().click();
+    const row = dialog.getByRole('group', { name: 'タグ「旧名称」', exact: true });
+    expect(await row.getByText('1件', { exact: true }).isVisible()).toBe(true);
+    await row.getByRole('button', { name: '編集', exact: true }).click(); await row.getByLabel('変更後のタグ名').fill('新名称');
+    await row.getByRole('button', { name: '保存', exact: true }).click();
+    await dialog.getByRole('group', { name: 'タグ「新名称」', exact: true }).waitFor();
+    expect(await dialog.getByRole('button', { name: '変更を保存', exact: true }).count()).toBe(0);
+    await dialog.getByRole('button', { name: 'タグ管理を閉じる', exact: true }).click(); await page.locator('#reload').click();
+    await expect.poll(() => page.locator('#filters').textContent()).toContain('新名称（1件）');
+    const after = await page.evaluate("JSON.parse(fixture.stored().find(([key])=>key==='myhomepage.memo.data.v2')[1])") as { tags: { id: string; name: string }[]; memoTags: unknown[] };
+    expect(after.tags[0]).toMatchObject({ id: before.tags[0]!.id, name: '新名称' }); expect(after.memoTags).toEqual(before.memoTags);
+    const card = page.locator('#cards>li').first(); expect(await card.locator('.card-tag .tag-icon').count()).toBe(1);
+    expect(await card.locator('.card-tag').textContent()).toContain('新名称');
+    await card.locator('summary').click(); await card.getByRole('button', { name: 'ピン留め', exact: true }).click();
+    await card.locator('.pin-indicator').filter({ hasText: '📌' }).waitFor();
+    const geometry = await card.evaluate(node => {
+      const pin = node.querySelector<HTMLElement>('.pin-indicator')!, caption = node.querySelector('.card-title')!;
+      return { first: caption.firstChild === pin, size: Number.parseFloat(getComputedStyle(pin).fontSize) };
+    });
+    expect(geometry.first).toBe(true); expect(geometry.size).toBe(20);
+    if (width === 1200) { const all = await page.locator('#filters-all').boundingBox(), tag = await page.locator('#filters label').boundingBox(); expect(Math.abs(all!.height - tag!.height)).toBeLessThan(1); }
+    expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+    await card.locator('.open-card').click(); expect(await page.locator('#editor-view').isVisible()).toBe(true);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]); expect(await page.evaluate('fixture.calls.fetch')).toBe(0);
+  } finally { await context.close(); }
+}, 20000);
+
 it('通常メモは一覧/前後とも直接編集、新規dirtyのcancel/approveと端のno-opを維持する', async () => {
   const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
   try {
@@ -1065,7 +1166,7 @@ it.each([1200, 390, 320])('localタグ管理は上部追加・行編集/取消�
     await row.getByLabel('変更後のタグ名').fill('破棄する入力'); await row.getByRole('button', { name: 'キャンセル', exact: true }).click();
     expect(await page.evaluate('fixture.calls.writes')).toBe(before);
     await row.getByRole('button', { name: '編集', exact: true }).click(); await row.getByLabel('変更後のタグ名').fill('業務');
-    page.once('dialog', value => void value.accept()); await row.getByRole('button', { name: '保存', exact: true }).click();
+    await row.getByRole('button', { name: '保存', exact: true }).click();
     const renamed = dialog.getByRole('group', { name: 'タグ「業務」', exact: true }); await renamed.waitFor();
     await renamed.getByRole('button', { name: '削除', exact: true }).click();
     await page.locator('#confirm-no').click(); expect(await renamed.isVisible()).toBe(true);
@@ -1179,7 +1280,7 @@ it.each(['create', 'rename', 'delete'])('cloudタグ管理の%sは既存C04要�
       await row.getByRole('button', { name: 'キャンセル', exact: true }).click();
       expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
       await row.getByRole('button', { name: '編集', exact: true }).click(); await row.getByLabel('変更後のタグ名').fill('改名タグ');
-      page.once('dialog', value => void value.accept()); await row.getByRole('button', { name: '保存', exact: true }).click();
+      await row.getByRole('button', { name: '保存', exact: true }).click();
     } else {
       await row.getByRole('button', { name: '削除', exact: true }).click(); await page.getByRole('button', { name: 'タグ削除をキャンセル', exact: true }).click();
       expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);

@@ -86,6 +86,10 @@ const snapshot = () => {
       row(String(400 + index), `Scroll ${String(index).padStart(2, '0')}`, 'scroll body', '10', '10', null));
     if (mode === 'cloud-list-scroll-views') for (let index = 0; index < 30; index++) result.memos.push(
       { ...row(String(600 + index), `Trash ${index}`, 'scroll body', '10', '10', null), deleted_at: at('14') });
+    if (mode === 'cloud-list-many-tags') for (let index = 0; index < 16; index++) {
+      const tag = { ...result.tags[0]!, id: `00000000-0000-4000-8000-000000000${800 + index}`, name: `折返し用タグ${index}` };
+      result.tags.push(tag); result.memoTags.push({ memo_id: memoId, tag_id: tag.id, user_id: value.user.id });
+    }
   }
   return result;
 };

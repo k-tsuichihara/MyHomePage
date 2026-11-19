@@ -143,7 +143,6 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       if (!root.contains(form) || !tagEditor?.canStart()) return;
       const value = current(token); if (!value) return;
       if (tag && !hasTag(value, tag)) { clear(); return; }
-      if (productLayout && tag && !doc.defaultView!.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return;
       if (tagEditor.save(tag, input.value, active!.valid)) clear();
     };
     form.onsubmit = event => { event.preventDefault(); submit(); };
@@ -204,7 +203,8 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
           const caption = doc.createElement('span'); caption.className = 'card-title'; caption.textContent = memo.title; open.replaceChildren(caption);
           const preview = doc.createElement('span'); preview.textContent = memo.body; preview.className = 'card-preview';
           const meta = doc.createElement('span'); meta.className = 'card-meta';
-          const tagNames = doc.createElement('span'); tagNames.textContent = tags.map(tag => tag.name).join('・');
+          const tagNames = doc.createElement('span'); tagNames.className = 'card-tags';
+          for (const tag of tags) { const chip = doc.createElement('span'); chip.className = 'card-tag'; const icon = doc.createElement('span'); icon.className = 'tag-icon'; icon.setAttribute('aria-hidden', 'true'); icon.textContent = '🏷'; chip.append(icon, ` ${tag.name}`); tagNames.append(chip); }
           const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新：${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; meta.append(tagNames, updated);
           const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
           const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙'; summary.setAttribute('aria-label', 'メモの操作'); menu.append(summary);
@@ -212,7 +212,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
           // 一覧から正式handlerを直接使用し、通常詳細の中継画面を作らない。
           options.append(...memoActions(memo, token));
 
-          open.append(preview, meta); row.append(pin, menu);
+          pin.hidden = !memo.pinnedAt; caption.prepend(pin); open.append(preview, meta); row.append(menu);
         }
         rows.append(row);
       });
@@ -252,7 +252,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
           const ids = context().result.query.selectedTagIds.filter(id => uuidKey(id) !== uuidKey(tag.id));
           if (node.checked) ids.push(tag.id); query(ids);
         };
-        label.append(node, `${tag.name}（使用 ${usage.get(uuidKey(tag.id)) ?? 0}件）`); chips.append(label); inputs.push({ id: tag.id, node });
+        label.append(node, `${tag.name}（${usage.get(uuidKey(tag.id)) ?? 0}件）`); chips.append(label); inputs.push({ id: tag.id, node });
       });
       const reset = button('クラウドのタグ絞込を解除', () => { if (root.contains(reset)) query([]); });
       search.oninput = () => query(); sort.onchange = () => query();
@@ -323,7 +323,6 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
           canStart,
           save: tagEditor ? (tag, name) => {
             if (!current(token) || !tagEditor?.canStart() || (tag && !hasTag(value, tag))) return false;
-            if (tag && !doc.defaultView!.confirm(`タグ「${tag.name}」の名前を変更しますか？`)) return false;
             // 入力検証の通知は既存と同じ要素。送信開始後は既存hostがsnapshotを失効させる。
             if (tagEditor.feedback) content.append(tagEditor.feedback);
             if (tagEditor.save(tag, name, active!.valid)) clear();

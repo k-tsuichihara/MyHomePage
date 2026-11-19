@@ -55,6 +55,7 @@ export function mountTagManagerView(doc: Document, root: HTMLElement, actions: {
         const field = doc.createElement('input'); field.setAttribute('aria-label', '変更後のタグ名'); field.value = tag.name;
         const save = async () => {
           if (!current() || !actions.save) return;
+          // 改名は保存の明示操作だけで実行する。削除確認は既存remove経路に残す。
           if (await actions.save(tag, field.value)) { editing = null; renderRows(); }
         };
         const form = doc.createElement('form'); form.className = 'tag-row-form'; form.onsubmit = event => { event.preventDefault(); void save(); };
