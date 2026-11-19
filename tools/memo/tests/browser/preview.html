@@ -39,7 +39,9 @@
     <button id="permanent-delete" hidden>完全削除</button>
   </section>
   <section id="editor-view" hidden aria-label="メモ編集">
-    <h2>メモの作成・編集</h2><form id="memo-form">
+    <h2>メモの作成・編集</h2>
+    <nav><button id="editor-previous">前のメモ</button><button id="editor-duplicate">複製</button><button id="editor-next">次のメモ</button></nav>
+    <form id="memo-form">
       <label>タイトル<input id="memo-title" autocomplete="off"></label>
       <label>本文<textarea id="memo-body" rows="10"></textarea></label>
       <p id="lengths"></p><fieldset><legend>選択タグ</legend><div id="editor-tags"></div></fieldset>

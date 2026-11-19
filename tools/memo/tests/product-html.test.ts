@@ -195,7 +195,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await recovery.getByRole('button', { name: /をプレビュー/ }).first().click();
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(afterDelete);
     await recovery.getByRole('button', { name: '新しいメモとして復元', exact: true }).click();
-    await page.waitForFunction(() => document.getElementById('detail-title')?.textContent === '合成製品メモ' && !document.getElementById('detail-view')?.hidden);
+    await page.waitForFunction(() => (document.getElementById('memo-title') as HTMLInputElement)?.value === '合成製品メモ' && !document.getElementById('editor-view')?.hidden);
     const recovered = JSON.parse((await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2')))!);
     const restoredMemo = recovered.memos[0];
     expect(restoredMemo.id).not.toBe(backup.data.memos[0].id);
@@ -214,7 +214,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await restoreArea.getByRole('button', { name: '確認して復元', exact: true }).click();
     await page.waitForFunction(() => JSON.parse(localStorage.getItem('myhomepage.memo.data.v2')!).memos.length === 2);
     await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
-    await page.locator('#back').click();
+    expect(await page.locator('#list-view').isVisible()).toBe(true);
     await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = false; });
     await page.getByRole('button', { name: '音声メモ', exact: true }).click();
     await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '合成音声追記');

@@ -23,7 +23,7 @@ export interface EditorState {
   readonly id: string;
   readonly sessionId: string;
   readonly source: 'local' | 'cloud';
-  readonly screen: 'edit' | 'detail';
+  readonly screen: 'edit';
   readonly draft: Draft;
   readonly baseline: Draft;
   readonly expectedRevision: number | null;
@@ -116,7 +116,7 @@ function matches(state: EditorState, context: SaveContext): state is EditorState
 /** C04が検証済みの成功要求を編集baselineへ反映する。snapshotの現在値とは扱わない。 */
 function cloudSaved(state: EditorState, attempt: SaveAttempt, value: { memo: Memo; tagIds: readonly string[] }): EditorState {
   return immutable({ ...state, baseline: draft(attempt.rawDraft), expectedRevision: value.memo.revision,
-    unresolved: state.unresolved.filter(row => row !== attempt), save: { kind: 'saved' }, screen: 'detail' });
+    unresolved: state.unresolved.filter(row => row !== attempt), save: { kind: 'saved' }, screen: 'edit' });
 }
 function completeCloudSave(state: EditorState, attempt: SaveAttempt, outcome: CloudSaveResult): EditorState | null {
   const rejected = (reason: EditorFailureReason): EditorState => immutable({ ...state,
@@ -192,6 +192,6 @@ export function settleSave(state: EditorState, context: SaveContext, input: unkn
       || memo.deletedAt !== null || memo.revision !== (request.expectedRevision === null ? 1 : request.expectedRevision + 1)
       || tagKeys(tagIds) !== tagKeys(request.tagIds)) return unknown('invalid-response');
     // 成功は送信した値だけに対応する。送信後の編集内容を返却値で置き換えない。
-    return immutable({ ...state, baseline: draft(attempt.rawDraft), expectedRevision: memo.revision, screen: 'detail', save: { kind: 'saved' } });
+    return immutable({ ...state, baseline: draft(attempt.rawDraft), expectedRevision: memo.revision, screen: 'edit', save: { kind: 'saved' } });
   } catch { return unknown('invalid-response'); }
 }

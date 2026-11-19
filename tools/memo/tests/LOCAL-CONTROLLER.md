@@ -11,11 +11,11 @@
 ## 読込・編集・保存
 
 - emptyだけを正常な空データとして扱う。旧キーのみ、pending、破損、取得失敗は停止状態。以前の取得データ・一覧・ドラフトがあれば保持し、利用可能な最新データであると装わない。停止／読込中は新たな書込や編集開始を許可しない。既存ドラフトの編集は継続できる。
-- 同時書込は一件。保存中のdraftコマンドは許可する。beginSave→同一store.saveを一度だけ呼ぶ→settleSaveの順で接続する。追加編集が残る場合、制御層のrouteはeditを維持する。既存settleSaveのscreen=detailを無条件に採用しない。
+- 同時書込は一件。保存中のdraftコマンドは許可する。beginSave→同一store.saveを一度だけ呼ぶ→settleSaveの順で接続する。成功後もroute/screenはeditを維持する。通常メモへのdetailコマンドも入口でeditへ正規化し、前後・回復等から旧detailを復活させない。ゴミ箱はeditorなしのdetailを維持する。
 - 成功時だけ一覧更新のためloadする。書込成功と後続load失敗は独立して保持し、後続失敗で成功をunknownへ戻したり、保存を再試行したりしない。queryMemos/countTagUsageを再利用し、一覧件数と使用件数を混同しない。
 - loadの応答には世代を付け、書込開始・新しいloadで古いloadを失効させる。古い応答は一覧や編集へ反映しない。ロード成功でもeditorを再生成せず、編集基準のメモ／関連と現在値を比較しchanged/missing/trashed/missing-tag/id-existsを明示する。revisionを自動更新しない。
 - 保存後の自動load中も明示loadを開始できる。readは「最後に開始したload」のloading/ready/failedであり、保存専用の読込成功を表すものではない。古い自動loadが先に終わっても最新load完了まではloadingを維持し、後から終わっても最新の成功・失敗・一覧を変更しない。保存コマンドのdoneも最新loadの成功保証ではなく、write/readを独立して確認する。
-- queryとscrollTopを保持し、詳細へ入る時の一覧順をdetailListへ固定して前後移動に使う。対象不在・結果外では別メモへ暗黙に移動しない。
+- queryとscrollTopを保持し、編集／read-only詳細へ入る時の一覧順をdetailListへ固定して前後移動に使う。保存済みの対象不在・結果外では別メモへ暗黙に移動しない。新規は通常一覧先頭の直前から「次」で先頭へ進む。対象なしは確認前にno-op、対象ありは既存departure確認（cancelでdraft保持／承認で保存せず対象edit）を使う。
 
 ## 確認・追加操作
 

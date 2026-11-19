@@ -13,6 +13,7 @@ export function appDepartureReason(app: Pick<LocalAppState, 'unresolved' | 'writ
 }
 
 export type NavigationTarget = { readonly kind: 'list' } | { readonly kind: 'detail'; readonly id: string }
+  | { readonly kind: 'edit'; readonly id: string }
   | { readonly kind: 'switch-source' } | { readonly kind: 'logout' };
 export interface LeaveConfirmation { readonly state: EditorState; readonly target: NavigationTarget }
 export type NavigationDecision = { kind: 'blocked'; reason: 'saving' | 'stale-confirmation' }
@@ -21,7 +22,7 @@ export type NavigationDecision = { kind: 'blocked'; reason: 'saving' | 'stale-co
   | { kind: 'allowed'; target: NavigationTarget; retained: EditorState };
 
 function target(input: NavigationTarget): NavigationTarget {
-  if (input.kind === 'detail') return { kind: 'detail', id: uuid(input.id) };
+  if (input.kind === 'detail' || input.kind === 'edit') return { kind: input.kind, id: uuid(input.id) };
   if (input.kind === 'list' || input.kind === 'switch-source' || input.kind === 'logout') return { kind: input.kind };
   throw new Error('Invalid navigation target');
 }
@@ -68,4 +69,12 @@ export function prepareLocalList(input: unknown, options?: unknown, scrollTop = 
 /** 詳細へ入った時点の一覧順を使う。更新後の存在確認は呼出側で別途行う。 */
 export function listNeighbors(context: ListContext, currentId: string) {
   return getMemoNeighbors(context.result.orderedIds, currentId);
+}
+
+/** 新規draftだけは一覧先頭の直前を仮の位置とする。保存済みの結果外IDは置換しない。 */
+export function editorNeighbors(context: ListContext, currentId: string, unsavedNew: boolean) {
+  const ids = context.result.items.filter(row => row.memo.deletedAt === null).map(row => row.memo.id);
+  const neighbors = getMemoNeighbors(ids, currentId);
+  return unsavedNew && neighbors.kind === 'not-in-result'
+    ? getMemoNeighbors([currentId, ...ids], currentId) : neighbors;
 }

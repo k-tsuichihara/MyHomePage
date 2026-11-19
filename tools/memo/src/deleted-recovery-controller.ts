@@ -18,7 +18,7 @@ export interface RecoveryState {
 }
 /** 単件回復固有の3状態と一時UUIDを管理する。Step 3の結果判定は変更しない。 */
 export function createDeletedRecoveryController(deps: { store: Store; createId: () => string; canStart?: () => boolean;
-  openCreated?: (id: string) => Promise<boolean> }) {
+  openCreated?: (id: string) => Promise<boolean>; leaveCreated?: () => Promise<boolean> }) {
   let state: RecoveryState = immutable({ phase: 'idle', outcome: 'none', backup: null, current: null, selected: null, page: 0,
     tagIds: [], newId: null, unresolvedIds: [], uncertainSourceIds: [], message: '', navigation: 'none' });
   const patch = (part: Partial<RecoveryState>) => { state = immutable({ ...state, ...part }); };
@@ -59,6 +59,12 @@ export function createDeletedRecoveryController(deps: { store: Store; createId: 
     getState: () => state,
     async dispatch(command: RecoveryCommand): Promise<void> {
       if (busy()) return;
+      // 回復後の通常画面がeditorでも、既存の離脱契約を通過した場合だけ元previewへ戻す。
+      if (command.kind === 'source' && state.phase === 'created' && deps.leaveCreated) {
+        try { if (!await deps.leaveCreated()) return; }
+        catch { patch({ message: '通常画面から移動できません。入力を保持し、元プレビューへは進みません。' }); return; }
+        if (busy() || state.phase !== 'created') return;
+      }
       if (deps.canStart && !deps.canStart()) { patch({ message: '通常画面の編集・保存・確認を終了してください。' }); return; }
       let attempted = false;
       try {

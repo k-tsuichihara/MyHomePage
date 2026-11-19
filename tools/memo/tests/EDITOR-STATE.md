@@ -4,7 +4,7 @@
 
 ## Q04 Step 4：cloud単件編集への再利用
 
-Q05 UAT-01の承認済み変更：製品UIでは確定保存後も編集を継続し、保存ボタン付近へ成功通知を表示する。local compositionは既存controllerの`keepEditingAfterSave`を指定し、settleSaveの成功・baseline/revision判定を変えずroute/screenだけeditにする。未指定の隔離controller契約と純粋editorの返却screenは従来どおり。cloudは既存editor表示を維持し、C04のsavedを受理した場合だけ成功通知を出す。追加編集で成功通知を消し、UNKNOWN/競合/拒否/古い応答を成功へ変換しない。
+Q05 UAT-01の承認済み変更（PR #121後を含む）：通常メモはすべてeditで開き、確定保存後も編集を継続する。純粋editorもscreen=editへ統一し、一時的な`keepEditingAfterSave`切替を廃止した。保存成功・baseline/revisionの判定は変更せず、成功時だけ保存ボタン付近へ通知する。追加編集で成功通知を消し、UNKNOWN/競合/拒否/古い応答を成功へ変換しない。
 
 以下のlocal契約と既定APIは維持する。`createEditor`の追加引数`source`をcloudにした場合も、ドラフト・dirty・要求整形/固定・ID再利用防止・saving・navigation ticketを同じ関数で扱う。local/cloud間でeditorやattemptを共有しない。`settleSave`はlocalだけを受け付ける。
 
@@ -22,7 +22,7 @@ PR #87のP2対応：画面が古くても元要求についてC04がcompleted/�
 - ドラフトはtitle/body/tagIds。文字列は入力途中の空白・不正文字を含めそのまま保持する。タグ選択はUUID大小文字同値の集合として比較し、順序だけの変化は未保存にしない。重複選択・不正UUIDは拒否する。
 - 未保存判定は整形前のドラフトとbaselineを比較する。保存開始時に既存normalizeMemoInputで検証・整形した要求と、整形前のrawDraftを独立して固定する。新規IDは呼出側から与え、自動再発行しない。
 - beginSaveはローカルストアを呼ばず、submit判定と不変attemptを返す。呼出側が明示操作の結果としてattempt.requestを既存store.saveへ一度だけ渡す。requestIdはこの状態内でも再利用を拒否するが、ストア本来の使用済み登録はsave受付時（他の検証・ロックより前）のまま。状態側で書込前に検証拒否した要求はストアへ渡さない。
-- 保存中の編集は許可し、二重保存・遷移は抑止。成功時はbaselineを送信時rawDraftに更新し、最新ドラフトは保持する。追加編集がなければclean、あればdirty。詳細状態に留まり、追加編集の保存完了を装わない。
+- 保存中の編集は許可し、二重保存・遷移は抑止。成功時はbaselineを送信時rawDraftに更新し、最新ドラフトは保持する。追加編集がなければclean、あればdirty。編集画面に留まり、追加編集の保存完了を装わない。
 - settleSaveは既存LocalSaveResultを受ける接続境界。savedだけを確定成功、rejected/not-attemptedを競合・拒否、unknown/unverifiedを結果不明とする。成功値も検証し、対象ID・内容・タグ・期待revisionとの不一致や不正応答は結果不明にする。例外は元例外を渡さずunknownへ変換して通知する。
 - 操作ID・local保存先・画面sessionIdと進行中attemptが一致しない応答は無視。再利用済みoperationId/requestIdも拒否し、遅延／逆順応答を別操作へ流用しない。認証・cloud処理は実装しない。
 - sessionIdは呼出側で画面セッションごとに新しく採番し、終了したセッションの識別子を再利用しない。save.kind=savedは送信した試行の成功だけを表し、現在のドラフトが保存済みかは必ずisDirtyも確認する。
@@ -31,7 +31,7 @@ PR #87のP2対応：画面が古くても元要求についてC04がcompleted/�
 
 ## 確認・一覧の境界
 
-- 離脱先は一覧／詳細／保存先切替要求／ログアウト相当要求。純粋な判定だけを返し、切替・認証・データ転送は実行しない。
+- 離脱先は一覧／編集／読取専用詳細／保存先切替要求／ログアウト相当要求。純粋な判定だけを返し、切替・認証・データ転送は実行しない。前後移動は`editorNeighbors`で対象を先に調べ、新規は保持した通常一覧の先頭直前、保存済みの結果外IDは勝手に代替しない。対象がある時だけ既存ticketで離脱確認する。
 - dirty、unresolved、save.kind=rejectedのいずれかがあれば明示確認を要求。ドラフトがcleanでも保存拒否・競合を見落として離脱させない。確認理由は結果不明（unknown）を優先し、次に保存拒否（rejected）、未保存（unsaved）とする。呼出側はreasonと保持されたsaveの拒否理由を利用者へ示してから離脱確認を行う。正常保存済みのcleanには失敗確認を要求しない。
 - 確認は状態オブジェクトそのものに結び付けた不変ticketとし、ドラフト変更（変更して元に戻す場合も）や保存結果反映後には古いticketを拒否する。別の確認表示では呼出側が保持する最新ticketだけを使う。確認のキャンセルや追加編集だけで保存拒否状態を解除しない。
 - キャンセルでは状態を維持。離脱許可も元ドラフトや不明要求を削除せず、返却されたretained状態として残す。呼出側は明示破棄確認済みの離脱でのみ画面セッションを終了できる。再起動後の復元保証はない。

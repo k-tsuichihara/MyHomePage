@@ -59,7 +59,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   views: ProductLocalViews = defaultViews, session?: ProductSessionPort, cloud?: ProductCloudHost) {
   const upgrade = createProductV3Upgrade(deps);
   const store = createLocalMemoStore({ storage: upgrade.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
-  const controller = createLocalMemoController({ store, createId: deps.createId, keepEditingAfterSave: true });
+  const controller = createLocalMemoController({ store, createId: deps.createId });
   const migration = createLocalMigrationController({ ...deps, storage: upgrade.storage, acceptExistingV3: true });
   let disposeMemo: ProductMemoDisposer = () => {};
   let disposed = false;
@@ -100,12 +100,13 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     } });
   const restore = createLocalRestoreController({ store, createId: deps.createId, canStart: () => normalReady() && !recoveryBusy() && !initialBusy() });
   const recovery = createDeletedRecoveryController({ store, createId: deps.createId, canStart: () => normalReady() && !restoreBusy() && !initialBusy(),
+    leaveCreated: async () => !disposed && (await controller.dispatch({ kind: 'list' })).kind === 'done',
     openCreated: async id => {
       if (disposed) return false;
       await controller.dispatch({ kind: 'load' });
       if (disposed || controller.getState().read.kind !== 'ready') return false;
-      const result = await controller.dispatch({ kind: 'detail', id });
-      return result.kind === 'done' && controller.getState().route.kind === 'detail';
+      const result = await controller.dispatch({ kind: 'edit', id });
+      return result.kind === 'done' && controller.getState().route.kind === 'edit';
     } });
   const mountRecoveryViews = () => {
     if (disposed || controller.getState().storageVersion !== 3) return;
@@ -122,7 +123,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     if (!disposeRecovery && views.mountRecovery) disposeRecovery = views.mountRecovery(doc, {
       getState: recovery.getState,
       async dispatch(command) { if (localAvailable()) await withSessionRefresh(() => recovery.dispatch(command)); },
-    }, () => { const route = controller.getState().route; return route.kind === 'detail' ? route.id : null; });
+    }, () => { const route = controller.getState().route; return route.kind === 'edit' ? route.id : null; });
   };
   const prepareBackup = createLocalBackup({ storage: upgrade.storage, locks: deps.locks, now: deps.now });
   const syncBackup = () => {

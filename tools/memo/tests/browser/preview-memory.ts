@@ -81,12 +81,13 @@ export function createPreviewEnvironment(scenario: string) {
     const state = controller.getState(); return !state.editor && state.write.kind !== 'writing' && state.read.kind === 'ready' && !state.confirmation;
   };
   return { controller, recovery: createDeletedRecoveryController({ store, createId: () => id(++sequence), canStart,
+    leaveCreated: async () => (await controller.dispatch({ kind: 'list' })).kind === 'done',
     openCreated: async id => {
       await controller.dispatch({ kind: 'load' });
       if (controller.getState().read.kind !== 'ready') return false;
-      const result = await controller.dispatch({ kind: 'detail', id });
+      const result = await controller.dispatch({ kind: 'edit', id });
       const route = controller.getState().route;
-      return result.kind === 'done' && route.kind === 'detail' && route.id === id;
+      return result.kind === 'done' && route.kind === 'edit' && route.id === id;
     } }), restore: createLocalRestoreController({ store, createId: () => id(++sequence), canStart }),
     migration: { storage, locks, createId: () => id(++sequence) } };
 }

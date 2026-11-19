@@ -26,24 +26,24 @@ test('50件ページ・履歴による選択可否・単件読取プレビュー
   await expect(preview).toContainText('<script>合成本文</script>'); await expect(preview.locator('script')).toHaveCount(0);
   await area.getByRole('button', { name: 'バックアップ一覧へ戻る' }).click(); await expect(page.locator('#count')).toContainText('10件');
 });
-test('直接保存・二重操作拒否・通常詳細・元プレビューの一時導線', async ({ page }) => {
+test('直接保存・二重操作拒否・通常編集・元プレビューの一時導線', async ({ page }) => {
   await page.goto('/?scenario=recovery-slow'); await upload(page);
   const area = page.getByRole('region', { name: '完全削除後の回復', exact: true });
   await area.getByRole('button', { name: '1: 過去メモ1をプレビュー' }).click();
   await area.getByRole('button', { name: '新しいメモとして復元' }).evaluate((node: HTMLButtonElement) => { node.click(); node.click(); });
   await expect(area).toContainText('復元しています'); await expect(page.locator('#editor-view')).toBeHidden();
-  await expect(area).toContainText('メモの作成を確認しました'); await expect(page.locator('#detail-title')).toHaveText('過去メモ1');
-  await expect(page.locator('#detail-tags')).toHaveText('仕事'); await expect(page.locator('#count')).toContainText('11件');
+  await expect(area).toContainText('メモの作成を確認しました'); await expect(page.locator('#memo-title')).toHaveValue('過去メモ1');
+  await expect(page.locator('#editor-tags').getByLabel('仕事', { exact: true })).toBeChecked(); await expect(page.locator('#count')).toContainText('11件');
   await expect(page.locator('#confirmation')).toBeHidden();
   await area.getByRole('button', { name: 'バックアッププレビューに戻る' }).click(); await expect(area.getByRole('article')).toBeVisible();
   await area.getByRole('button', { name: 'バックアップ一覧へ戻る' }).click();
   await upload(page); await expect(page.getByLabel('単件回復のバックアップJSON')).toHaveValue(''); await expect(page.locator('#count')).toContainText('11件');
 });
-test('書込後例外から一回だけ自動診断し、作成を確認して詳細へ進む', async ({ page }) => {
+test('書込後例外から一回だけ自動診断し、作成を確認して編集へ進む', async ({ page }) => {
   await page.goto('/?scenario=recovery-unknown'); await upload(page);
   const area = page.getByRole('region', { name: '完全削除後の回復', exact: true });
   await area.getByRole('button', { name: '1: 過去メモ1をプレビュー' }).click(); await area.getByRole('button', { name: '新しいメモとして復元' }).click();
-  await expect(area).toContainText('メモの作成を確認しました'); await expect(page.locator('#detail-title')).toHaveText('過去メモ1'); await expect(page.locator('#count')).toContainText('11件');
+  await expect(area).toContainText('メモの作成を確認しました'); await expect(page.locator('#memo-title')).toHaveValue('過去メモ1'); await expect(page.locator('#count')).toContainText('11件');
 });
 test('再診断失敗は結果不明、手動再診断と戻るだけでは追加書込しない', async ({ page }) => {
   await page.goto('/?scenario=recovery-unreadable'); await upload(page);

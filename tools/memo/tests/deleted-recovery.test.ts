@@ -18,7 +18,7 @@ const bytes = () => new TextEncoder().encode(JSON.stringify({ format: 'myhomepag
   sourceStorageVersion: 3, exportedAt: NOW, data: { memos: [source()], tags: state().tags, memoTags: [{ memoId: source().id, tagId: TAG }], deletedMemoIds: [] } }));
 const input = (n = 100) => ({ source: source(), sourceTags: [TAG], expectedTags: [TAG], id: token(n), requestId: token(n + 1) });
 function fixture() { const f = saveFixture(current()); f.storage.values.set(OLD_STORAGE_KEY, '[]'); return f; }
-function controllerFixture(options: { store?: ReturnType<typeof createLocalMemoStore>; openCreated?: (id: string) => Promise<boolean>; canStart?: () => boolean } = {}) {
+function controllerFixture(options: { store?: ReturnType<typeof createLocalMemoStore>; openCreated?: (id: string) => Promise<boolean>; canStart?: () => boolean; leaveCreated?: () => Promise<boolean> } = {}) {
   const f = fixture(); let sequence = 500;
   const controller = createDeletedRecoveryController({ store: options.store ?? f.store, createId: () => token(++sequence), ...options });
   const preview = async () => { await controller.dispatch({ kind: 'file', bytes: bytes() }); await controller.dispatch({ kind: 'select', index: 0 }); };
@@ -26,6 +26,17 @@ function controllerFixture(options: { store?: ReturnType<typeof createLocalMemoS
 }
 
 describe('単件回復の純粋変換', () => {
+  it.each([true, false, 'throw'] as const)('元previewへ戻る前の既存離脱判定を通す：%s', async allowed => {
+    let attempts = 0;
+    const f = controllerFixture({ openCreated: async () => true, leaveCreated: async () => {
+      attempts++; if (allowed === 'throw') throw Error('PRIVATE'); return allowed;
+    } });
+    await f.preview(); await f.controller.dispatch({ kind: 'restore' });
+    expect(f.controller.getState().phase).toBe('created'); const writes = f.storage.writes.length;
+    await f.controller.dispatch({ kind: 'source' });
+    expect(attempts).toBe(1); expect(f.controller.getState().phase).toBe(allowed === true ? 'preview' : 'created');
+    expect(f.storage.writes.length).toBe(writes); expect(JSON.stringify(f.controller.getState())).not.toContain('PRIVATE');
+  });
   it('正常行と現在履歴の対象判定を分離する', () => {
     const row = diagnoseBackup(bytes()).rows[0]!;
     expect(canRecover(row, current())).toBe(true);

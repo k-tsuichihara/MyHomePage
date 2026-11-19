@@ -9,13 +9,13 @@ import { mountTagManagerView } from './tag-manager-view';
 
 /** C04検証済みの値だけを閲覧する。保存先・Auth・通信の状態は所有しない。 */
 export function mountProductSnapshot(doc: Document, parent: HTMLElement,
-  edit?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[]) => boolean,
+  edit?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[], context: ListContext) => boolean,
   changeState?: (memo: Memo, action: 'pin' | 'unpin' | 'trash' | 'restore', valid: () => boolean) => boolean,
   deletePermanently?: (memo: Memo, valid: () => boolean) => boolean,
   emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean,
   tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean; feedback?: HTMLElement },
   deleteTag?: (tag: Tag, valid: () => boolean) => boolean,
-  duplicate?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[]) => boolean) {
+  duplicate?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[], context: ListContext) => boolean) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   const productLayout = doc.documentElement.dataset.productLayout === 'review2';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
@@ -48,10 +48,11 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     const latest = current(token), selected = latest?.memos.find(row => uuidKey(row.id) === uuidKey(id));
     if (!edit || !latest || !selected || selected.deletedAt !== null) return;
     const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
-    if (edit(selected, tagIds, active!.valid, latest.tags)) clear();
+    if (edit(selected, tagIds, active!.valid, latest.tags, active![active!.view])) clear();
   };
   const detail = (id: string, token: object) => {
     const value = current(token), memo = value?.memos.find(row => uuidKey(row.id) === uuidKey(id)); if (!value || !memo) return;
+    if (edit && memo.deletedAt === null) { editMemo(id, token); return; }
     const tags = value.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(memo.id))
       .map(row => value.tags.find(tag => uuidKey(tag.id) === uuidKey(row.tagId))!.name);
     releaseTagFeedback(); root.dataset.view = 'detail';
@@ -71,9 +72,10 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       }
       root.prepend(nav);
     }
-    if (edit && memo.deletedAt === null) {
-      const startEdit = button('このクラウドメモを編集', () => { if (root.contains(startEdit)) editMemo(id, token); }); startEdit.className = 'primary'; root.append(startEdit);
-    }
+    root.append(...memoActions(memo, token));
+  };
+  const memoActions = (memo: Memo, token: object) => {
+    const id = memo.id, actions: HTMLButtonElement[] = [];
     const action = memo.deletedAt === null ? 'trash' : 'restore';
     const label = action === 'trash' ? 'ゴミ箱へ移動' : '復元';
     if (duplicate && memo.deletedAt === null) {
@@ -82,10 +84,10 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         const latest = current(token), selected = latest?.memos.find(row => uuidKey(row.id) === uuidKey(id));
         if (!latest || !selected || selected.deletedAt !== null || selected.revision !== memo.revision) return;
         const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
-        if (duplicate(selected, tagIds, active!.valid, latest.tags)) clear();
+        if (duplicate(selected, tagIds, active!.valid, latest.tags, active![active!.view])) clear();
       });
-      if (productLayout) { copy.classList.add('pc-cloud-duplicate'); setPcButtonLabel(doc, copy, '複製'); }
-      root.append(copy);
+      if (productLayout) { copy.classList.add('pc-cloud-duplicate'); copy.textContent = '複製'; }
+      actions.push(copy);
     }
     if (changeState) {
       if (memo.deletedAt === null) {
@@ -97,7 +99,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
             || selected.revision !== memo.revision || selected.pinnedAt !== memo.pinnedAt) return;
           if (changeState(selected, pinAction, active!.valid)) clear();
         });
-        root.append(pin);
+        actions.push(pin);
       }
       const start = button(label, () => {
         if (!root.contains(start) || !current(token)) return;
@@ -110,9 +112,9 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
           if (changeState(selected, action, valid)) clear();
         });
         confirmView(text('p', `このメモを${label}しますか。`), confirm,
-          button(action === 'trash' ? '移動をキャンセル' : '復元をキャンセル', () => detail(id, token)));
+          button(action === 'trash' ? '移動をキャンセル' : '復元をキャンセル', () => memo.deletedAt === null && (productLayout || edit) ? list(token) : detail(id, token)));
       });
-      root.append(start);
+      actions.push(start);
     }
     if (deletePermanently && memo.deletedAt !== null) {
       const start = button('完全削除', () => {
@@ -124,10 +126,11 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
           if (deletePermanently(selected, active!.valid)) clear();
         });
         confirmView(text('p', 'このメモを完全に削除します。元に戻せません。'), confirm,
-          button('完全削除をキャンセル', () => detail(id, token)));
+          button('完全削除をキャンセル', () => memo.deletedAt === null && productLayout ? list(token) : detail(id, token)));
       });
-      root.append(start);
+      actions.push(start);
     }
+    return actions;
   };
   const hasTag = (value: MemoData, tag: Tag) => value.tags.some(row => uuidKey(row.id) === uuidKey(tag.id) && row.revision === tag.revision && row.name === tag.name);
   const editTag = (tag: Tag | null, token: object) => {
@@ -190,10 +193,11 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         const open = button(memo.title, () => {
           if (!root.contains(open) || !current(token)) return;
           rememberScroll();
-          if (productLayout && edit && memo.deletedAt === null) editMemo(memo.id, token);
+          if (edit && memo.deletedAt === null) editMemo(memo.id, token);
           else detail(memo.id, token);
         });
         row.append(open);
+        if (!productLayout && edit) row.append(...memoActions(memo, token));
         if (productLayout) {
           open.className = 'open-card';
           open.setAttribute('aria-label', memo.title);
@@ -205,19 +209,9 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
           const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
           const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙'; summary.setAttribute('aria-label', 'メモの操作'); menu.append(summary);
           const options = doc.createElement('div'); options.className = 'card-menu-items'; menu.append(options);
-          // 既存詳細の操作入口へ委譲し、確認・要求固定・currentnessを複製しない。
-          const action = (label: string, existing: string) => {
-            const item = button(label, () => {
-              if (!root.contains(item) || !current(token)) return;
-              rememberScroll(); detail(memo.id, token);
-              Array.from(root.querySelectorAll('button')).find(node => (node.dataset.presentationLabel ?? node.textContent) === existing)?.click();
-            }); options.append(item);
-          };
-          if (memo.deletedAt === null) {
-            if (changeState) action(memo.pinnedAt ? 'ピン留め解除' : 'ピン留め', memo.pinnedAt ? 'ピン留め解除' : 'ピン留め');
-            if (duplicate) action('複製', 'このクラウドメモを複製');
-            if (changeState) action('ゴミ箱へ', 'ゴミ箱へ移動');
-          } else { if (changeState) action('復元', '復元'); if (deletePermanently) action('完全削除', '完全削除'); }
+          // 一覧から正式handlerを直接使用し、通常詳細の中継画面を作らない。
+          options.append(...memoActions(memo, token));
+
           open.append(preview, meta); row.append(pin, menu);
         }
         rows.append(row);
@@ -380,11 +374,13 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   return Object.freeze({
     tagChoices() {
       if (!active) return null;
-      const value = current(active.token); return value && active ? { tags: value.tags, valid: active.valid } : null;
+      const value = current(active.token); return value && active ? { tags: value.tags, valid: active.valid, context: active[active.view] } : null;
     },
-    show(value: MemoData, valid: () => boolean) {
+    show(value: MemoData, valid: () => boolean, context?: ListContext | null) {
       clear(); if (disposed) return;
-      const token = {}; active = { value, valid, token, view: 'normal', normal: { result: queryMemos(value), scrollTop: 0 },
+      // 通常一覧へ復帰する。ゴミ箱のqueryを通常一覧へ持ち込まない。
+      const normal = context?.result.query.view === 'normal' ? context : null;
+      const token = {}; active = { value, valid, token, view: 'normal', normal: { result: queryMemos(value, normal?.result.query), scrollTop: normal?.scrollTop ?? 0 },
         trash: { result: queryMemos(value, { view: 'trash' }), scrollTop: 0 } }; list(token);
     },
     refresh() { if (active) current(active.token); },

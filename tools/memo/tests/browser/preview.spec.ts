@@ -19,7 +19,6 @@ const openEditor = async (page: import('@playwright/test').Page, scenario = '') 
   await page.goto(`/${scenario ? `?scenario=${scenario}` : ''}`);
   await expect(page.locator('#read-status')).toContainText('読込が完了');
   await page.getByRole('button', { name: '📌 仕事メモ', exact: true }).click();
-  await page.getByRole('button', { name: '編集する', exact: true }).click();
   await expect(page.locator('#editor-view')).toBeVisible();
 };
 
@@ -30,7 +29,7 @@ test('新規保存・検索・タグ・前後移動とスクロールを接続�
   await page.locator('#editor-tags').getByLabel('仕事', { exact: true }).check();
   await page.getByRole('button', { name: '保存する', exact: true }).click();
   await expect(page.locator('#save-status')).toContainText('保存は成功');
-  await expect(page.locator('#detail-title')).toHaveText('UI新規'); expect(await page.locator('#detail-body').textContent()).toBe(' 本文を保持\n ');
+  await expect(page.locator('#memo-title')).toHaveValue(' UI新規 '); expect(await page.locator('#memo-body').inputValue()).toBe(' 本文を保持\n ');
   await page.getByRole('button', { name: '一覧へ戻る' }).click();
   await page.getByLabel('検索', { exact: true }).fill('UI新規'); await expect(page.locator('#count')).toContainText('1件');
   await page.getByLabel('検索', { exact: true }).fill(''); await page.getByLabel('並び替え').selectOption('created-asc');
@@ -38,7 +37,7 @@ test('新規保存・検索・タグ・前後移動とスクロールを接続�
   await page.waitForTimeout(50);
   const scroll = await page.locator('#cards').evaluate(node => node.scrollTop);
   await page.getByRole('button', { name: '📌 仕事メモ', exact: true }).click();
-  await page.getByRole('button', { name: '次のメモ', exact: true }).click(); await expect(page.locator('#detail-title')).toHaveText('合成メモ 2');
+  await page.getByRole('button', { name: '次のメモ', exact: true }).click(); await expect(page.locator('#memo-title')).toHaveValue('合成メモ 2');
   await page.getByRole('button', { name: '一覧へ戻る' }).click();
   await expect(page.getByLabel('並び替え')).toHaveValue('created-asc');
   expect(await page.locator('#cards').evaluate(node => node.scrollTop)).toBe(scroll);
@@ -165,7 +164,7 @@ test('専用サーバーは検証資産以外を配信せずCSPを設定する',
 test('入力文字列をHTMLとして実行せず、確認画面に対象と操作を表示する', async ({ page }) => {
   await openEditor(page); const payload = '<img src="https://example.invalid/leak">';
   await page.getByLabel('タイトル', { exact: true }).fill(payload); await page.getByRole('button', { name: '保存する', exact: true }).click();
-  await expect(page.locator('#detail-title')).toHaveText(payload); expect(await page.locator('img').count()).toBe(0);
+  await expect(page.locator('#memo-title')).toHaveValue(payload); expect(await page.locator('img').count()).toBe(0);
   await page.getByRole('button', { name: '一覧へ戻る' }).click(); const row = page.locator('#cards li').filter({ hasText: payload });
   await row.locator('summary').click(); await row.getByRole('button', { name: 'ゴミ箱へ', exact: true }).click();
   await expect(page.locator('#confirm-description')).toContainText(payload); await expect(page.locator('#confirm-description')).toContainText('ゴミ箱へ移動');
@@ -202,9 +201,10 @@ for (const create of [false, true]) test(`保存成功後の読込失敗で古�
   await page.locator('#memo-title').fill('確定保存タイトル'); await page.locator('#memo-body').fill('確定保存本文');
   await page.locator('#save').click(); await expect(page.locator('#save-status')).toContainText('保存は成功');
   await expect(page.locator('#read-status')).toContainText('失敗');
-  await expect(page.locator('#detail-title')).toHaveText('詳細を取得できません。再読込してください。');
-  await expect(page.locator('#detail-body')).toBeEmpty(); await expect(page.locator('#detail-tags')).toBeEmpty();
-  await expect(page.locator('#edit')).toBeDisabled();
+  await expect(page.locator('#detail-view')).toBeHidden();
+  await expect(page.locator('#memo-title')).toHaveValue('確定保存タイトル');
+  await expect(page.locator('#memo-body')).toHaveValue('確定保存本文');
+  await expect(page.locator('#save')).toBeDisabled();
 });
 
 test('確認のキャンセル・再表示・遅延読込による失効を区別する', async ({ page }) => {
@@ -234,8 +234,8 @@ test('保存応答後にフォーカスと別入力欄を切り替えても古�
   await expect(page.getByLabel('タイトル', { exact: true })).toHaveValue('追加タイトル'); await expect(body).toHaveValue('追加本文');
   await page.getByLabel('タイトル', { exact: true }).fill('応答後タイトル'); await body.fill('応答後本文');
   await expect(page.getByLabel('タイトル', { exact: true })).toHaveValue('応答後タイトル');
-  await page.getByRole('button', { name: '保存する', exact: true }).click(); await expect(page.locator('#detail-view')).toBeVisible();
-  await expect(page.locator('#detail-title')).toHaveText('応答後タイトル'); await expect(page.locator('#detail-body')).toHaveText('応答後本文');
+  await page.getByRole('button', { name: '保存する', exact: true }).click(); await expect(page.locator('#editor-view')).toBeVisible();
+  await expect(page.locator('#memo-title')).toHaveValue('応答後タイトル'); await expect(page.locator('#memo-body')).toHaveValue('応答後本文');
 });
 
 test('遅延再読込中の別入力欄の編集をフォーカス移動後も保持する', async ({ page }) => {

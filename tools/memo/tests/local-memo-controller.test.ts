@@ -41,12 +41,52 @@ function modify(f: ReturnType<typeof fixture>, update: (value: ReturnType<typeof
 }
 
 describe('ローカル機能の一連の接続', () => {
+  it('新規の前後対象を先に確認し、cancelでdraft保持・approveで通常編集へ移動する（書込0）', async () => {
+    const f = fixture(); await f.dispatch({ kind: 'load' });
+    await f.dispatch({ kind: 'query', options: { text: '元の', selectedTagIds: [TAG], sort: 'created-asc' }, scrollTop: 42 });
+    await f.dispatch({ kind: 'new' });
+    await f.dispatch({ kind: 'draft', value: { title: '未保存新規', body: '残す', tagIds: [] } });
+    const editor = f.get().editor;
+    expect(await f.dispatch({ kind: 'adjacent', direction: 'previous' })).toMatchObject({ reason: 'not-in-result' });
+    expect(f.get().confirmation).toBeNull(); expect(f.get().editor).toBe(editor);
+    expect((await f.dispatch({ kind: 'adjacent', direction: 'next' })).kind).toBe('confirmation-required');
+    await f.dispatch({ kind: 'confirm', token: f.get().confirmation!.token, accepted: false });
+    expect(f.get().editor).toBe(editor);
+    await f.dispatch({ kind: 'adjacent', direction: 'next' }); await approve(f);
+    expect(f.get().route).toEqual({ kind: 'edit', id: MEMO }); expect(f.get().editor!.draft.title).toBe('元のタイトル');
+    expect(f.get().detailList!.scrollTop).toBe(42); expect(f.storage.writes).toHaveLength(0);
+  });
+  it('通常メモはdetail要求でも編集、dirty前後移動は既存確認を使い、結果外・端はno-op', async () => {
+    const f = fixture(); await f.dispatch({ kind: 'load' }); await f.dispatch({ kind: 'detail', id: MEMO });
+    expect(f.get().route.kind).toBe('edit');
+    await f.dispatch({ kind: 'draft', value: { title: 'dirty', body: '保持', tagIds: [] } });
+    const editor = f.get().editor;
+    await f.dispatch({ kind: 'adjacent', direction: 'next' });
+    await f.dispatch({ kind: 'confirm', token: f.get().confirmation!.token, accepted: false }); expect(f.get().editor).toBe(editor);
+    await f.dispatch({ kind: 'adjacent', direction: 'next' }); await approve(f); expect(f.get().route).toEqual({ kind: 'edit', id: OTHER });
+    expect((await f.dispatch({ kind: 'adjacent', direction: 'next' })).kind).toBe('blocked'); expect(f.get().confirmation).toBeNull();
+    await f.dispatch({ kind: 'adjacent', direction: 'previous' }); expect(f.get().route).toEqual({ kind: 'edit', id: MEMO });
+    expect(f.storage.writes).toHaveLength(0);
+  });
+  it('空結果の新規は前後どちらも確認せず、ゴミ箱は引き続きreadonly detail', async () => {
+    const initial = state(); initial.memos[0]!.deletedAt = NOW;
+    const f = fixture(initial); await f.dispatch({ kind: 'load' }); await f.dispatch({ kind: 'detail', id: MEMO });
+    expect(f.get().route.kind).toBe('detail'); expect(f.get().editor).toBeNull();
+    expect(await f.dispatch({ kind: 'edit', id: MEMO })).toMatchObject({ reason: 'trashed' });
+    await f.dispatch({ kind: 'list' }); await f.dispatch({ kind: 'query', options: { text: '一致なし' }, scrollTop: 0 });
+    await f.dispatch({ kind: 'new' }); const editor = f.get().editor;
+    for (const direction of ['previous', 'next'] as const) {
+      expect(await f.dispatch({ kind: 'adjacent', direction })).toMatchObject({ reason: 'not-in-result' });
+      expect(f.get().editor).toBe(editor); expect(f.get().confirmation).toBeNull();
+    }
+    expect(f.storage.writes).toHaveLength(0);
+  });
   it.each(['saved', 'rejected', 'unknown'])('製品の保存後編集継続は%sでも成功判定・draftを変えない', async outcome => {
     const f = fixture(state(), store => ({ ...store, save: outcome === 'saved' ? store.save : async () => outcome === 'rejected'
       ? { kind: 'rejected', reason: 'conflict', writeOutcome: 'not-attempted' } as const
       : { kind: 'unknown', reason: 'storage-failure', writeOutcome: 'unverified' } as const }));
     let serial = 600;
-    const c = createLocalMemoController({ store: f.store, createId: () => token(++serial), keepEditingAfterSave: true });
+    const c = createLocalMemoController({ store: f.store, createId: () => token(++serial) });
     await c.dispatch({ kind: 'load' }); await c.dispatch({ kind: 'edit', id: MEMO });
     await c.dispatch({ kind: 'draft', value: { title: '編集継続', body: '保持する本文', tagIds: [TAG] } });
     await c.dispatch({ kind: 'save' });
@@ -59,16 +99,16 @@ describe('ローカル機能の一連の接続', () => {
       await c.dispatch({ kind: 'save' }); expect(c.getState().editor!.expectedRevision).toBe(state().memos.find(row => row.id === MEMO)!.revision + 2);
     } else expect(isDirty(c.getState().editor!)).toBe(true);
   });
-  it('読込→検索→詳細→前後→編集→保存→一覧復帰で条件・スクロールを保持', async () => {
+  it('読込→検索→通常編集→前後→保存→一覧復帰で条件・スクロールを保持', async () => {
     const f = fixture(); await f.dispatch({ kind: 'load' });
     await f.dispatch({ kind: 'query', options: { text: '', selectedTagIds: [TAG], sort: 'created-asc' }, scrollTop: 87.5 });
     await f.dispatch({ kind: 'detail', id: MEMO });
-    await f.dispatch({ kind: 'adjacent', direction: 'next' }); expect(f.get().route).toEqual({ kind: 'detail', id: OTHER });
-    await f.dispatch({ kind: 'adjacent', direction: 'previous' }); expect(f.get().route).toEqual({ kind: 'detail', id: MEMO });
+    await f.dispatch({ kind: 'adjacent', direction: 'next' }); expect(f.get().route).toEqual({ kind: 'edit', id: OTHER });
+    await f.dispatch({ kind: 'adjacent', direction: 'previous' }); expect(f.get().route).toEqual({ kind: 'edit', id: MEMO });
     await f.dispatch({ kind: 'edit', id: MEMO });
     await f.dispatch({ kind: 'draft', value: { title: ' 保存後 ', body: ' 本文 ', tagIds: [TAG] } });
     await f.dispatch({ kind: 'save' });
-    expect(f.get().write.kind).toBe('succeeded'); expect(f.get().route.kind).toBe('detail');
+    expect(f.get().write.kind).toBe('succeeded'); expect(f.get().route.kind).toBe('edit');
     expect(isDirty(f.get().editor!)).toBe(false); expect(f.get().editorIssue).toBeNull();
     await f.dispatch({ kind: 'list' });
     expect(f.get().route.kind).toBe('list'); expect(f.get().list!.scrollTop).toBe(87.5);
@@ -88,7 +128,7 @@ describe('ローカル機能の一連の接続', () => {
     const f = fixture(); await f.dispatch({ kind: 'load' });
     await f.dispatch({ kind: 'query', options: { text: '対象外' }, scrollTop: 0 }); await f.dispatch({ kind: 'detail', id: MEMO });
     expect(await f.dispatch({ kind: 'adjacent', direction: 'next' })).toMatchObject({ kind: 'blocked', reason: 'not-in-result' });
-    expect(f.get().route).toEqual({ kind: 'detail', id: MEMO });
+    expect(f.get().route).toEqual({ kind: 'edit', id: MEMO });
   });
   it('一覧件数とタグ使用件数は別々に算出する', async () => {
     const f = fixture(); await f.dispatch({ kind: 'load' });
@@ -112,13 +152,13 @@ describe('書込と非同期の安全性', () => {
     expect(isDirty(f.get().editor!)).toBe(true); expect(f.get().route.kind).toBe('edit'); expect(f.get().editor!.screen).toBe('edit');
     expect(f.get().editor!.expectedRevision).toBe(4); expect(f.get().editorIssue).toBeNull();
   });
-  it('保存中に変更して元へ戻した場合はcleanな詳細へ進む', async () => {
+  it('保存中に変更して元へ戻した場合もcleanな編集に留まる', async () => {
     const gate = deferred<void>();
     const f = fixture(state(), store => ({ ...store, save: async input => { await gate.promise; return store.save(input); } }));
     await editing(f); const raw = f.get().editor!.draft, saving = f.dispatch({ kind: 'save' });
     await f.dispatch({ kind: 'draft', value: { ...raw, title: '一時変更' } });
     await f.dispatch({ kind: 'draft', value: raw }); gate.resolve(); await saving;
-    expect(isDirty(f.get().editor!)).toBe(false); expect(f.get().route.kind).toBe('detail');
+    expect(isDirty(f.get().editor!)).toBe(false); expect(f.get().route.kind).toBe('edit');
   });
   it('保存確定後の再読込失敗を独立して保持し、自動再試行しない', async () => {
     const f = fixture(); await editing(f);

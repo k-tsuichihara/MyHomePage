@@ -1,5 +1,5 @@
 import { beginSave, confirmResave, createEditor, editDraft, immutable, isDirty, settleSave } from './editor-state';
-import { appDepartureReason, listNeighbors, prepareLocalList, requestNavigation } from './navigation-state';
+import { appDepartureReason, editorNeighbors, listNeighbors, prepareLocalList, requestNavigation } from './navigation-state';
 import { queryMemos } from './memo-query';
 import { countTagUsage } from './tag-usage';
 import { validateLocalFormat } from './local-format';
@@ -16,8 +16,6 @@ import { parseDeleteTargets, parsePermanentDelete, sameTargets } from './local-d
 export interface LocalControllerDependencies {
   store: Pick<ReturnType<typeof createLocalMemoStore>, 'load' | 'save' | 'changeState' | 'saveTag' | 'deleteTag' | 'deletePermanently' | 'emptyTrash'>;
   createId: () => string;
-  /** 製品UIは確定保存後も入力欄・選択範囲を保って編集を続ける。 */
-  keepEditingAfterSave?: boolean;
 }
 const done: CommandResult = { kind: 'done' };
 const blocked = (reason: string): CommandResult => ({ kind: 'blocked', reason });
@@ -86,12 +84,14 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
 
   function navigate(destination: Destination, accepted: boolean): CommandResult {
     if (!ready()) return blocked('not-ready');
+    // 通常メモの開き方をここで一本化する。復元後・前後移動等のdetail要求も同じ経路。
+    if (destination.kind === 'detail' && findMemo(uuid(destination.id))?.deletedAt === null) destination = { kind: 'edit', id: destination.id };
     if (!accepted) {
       const reason = appDepartureReason(app);
       if (reason) return confirmation(destination, reason);
       if (app.editor) {
         const decision = requestNavigation(app.editor, destination.kind === 'list' || destination.kind === 'new'
-          ? { kind: 'list' } : { kind: 'detail', id: destination.id });
+          ? { kind: 'list' } : { kind: destination.kind === 'edit' ? 'edit' : 'detail', id: destination.id });
         if (decision.kind === 'confirmation-required') return confirmation(destination, decision.reason);
         if (decision.kind === 'blocked') return blocked(decision.reason);
       }
@@ -200,9 +200,9 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
       let editor = settleSave(app.editor, saving.attempt.context, result);
       success = editor.save.kind === 'saved';
       // PR #10の保存試行の成功と、最新ドラフトの画面状態を分ける。
-      if (success && (deps.keepEditingAfterSave || isDirty(editor))) editor = immutable({ ...editor, screen: 'edit' });
+      if (success) editor = immutable({ ...editor, screen: 'edit' });
       const anchor = success && result.kind === 'saved' ? structuredClone(result.value) : app.editorAnchor;
-      patch({ editor, editorAnchor: anchor, route: { kind: success && !deps.keepEditingAfterSave && !isDirty(editor) ? 'detail' : 'edit', id: editor.id } });
+      patch({ editor, editorAnchor: anchor, route: { kind: 'edit', id: editor.id } });
     }
     if (success) {
       const deletedCount = result.kind === 'deleted' || result.kind === 'not-needed' ? result.count : undefined;
@@ -244,9 +244,12 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     }
     if (command.kind === 'adjacent') {
       if (!app.detailList || app.route.kind === 'list') return blocked('no-detail');
-      const neighbors = listNeighbors(app.detailList, app.route.id);
+      const neighbors = app.editor ? editorNeighbors(app.detailList, app.route.id, app.editor.expectedRevision === null)
+        : listNeighbors(app.detailList, app.route.id);
       const id = neighbors.kind === 'found' ? (command.direction === 'previous' ? neighbors.previousId : neighbors.nextId) : null;
-      return id ? navigate({ kind: 'detail', id }, false) : blocked('not-in-result');
+      const target = id ? findMemo(id) : null;
+      return id && target && (!app.editor || target.deletedAt === null)
+        ? navigate({ kind: 'detail', id }, false) : blocked('not-in-result');
     }
     return navigate(command, accepted);
   }
