@@ -374,7 +374,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   return Object.freeze({
     tagChoices() {
       if (!active) return null;
-      const value = current(active.token); return value && active ? { tags: value.tags, valid: active.valid, context: active[active.view] } : null;
+      const value = current(active.token); return value && active ? { tags: value.tags, valid: active.valid, context: active.normal } : null;
     },
     show(value: MemoData, valid: () => boolean, context?: ListContext | null) {
       clear(); if (disposed) return;

@@ -26,7 +26,7 @@ let lateVoiceResult: VoiceRecognition['onresult'];
 // 合成音声試験以外もnative認識器へ到達させず、unsupportedを確実に再現する。
 Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: undefined });
 Object.defineProperty(window, 'webkitSpeechRecognition', { configurable: true, value: undefined });
-if (mode === 'cloud-voice' || (mode.startsWith('cloud-voice-') && mode !== 'cloud-voice-unsupported')) Object.defineProperty(window, 'SpeechRecognition', { value: class implements VoiceRecognition {
+if (mode === 'cloud-list-voice' || mode === 'cloud-voice' || (mode.startsWith('cloud-voice-') && mode !== 'cloud-voice-unsupported')) Object.defineProperty(window, 'SpeechRecognition', { value: class implements VoiceRecognition {
   lang = ''; continuous = false; interimResults = false;
   onresult: VoiceRecognition['onresult'] = null; onerror = null; onend = null;
   start() { voiceCalls.start++; latestVoice = this; lateVoiceResult = this.onresult; }

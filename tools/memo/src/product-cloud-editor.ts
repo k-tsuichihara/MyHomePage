@@ -15,7 +15,7 @@ import { normalizeMemoInput } from './input';
 export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps: {
   writer: Pick<ReturnType<typeof createCloudController>, 'save' | 'resolve'>;
   loader?: ReturnType<typeof createCloudController>['load'];
-  returnToList?: (context: ListContext | null) => Promise<void>;
+  returnToList?: (context: ListContext | null, commit: () => boolean) => Promise<boolean>;
   auth: Pick<ReturnType<typeof createMemoAuthSession>, 'getContext' | 'isCurrent'>;
   selected(): boolean; viewKey(): object; createId(): string; changed(): void; now?: (() => Date) | undefined;
 }) {
@@ -88,8 +88,19 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   }
   async function finishLeave(destination: NavigationTarget) {
     if (destination.kind === 'list') {
-      const list = navigation; editor = null; navigation = null; changed();
-      await deps.returnToList?.(list); return;
+      const context = auth(); if (!editor || !context || !deps.returnToList) return;
+      const before = editor, view = deps.viewKey(), list = navigation;
+      working = true; changed();
+      try {
+        // 一覧取得が確定するまでeditor/一覧条件を保持する。確定時だけ既存hostから解放する。
+        const returned = await deps.returnToList(list, () => {
+          if (disposed || editor !== before || !deps.selected() || deps.viewKey() !== view || !deps.auth.isCurrent(context)) return false;
+          editor = null; navigation = null; changed(); return true;
+        });
+        if (!returned && editor === before) notice = '一覧を確認できません。編集中の内容を保持しています。自動再試行しません。';
+      } catch { if (!disposed && editor === before) notice = '一覧を確認できません。編集中の内容を保持し、自動再試行しません。'; }
+      finally { working = false; if (!disposed) changed(); }
+      return;
     }
     if (destination.kind !== 'edit' || !editor || !navigation || !deps.loader || !candidatesCurrent()) return;
     const context = auth(); if (!context) return;

@@ -242,13 +242,14 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const reason = appDepartureReason(decision.app);
     return reason || decision.tickets.length ? { kind: 'confirmation-required', reason: reason ?? 'unsaved' } : { kind: 'allowed' };
   };
-  const readCloud = async (listContext?: import('./navigation-state').ListContext | null) => {
-    if (!cloud || closed || loading || cloud.target.current().target !== 'cloud') return;
+  const readCloud = async (listContext?: import('./navigation-state').ListContext | null, commitReturn?: () => boolean): Promise<boolean> => {
+    if (!cloud || closed || loading || cloud.target.current().target !== 'cloud') return false;
     const auth = cloudContext();
-    if (!auth) { refresh(); return; }
+    if (!auth) { refresh(); return false; }
     const selection = cloud.target.current();
     snapshotView?.clear();
-    selectionTicket = {};
+    // 一覧復帰のeditor文脈は、失敗時に引き続き使えるよう成功確定まで失効させない。
+    if (!commitReturn) selectionTicket = {};
     // 明示再読取へ進んだら前の成功案内だけを片付ける。不明要求・失敗通知は残す。
     if (stateRecord?.result?.kind === 'completed' && stateRecord.result.result.kind === 'ok') stateStatus.textContent = '';
     loading = true; cloudStatus.textContent = 'クラウド読取中です。書込は行いません。';
@@ -259,7 +260,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         if (!closed && cloud.target.current().target === 'cloud' && session.isCurrent?.(auth)) {
           cloudStatus.textContent = '停止：切替前のクラウド応答を反映しません。';
         }
-        return;
+        return false;
       }
       cloudStatus.textContent = result.kind === 'completed'
         ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ピン留め/解除・ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : cloud.controller.saveTag ? 'タグの単件作成・改名ができます。' : cloud.controller.deleteTag ? 'タグの単件削除ができます。' : '書込未接続です。'}`
@@ -268,10 +269,17 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         : result.kind === 'stale-response' ? '停止：古いクラウド応答を反映しません。'
           : '停止：クラウド読取を完了できませんでした。';
       if (result.kind === 'completed' && result.result.kind === 'ok') {
-        snapshotView?.show(result.result.value, () => !closed && cloud.target.current() === selection && !!session.isCurrent?.(auth), listContext);
+        if (commitReturn && !commitReturn()) return false;
+        if (commitReturn) selectionTicket = {};
+        // editor解放によるC05のdirty更新後の選択状態に、今回検証済みの一覧を結び付ける。
+        const displayedSelection = cloud.target.current();
+        snapshotView?.show(result.result.value, () => !closed && cloud.target.current() === displayedSelection && !!session.isCurrent?.(auth), listContext);
+        return true;
       }
+      return false;
     } catch { if (!closed && cloud.target.current() === selection) cloudStatus.textContent = 'UNKNOWN：読取結果を確認できません。自動再試行しません。'; }
     finally { loading = false; if (closed) cloud.controller.dispose(); else refresh(); }
+    return false;
   };
   const applyTarget = (result: StorageTargetDecision, intent: 'logout' | StorageTarget,
     from: ReturnType<ProductCloudHost['target']['current']>) => {

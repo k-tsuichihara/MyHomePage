@@ -13,6 +13,7 @@ import { mountVoiceInput } from './ui/voice-input';
 import type { VoiceEditBridge } from './ui/memo-preview';
 import { createLocalRestoreController } from './local-restore-controller';
 import { createDeletedRecoveryController } from './deleted-recovery-controller';
+import type { RecoveryState } from './deleted-recovery-controller';
 import { mountRestorePreview } from './ui/restore-preview';
 import { mountDeletedRecoveryPreview } from './ui/deleted-recovery-preview';
 import { createInitialRestoreController } from './initial-restore-controller';
@@ -99,8 +100,15 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       return !disposed && controller.getState().read.kind === 'ready';
     } });
   const restore = createLocalRestoreController({ store, createId: deps.createId, canStart: () => normalReady() && !recoveryBusy() && !initialBusy() });
+  // 離脱判定は既存controllerが所有する。元previewへの継続だけを同じ確認tokenに結び付ける。
+  let sourceReturn: { token: number; state: RecoveryState } | null = null;
   const recovery = createDeletedRecoveryController({ store, createId: deps.createId, canStart: () => normalReady() && !restoreBusy() && !initialBusy(),
-    leaveCreated: async () => !disposed && (await controller.dispatch({ kind: 'list' })).kind === 'done',
+    leaveCreated: async () => {
+      if (!localAvailable()) return false;
+      const state = recovery.getState(), result = await controller.dispatch({ kind: 'list' });
+      sourceReturn = result.kind === 'confirmation-required' ? { token: result.token, state } : null;
+      return result.kind === 'done';
+    },
     openCreated: async id => {
       if (disposed) return false;
       await controller.dispatch({ kind: 'load' });
@@ -146,6 +154,14 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
         if (!localAvailable()) return { kind: 'blocked', reason: disposed ? 'disposed' : 'cloud-read-only' };
         if ((upgradeBusy || restoreBusy() || recoveryBusy() || initialBusy()) && command.kind !== 'draft') return { kind: 'blocked', reason: 'writing' };
         const result = await withSessionRefresh(() => controller.dispatch(command));
+        const source = sourceReturn, state = controller.getState(), ticket = state.confirmation;
+        if (source && (ticket?.token !== source.token || ticket.generation !== state.generation)) {
+          sourceReturn = null;
+          if (command.kind === 'confirm' && command.token === source.token && command.accepted && result.kind === 'done'
+            && state.route.kind === 'list' && recovery.getState() === source.state && localAvailable()) {
+            await withSessionRefresh(() => recovery.dispatch({ kind: 'source' }));
+          }
+        }
         syncBackup();
         if (upgrade.getState() === 'legacy-changed') {
           const status = doc.getElementById('product-status');
@@ -197,6 +213,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
     isReady: () => localInitializationSettled,
     createId: deps.createId, now: () => new Date(deps.now()),
     setCloudSelected(selected) {
+      if (selected) sourceReturn = null;
       for (const id of ['memo-app', 'migration-view']) {
         const node = doc.getElementById(id); if (!node) continue;
         if (selected) {
@@ -218,6 +235,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
       const result = sessionUi?.dispose();
       if (result === 'busy' || result === 'pending') return result;
       disposed = true;
+      sourceReturn = null;
       disposeMemo();
       disposeBackup?.();
       disposeUpgrade?.(); upgrade.dispose();

@@ -242,6 +242,8 @@
 | U01-05/09/10 | ケバブの不要文言・枠・角丸を省略、アイコン固定、外側クリックで閉じる | 同上。カードとメニューのイベント分離・表示回帰PASS | R01-B | 未実施 |
 | U01-02/06/13/14 | 対象なしは無通知、通常メモは直接edit、新規/保存済みの前後移動と既存離脱確認 | PR #122 / `2d52a50`で全Vitest 59ファイル2,023件、最終関連24件、E2E 83件、typecheck・local/cloud build・diff check PASS。cancel/approve・stale・readonly維持も自動確認 | R01-Cの1〜10 | 未実施 |
 
+PR #122レビューのP2追補（Human観測とは区別）：cloud一覧復帰の失敗・古いAuth・読取中の追加入力でeditor/一覧条件を失わないよう、読取成功時だけ解放する。単件回復は同じ有効な離脱確認tokenへの承認後に元プレビュー戻りを再開し、cancelや追加編集による失効では再開しない。ゴミ箱表示中の新規/音声新規にも保持済みの通常一覧文脈を渡す。本追補のAI Gateは全Vitest59ファイル2,029件、Playwright E2E83件、typecheck・local/cloud build・diff check PASS。上記のdraft保持・cancel/古い承認拒否/承認後preview復帰・通常一覧条件の復帰を合成製品試験で確認し、実通信0・余計なwriteなし。詳細契約は[製品UI契約のP2追補](PRODUCT-UI-INTEGRATION.md)を参照。これらの異常・stale分岐をHumanへ故意に再現させる独立ケースは追加しない。R01の具体的操作とUAT-08の代表利用を維持し、Human再確認結果は未実施のままとする。
+
 <a id="uat01-recheck"></a>
 
 ### 次にHumanが行う影響箇所の再確認（すべて未実施）

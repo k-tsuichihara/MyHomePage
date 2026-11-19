@@ -9,10 +9,10 @@ U01-13/14を[Human UAT正本](HUMAN-UAT-v1.1.0.md)へ記録。UAT-01=FAIL、PASS
 | local一覧・検索/タグ/sort結果・再度開く | 通常はedit。controller入口で旧detail要求もeditへ正規化 |
 | local保存完了 | 純粋editor/controllerともeditを維持。一時的なkeepEditingAfterSave切替を削除 |
 | local前後移動 | 既存ListContextの通常対象を先に確認し、既存departure確認後にedit。結果外/端は無通知・無書込 |
-| 新規/複製draftの前後 | 一覧先頭の直前を仮位置にし、次→先頭。cancelは同じdraft、承認は保存せず対象editor |
-| 完全削除後の単件回復 | 作成確認後に通常edit。一時的な元preview戻りは既存一覧離脱を通す。dirty等の確認が必要なら元previewを開かない |
+| 新規/複製draftの前後 | 通常一覧先頭の直前を仮位置にし、次→先頭。通常新規/音声新規には、ゴミ箱表示中でも保持済みactive.normalを渡す。cancelは同じdraft、承認は保存せず対象editor |
+| 完全削除後の単件回復 | 作成確認後に通常edit。元preview戻りは既存一覧離脱を通し、確認tokenと回復state参照に継続を結び付ける。同じ有効確認の承認後だけsourceを再開し、cancel・編集等による失効・保存先変更では再開しない |
 | cloud一覧・前後 | 編集注入済み通常hostはedit。前後は凍結したListContextのIDを使い、明示移動の既存C04 loadで現在の本文/revisionを検証 |
-| cloud一覧復帰 | 明示的な編集終了時に既存load。旧query/scrollだけを新snapshotへ適用し、過去データは混ぜない。失敗・古いcontextでは旧一覧を復活させない |
+| cloud一覧復帰 | 明示的な編集終了時に既存load。読取が現在の成功と確定するまでeditor/一覧条件を保持し、成功時だけ既存hostへ解放を通知する。旧query/scrollだけを新snapshotへ適用し、過去データは混ぜない。失敗・古いcontextではdraftを失わず、旧一覧を復活させない |
 | cloudカード操作 | 同じ正式handlerをメニューから直接使用。detailを生成して旧ボタンをclickする中継経路を削除 |
 | read-only詳細 | ゴミ箱、編集未注入のcloud読取host、backup/復元前previewは維持。通常editorへの迂回として使わない |
 
@@ -23,6 +23,10 @@ cloudは取得開始時のeditor参照・Auth user/generation・保存先/view k
 追加AI Gate観点：新規/保存済みの対象あり・なし、cancel/approve、一覧条件/scroll、local write0、cloudの明示loadのみ、stale Auth/user/target/editor、保存成功継続/失敗/UNKNOWN、単件回復元preview、ゴミ箱readonly、既存レイアウト/preview/backup。実通信・Human再確認・公開は行わない。
 
 AI Gate：全Vitest59ファイル2,023件、Playwright E2E83件、typecheck、local/cloud product build、diff checkはPASS。最後のread-only長文試験を実際のゴミ箱へ移し、正常一覧復帰のquery境界を明示した後、関連24件とtypecheck/buildを追加確認した。UAT表・各ケースの結果10件と相対リンク37件も整合。Windowsの制限内E2Eではassert後の終了待ちが続いたため、同一の外部通信遮断付きE2Eを制限外で再実行し、83件PASS・exit 0を確認した。実Supabase/Auth/RPC/DB/SQL通信0件、実マイク・実スマホ・Human再確認・公開は未実施。
+
+PR #122のP2追補：cloud一覧復帰の成否を既存hostが返し、取得成功/現在性とeditor参照を確認した時だけ解放する。失敗時は選択ticketも更新せず、元の編集・一覧条件で利用者の次の明示操作を待つ。単件回復は新たな離脱判定を作らず、既存controllerのconfirm結果が同じtoken・回復stateに対する承認成功の場合だけsourceを再開する。新規用tagChoicesの一覧文脈をactive.normalへ統一し、音声新規にも同じ境界を使う。UNKNOWNの自動再送・write・fallbackは追加しない。
+
+P2追補のAI Gate：全Vitest59ファイル2,029件、Playwright E2E83件、typecheck、local/cloud product build、diff check PASS。cloud一覧復帰のfailed/unverified・Auth世代変更・読取中編集でdraft/条件を保持し、次の明示操作でだけ復帰する製品試験を追加。ゴミ箱からの通常/音声新規で通常一覧の前後対象と検索/タグ/sortの復帰を確認。生成HTMLの実localStorage合成試験では、単件回復後のsource離脱cancel・確認後追加入力/旧承認の拒否・有効承認後のpreview復帰を追加し、書込が増えないことを確認した。実通信0、Human再確認未実施。
 
 ## Q05 UAT-01：保存後編集継続・カードUX
 
