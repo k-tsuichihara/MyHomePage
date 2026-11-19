@@ -46,6 +46,7 @@ it.each([1200, 390, 320])('UAT-01：local/cloudの保存後編集継続・カー
         await page.locator('#save').click();
         await page.locator('#editor-view .editor-saved').waitFor();
         expect(await page.locator('#editor-view .editor-saved').textContent()).toBe('保存しました');
+        expect(await page.locator('#save-status').isVisible()).toBe(false);
         const notice = await page.locator('#editor-view .editor-saved').boundingBox(), save = await page.locator('#save').boundingBox();
         expect(notice!.y + notice!.height).toBeLessThanOrEqual(save!.y);
         await page.screenshot({ path: fileURLToPath(new URL(`.product/uat01-saved-local-${width}.png`, root)) });
@@ -59,6 +60,16 @@ it.each([1200, 390, 320])('UAT-01：local/cloudの保存後編集継続・カー
       expect(await open.locator('.card-preview').count()).toBe(1); expect(await open.locator('time').textContent()).toMatch(/^更新：/);
       expect(await open.locator('time').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(12);
       const before = await page.evaluate('fixture.rpcNames.length');
+      // pointer-downだけを観察し、upはカード外へ逃がして遷移させない。
+      const hit = (await open.boundingBox())!;
+      await page.mouse.move(hit.x + 8, hit.y + 8); await page.mouse.down();
+      expect(await open.evaluate(node => ({ focused: document.activeElement === node, visible: node.matches(':focus-visible'), outline: getComputedStyle(node).outlineStyle })))
+        .toEqual({ focused: true, visible: false, outline: 'none' });
+      await page.mouse.move(0, 0); await page.mouse.up();
+      await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
+      expect(await open.evaluate(node => ({ focused: document.activeElement === node, visible: node.matches(':focus-visible'), outline: getComputedStyle(node).outlineStyle, width: getComputedStyle(node).outlineWidth })))
+        .toEqual({ focused: true, visible: true, outline: 'solid', width: '3px' });
+      await page.locator('#page-title').click();
       await open.hover(); expect(await open.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
       await page.screenshot({ path: fileURLToPath(new URL(`.product/uat01-cards-${cloud ? 'cloud' : 'local'}-${width}.png`, root)) });
       const closedIcon = await card.locator('summary').boundingBox();

@@ -170,7 +170,9 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
       const saveNotice = element('save-status');
       if (saveNotice.dataset.notice !== state.write.kind) saveNotice.hidden = false;
       saveNotice.dataset.notice = state.write.kind;
-      saveNotice.dataset.routine = String(state.write.kind === 'idle');
+      // メモ保存の成功は保存ボタン直上で示す。削除等の成功や拒否/UNKNOWNは省略しない。
+      saveNotice.dataset.routine = String(state.write.kind === 'idle'
+        || (state.write.kind === 'succeeded' && state.write.attempt.command.kind === 'save'));
       element('read-status').dataset.routine = String(state.read.kind === 'ready' || state.read.kind === 'idle');
       element('draft-status').dataset.routine = String(!state.editor || !isDirty(state.editor));
     }

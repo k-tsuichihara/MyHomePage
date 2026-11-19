@@ -264,6 +264,8 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 .memo-product .open-card .card-meta{font-weight:400;margin:0;min-width:0}
 .memo-product .card-meta time{font-size:13px}
 .memo-product .open-card:hover{background:transparent}
+.memo-product .open-card:focus:not(:focus-visible){outline:none;box-shadow:none}
+.memo-product #save-status[data-notice=succeeded][data-routine=true]{display:none!important}
 .memo-product details[open] button{border:0;border-radius:0}
 .memo-product .memo-cards details,.memo-product #product-cloud-items details{width:32px}
 .memo-product .memo-cards details[open],.memo-product #product-cloud-items details[open]{background:transparent;box-shadow:none;border-radius:0}

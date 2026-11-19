@@ -2,9 +2,13 @@
 
 ## Q05 UAT-01：保存後編集継続・カードUX
 
+追加指摘（U01-11/12）：productの`save-status`だけ、succeededかつメモsaveコマンドのとき既存`data-routine`をtrueにし、保存ボタン上の「保存しました」と重複する上部通知を非表示にする。状態・結果分類・通知要素自体は保持し、拒否/UNKNOWN/読取失敗や削除等の通知は対象外。共通Bootstrapのbutton:focusによる黒枠は製品カードだけ`:focus:not(:focus-visible)`で抑制し、マウス操作でもblurは発行しない。既存の青い3px keyboard focus-visibleを維持する。1200/390/320pxのlocal/cloud製品試験でpointer-down時の枠なし、Tab/Shift+Tab後の青いfocus、保存成功通知の集約、既存の失敗/UNKNOWN表示を確認する。
+
+U01-11/12のAI Gate：製品layout80件＋product HTML8件＋preview5件＝関連Vitest93件、Playwright83件、typecheck、local/cloud product build、diff checkはPASS。直前`19f1a3c`の全Vitest2,005件PASSを基準に、今回の表示変更は関連回帰で確認し、全Vitestは再実行していない。実通信・Human再確認なし、UAT-01はFAILのまま。
+
 追加指摘（U01-06〜10）：通常メモカードはlocalの既存editコマンド／cloudの既存編集開始callbackへ直接接続する。ゴミ箱と編集機能未注入のcloudは詳細の読取専用を維持。primaryクラスの通常/hoverを新規・保存・編集で共有し、カードbuttonだけhover背景を透明にする。ケバブsummaryを固定幅にして操作パネルを独立配置し、外側クリックは既存layoutのclick/cleanup管理からopen属性を閉じるだけとする。通知・保存・Auth/RPCを発行しない。詳細画面の表示回帰は前後移動/復元で使う既存controller経路のfixtureから継続し、通常カード入口の製品試験は編集開始をassertする。
 
-追加指摘後の最終AI Gate：全Vitest59ファイル/2,005件、Playwright E2E83件、typecheck、local/cloud product build、diff checkはPASS。製品layout80件の中でlocal/cloud各1200/390/320pxの直接編集、カードhover背景なし、primaryの通常/hover配色、summary開閉前後の座標一致、パネル内クリック保持・外側クリック閉鎖と無追加RPC/writeを確認する。旧detail入口を前提にした製品HTMLの復元回帰は、編集を明示終了した一覧から診断を開始し、既存の編集/復元ガードを緩めていない。Human再確認・実通信は0。UAT記録はFAIL1/未実施7/SKIP2を維持する。
+U01-06〜10のAI Gate：全Vitest59ファイル/2,005件、Playwright E2E83件、typecheck、local/cloud product build、diff checkはPASS。製品layout80件の中でlocal/cloud各1200/390/320pxの直接編集、カードhover背景なし、primaryの通常/hover配色、summary開閉前後の座標一致、パネル内クリック保持・外側クリック閉鎖と無追加RPC/writeを確認する。旧detail入口を前提にした製品HTMLの復元回帰は、編集を明示終了した一覧から診断を開始し、既存の編集/復元ガードを緩めていない。Human再確認・実通信は0。UAT記録はFAIL1/未実施7/SKIP2を維持する。
 
 Humanの01-2/01-3/01-4指摘を[UAT正本](HUMAN-UAT-v1.1.0.md)にFAILとして記録。製品local controllerだけ保存後もeditへ留まり、成功・baseline/revision・読戻しの判定は維持する。cloudは従来どおりeditor継続。両方で確定savedかつ追加未保存変更がない場合だけ保存ボタン直上へ「保存しました」を表示する。保存中の追加編集・失敗・UNKNOWN等では表示しない。
 
