@@ -262,6 +262,14 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 .memo-product .card-title{grid-column:1;grid-row:1;overflow-wrap:anywhere}
 .memo-product .open-card .card-preview{display:block;min-width:0;font-size:14px;font-weight:400}
 .memo-product .open-card .card-meta{font-weight:400;margin:0;min-width:0}
+.memo-product .open-card .card-meta{display:grid;grid-template-columns:minmax(0,1fr);align-self:start;align-content:start;gap:8px}
+.memo-product .open-card .card-meta time{grid-row:1;justify-self:start}
+.memo-product .open-card .card-meta .card-tags{grid-row:2;display:flex;flex-wrap:wrap;gap:6px;white-space:normal;overflow:visible}
+.memo-product .card-title .pin-indicator{position:static;font-size:20px;line-height:1;vertical-align:middle;margin-right:6px}
+.memo-product .card-tag{display:inline-flex;align-items:center;margin-right:8px;gap:2px}
+.memo-product .card-meta .card-tag{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+.memo-product .tag-icon{font-size:14px;line-height:1}
+@media(min-width:651px){.memo-product #filters-all{padding:6px 11px;line-height:normal;min-height:0}.memo-product .tag-chip-strip{align-items:stretch}.memo-product .tag-chip-strip #filters{padding-top:0;padding-bottom:0}.memo-product #filters-all{align-self:stretch}}
 .memo-product .card-meta time{font-size:13px}
 .memo-product .open-card:hover{background:transparent}
 .memo-product .open-card:focus:not(:focus-visible){outline:none;box-shadow:none}
@@ -280,4 +288,11 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 .memo-product .open-card .card-preview{grid-column:1;grid-row:2}
 .memo-product .open-card .card-meta{grid-column:1;grid-row:3;flex-wrap:wrap}
 .memo-product .card-meta time{font-size:12px}
+}
+@media(max-width:650px){
+/* すべてと各タグを同じ折返し領域に置き、約3行を超えた分だけ縦にスクロールする。 */
+.memo-product .tag-chip-strip,.memo-product .cloud-filter-wrap .tag-chips{display:flex;flex-wrap:wrap;align-content:flex-start;gap:8px;max-height:148px;overflow-x:hidden;overflow-y:auto;white-space:normal;padding:0}
+.memo-product .tag-chip-strip #filters{display:contents}
+.memo-product .tag-chip-strip label,.memo-product .cloud-filter-wrap .tag-chips label{max-width:100%;white-space:normal;overflow-wrap:anywhere;flex-shrink:1;min-width:0;box-sizing:border-box}
+.memo-product .tag-chip-strip #filters-all{flex:0 0 auto}
 }

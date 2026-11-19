@@ -274,7 +274,7 @@ test('一覧メニューからの確認はスクロールで消えずbusy再描�
 });
 
 test('無関係なタグ追加・削除・使用件数変更で選択中タグを解除しない', async ({ page }) => {
-  await page.goto('/?scenario=slow-mutation'); const work = page.locator('#filters').getByLabel('仕事（使用 1件）', { exact: true }); await work.check();
+  await page.goto('/?scenario=slow-mutation'); const work = page.locator('#filters').getByLabel('仕事（1件）', { exact: true }); await work.check();
   await expect(page.locator('#count')).toContainText('1件'); await page.locator('#tag-manager summary').click();
   await page.getByLabel('タグ名', { exact: true }).fill('無関係なタグ'); await page.getByRole('button', { name: 'タグを保存' }).click();
   await expect(page.locator('#save-status')).toContainText('保存は成功'); await expect(work).toBeChecked();
@@ -282,14 +282,14 @@ test('無関係なタグ追加・削除・使用件数変更で選択中タグ�
   await page.getByRole('button', { name: '確認して実行' }).click(); await expect(page.locator('#filters')).not.toContainText('無関係なタグ'); await expect(work).toBeChecked();
   await page.locator('#cards summary').click(); await page.getByRole('button', { name: 'ゴミ箱へ', exact: true }).click();
   await page.getByRole('button', { name: '確認して実行' }).click();
-  await expect(page.locator('#filters').getByLabel('仕事（使用 0件）', { exact: true })).toBeChecked();
+  await expect(page.locator('#filters').getByLabel('仕事（0件）', { exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'ゴミ箱', exact: true }).click(); await expect(page.locator('#count')).toContainText('1件');
   await page.locator('#cards summary').click(); await page.getByRole('button', { name: '復元する', exact: true }).click();
   await page.getByRole('button', { name: '確認して実行' }).click(); await expect(work).toBeChecked();
 });
 
 test('選択タグ削除後の検索・並び替えでも不在タグIDを黙って解除しない', async ({ page }) => {
-  await page.goto('/'); await page.locator('#filters').getByLabel('仕事（使用 1件）', { exact: true }).check();
+  await page.goto('/'); await page.locator('#filters').getByLabel('仕事（1件）', { exact: true }).check();
   await page.locator('#tag-manager summary').click(); await page.getByLabel('管理するタグ').selectOption({ label: '仕事' });
   await page.getByRole('button', { name: 'タグを削除' }).click(); await page.getByRole('button', { name: '確認して実行' }).click();
   await expect(page.locator('#missing-tags')).toContainText('削除されています'); await expect(page.locator('#count')).toContainText('0件');
@@ -301,7 +301,7 @@ test('選択タグ削除後の検索・並び替えでも不在タグIDを黙っ
 });
 
 test('busy中にタグ選択をクリックしても表示だけが未選択へ変わらない', async ({ page }) => {
-  await page.goto('/?scenario=slow-mutation'); const work = page.locator('#filters').getByLabel('仕事（使用 1件）', { exact: true }); await work.check();
+  await page.goto('/?scenario=slow-mutation'); const work = page.locator('#filters').getByLabel('仕事（1件）', { exact: true }); await work.check();
   await page.locator('#cards summary').click(); await page.getByRole('button', { name: 'ピン解除', exact: true }).click();
   await expect(page.locator('#save-status')).toContainText('保存処理中');
   await work.evaluate(node => { (node as HTMLInputElement).click(); });
