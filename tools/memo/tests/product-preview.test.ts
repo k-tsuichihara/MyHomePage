@@ -73,7 +73,8 @@ it('local製品previewはウィンドウ6幅の内部領域まで追従する（
       await page.locator('#memo-title').fill('横幅を確認する長いタイトル'.repeat(6));
       await page.locator('#memo-body').fill('long-unbroken-body-'.repeat(50));
       await page.locator('#editor-tags input').first().check();
-      await page.locator('#save').click(); await page.locator('#detail-view').waitFor(); await page.locator('#back').click();
+      await page.locator('#save').click(); await page.locator('#editor-view .editor-saved').waitFor();
+      expect(await page.locator('#editor-view').isVisible()).toBe(true); await page.locator('#back').click();
       const samples = [];
       for (const width of [1200, 992, 900, 800, 651, 650, 390]) {
         const frame = await page.evaluate(() => outerWidth - innerWidth);
@@ -152,7 +153,8 @@ it('同じ製品配信・専用profileで実localStorage保存と再読込がで
       await page.locator('#memo-title').fill('local UAT合成メモ');
       await page.locator('#memo-body').fill('専用profileに保存する合成本文');
       await page.locator('#save').click();
-      await page.locator('#detail-view').waitFor({ state: 'visible' });
+      await page.locator('#editor-view .editor-saved').waitFor();
+      expect(await page.locator('#editor-view').isVisible()).toBe(true);
       const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
       expect(JSON.parse(raw!).version).toBe(3);
       expect(JSON.parse(raw!).memos[0].body).toBe('専用profileに保存する合成本文');

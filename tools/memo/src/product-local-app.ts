@@ -59,7 +59,7 @@ export function createProductLocalApp(doc: Document, deps: ProductLocalDependenc
   views: ProductLocalViews = defaultViews, session?: ProductSessionPort, cloud?: ProductCloudHost) {
   const upgrade = createProductV3Upgrade(deps);
   const store = createLocalMemoStore({ storage: upgrade.storage, locks: deps.locks, now: deps.now, initialVersion: 3 });
-  const controller = createLocalMemoController({ store, createId: deps.createId });
+  const controller = createLocalMemoController({ store, createId: deps.createId, keepEditingAfterSave: true });
   const migration = createLocalMigrationController({ ...deps, storage: upgrade.storage, acceptExistingV3: true });
   let disposeMemo: ProductMemoDisposer = () => {};
   let disposed = false;

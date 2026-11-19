@@ -72,6 +72,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   const candidatesCurrent = () => !!editor && !!auth() && !!candidateContext
     && deps.auth.isCurrent(candidateContext) && deps.viewKey() === candidateView;
   const save = button('クラウドへ保存', () => { void submit(); });
+  const saved = doc.createElement('span'); saved.className = 'editor-saved'; saved.setAttribute('role', 'status');
   const resolve = button('クラウドの保存結果を照合', () => { void diagnose(); });
   const close = button('クラウド編集を閉じる', () => {
     if (!editor || working) return;
@@ -86,7 +87,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     if (editor && closeTicket && !working && confirmNavigation(editor, closeTicket, true).kind === 'allowed') editor = null;
     closeTicket = null; changed();
   }), button('クラウド編集を続ける', () => { closeTicket = null; render(); }));
-  root.append(title, body, tagField, tagNotice, voiceStart, save, resolve, close, confirmation, status); parent.append(root, voice.section);
+  root.append(title, body, tagField, tagNotice, voiceStart, save, resolve, close, confirmation, status); save.before(saved); parent.append(root, voice.section);
   if (doc.documentElement.dataset.productLayout === 'review2') {
     const titleLabel = doc.createElement('label'); titleLabel.textContent = 'タイトル（最大100文字）';
     title.before(titleLabel); titleLabel.append(title);
@@ -107,7 +108,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     const stop = voice.section.querySelector('button');
     const footer = doc.createElement('div'); footer.className = 'cloud-editor-footer editor-footer';
     if (stop) footer.append(stop);
-    save.textContent = '保存する'; footer.append(save); root.append(footer);
+    save.textContent = '保存する'; footer.append(saved, save); root.append(footer);
     bodyLabel.before(bodyHeading);
     bodyHeading.classList.add('pc-cloud-body-heading'); bodyLabel.classList.add('pc-cloud-body-field');
     root.append(voice.section);
@@ -120,6 +121,8 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     voice.section.hidden = !deps.selected();
     voice.status.hidden = !deps.selected();
     const available = editor && auth();
+    const savedHere = !!available && !working && !notice && editor!.save.kind === 'saved' && !isDirty(editor!);
+    saved.textContent = savedHere ? '保存しました' : ''; saved.hidden = !savedHere;
     if (voiceContext && (!editor || !voiceCurrent())) { voice.stop(); voiceContext = null; }
     voiceStart.disabled = !available || working || !!closeTicket;
     title.value = available ? editor!.draft.title : ''; body.value = available ? editor!.draft.body : '';

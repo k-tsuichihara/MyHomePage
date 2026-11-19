@@ -191,12 +191,14 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         row.append(open);
         if (productLayout) {
           open.className = 'open-card';
-          const preview = text('p', memo.body); preview.className = 'card-preview';
-          const meta = text('p', ''); meta.className = 'card-meta';
+          open.setAttribute('aria-label', memo.title);
+          const caption = doc.createElement('span'); caption.className = 'card-title'; caption.textContent = memo.title; open.replaceChildren(caption);
+          const preview = doc.createElement('span'); preview.textContent = memo.body; preview.className = 'card-preview';
+          const meta = doc.createElement('span'); meta.className = 'card-meta';
           const tagNames = doc.createElement('span'); tagNames.textContent = tags.map(tag => tag.name).join('・');
-          const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新 ${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; meta.append(tagNames, updated);
+          const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新：${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; meta.append(tagNames, updated);
           const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
-          const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙ 操作'; menu.append(summary);
+          const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙'; summary.setAttribute('aria-label', 'メモの操作'); menu.append(summary);
           // 既存詳細の操作入口へ委譲し、確認・要求固定・currentnessを複製しない。
           const action = (label: string, existing: string) => {
             const item = button(label, () => {
@@ -210,7 +212,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
             if (duplicate) action('複製', 'このクラウドメモを複製');
             if (changeState) action('ゴミ箱へ', 'ゴミ箱へ移動');
           } else { if (changeState) action('復元', '復元'); if (deletePermanently) action('完全削除', '完全削除'); }
-          row.append(preview, meta, pin, menu);
+          open.append(preview, meta); row.append(pin, menu);
         }
         rows.append(row);
       });

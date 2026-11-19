@@ -7,6 +7,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { prepareProductPreview } from '../scripts/product-preview';
 
 const root = new URL('../', import.meta.url);
+// 保存後は編集継続。詳細の既存回帰は明示的なカード選択で開始する。
+async function openSavedDetail(page: import('@playwright/test').Page) {
+  await page.locator('#editor-view .editor-saved').waitFor();
+  expect(await page.locator('#editor-view').isVisible()).toBe(true);
+  expect(await page.locator('#detail-view').isVisible()).toBe(false);
+  await page.locator('#back').click(); await page.locator('#cards button.open-card').first().click();
+  await page.locator('#detail-view').waitFor();
+}
 let browser: Browser, fake: string;
 beforeAll(async () => {
   execFileSync(process.execPath, ['scripts/build-product.mjs']);
@@ -25,6 +33,96 @@ async function fakeProduct(context: BrowserContext, mode: string) {
   await context.route('**/layout-fixture.js', route => route.fulfill({ contentType: 'text/javascript', body: fake }));
   const page = await context.newPage(); page.setDefaultTimeout(3000); await page.goto(url); return page;
 }
+
+it.each([1200, 390, 320])('UAT-01：local/cloudの保存後編集継続・カード主要領域とメニュー分離：幅%s', async width => {
+  for (const cloud of [false, true]) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, cloud ? 'cloud-edit-success' : 'cloud-edit-signed-out');
+      if (!cloud) {
+        await page.locator('#new').click(); await page.locator('#memo-title').fill('UAT合成メモ'); await page.locator('#memo-body').fill('本文プレビュー');
+        await page.locator('#save').click();
+        await page.locator('#editor-view .editor-saved').waitFor();
+        expect(await page.locator('#editor-view .editor-saved').textContent()).toBe('保存しました');
+        const notice = await page.locator('#editor-view .editor-saved').boundingBox(), save = await page.locator('#save').boundingBox();
+        expect(notice!.y + notice!.height).toBeLessThanOrEqual(save!.y);
+        await page.screenshot({ path: fileURLToPath(new URL(`.product/uat01-saved-local-${width}.png`, root)) });
+        expect(await page.locator('#editor-view').isVisible()).toBe(true);
+        expect(await page.locator('#detail-view').isVisible()).toBe(false);
+        await page.locator('#memo-body').fill('継続編集'); expect(await page.locator('#editor-view .editor-saved').isVisible()).toBe(false);
+        await page.locator('#save').click(); await page.locator('#editor-view .editor-saved').waitFor(); await page.locator('#back').click();
+      }
+      const rows = page.locator(cloud ? '#product-cloud-items' : '#cards'); await rows.locator('button.open-card').first().waitFor();
+      const card = rows.locator('li').first(), open = card.locator('button.open-card');
+      expect(await open.locator('.card-preview').count()).toBe(1); expect(await open.locator('time').textContent()).toMatch(/^更新：/);
+      expect(await open.locator('time').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(12);
+      const before = await page.evaluate('fixture.rpcNames.length');
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/uat01-cards-${cloud ? 'cloud' : 'local'}-${width}.png`, root)) });
+      await card.locator('summary').click();
+      expect(await card.locator('summary').textContent()).toBe('︙');
+      expect(await rows.isVisible()).toBe(true);
+      expect(await card.locator('details[open] button').first().evaluate(node => ({ border: getComputedStyle(node).borderTopWidth, radius: getComputedStyle(node).borderRadius }))).toEqual({ border: '0px', radius: '0px' });
+      const menuAction = card.locator('details[open] button').first(); await menuAction.hover();
+      expect(await menuAction.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+      await card.locator('summary').click();
+      await open.locator('.card-preview').click();
+      if (cloud) {
+        const snapshot = page.locator('#product-cloud-snapshot');
+        await snapshot.getByRole('button', { name: /一覧へ/ }).click();
+        await rows.locator('button.open-card time').first().click();
+        await snapshot.getByRole('button', { name: 'このクラウドメモを編集', exact: true }).click();
+        const editor = page.locator('#product-cloud-editor');
+        await page.getByLabel('クラウドの本文', { exact: true }).fill('保存後も編集する本文'); await editor.getByRole('button', { name: '保存する', exact: true }).click();
+        await editor.locator('.editor-saved').waitFor(); expect(await editor.locator('.editor-saved').textContent()).toBe('保存しました');
+        const notice = await editor.locator('.editor-saved').boundingBox(), save = await editor.getByRole('button', { name: '保存する', exact: true }).boundingBox();
+        expect(notice!.y + notice!.height).toBeLessThanOrEqual(save!.y);
+        expect(await editor.isVisible()).toBe(true); expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+        expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+      } else {
+        await page.locator('#detail-view').waitFor();
+        await page.locator('#next').click(); expect(await page.locator('#error').textContent()).toBe('');
+        await page.locator('#previous').click(); expect(await page.locator('#error').textContent()).toBe('');
+        await page.locator('#back').click(); await rows.locator('button.open-card time').first().click(); await page.locator('#detail-view').waitFor();
+        await page.locator('#back').click(); await rows.locator('button.open-card').first().focus(); await page.keyboard.press('Enter');
+        await page.locator('#detail-view').waitFor();
+        expect(await page.evaluate('fixture.rpcNames.length')).toBe(before);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/uat01-${cloud ? 'cloud' : 'local'}-${width}.png`, root)) });
+    } finally { await context.close(); }
+  }
+}, 20000);
+
+it.each(['unknown', 'rejected'])('UAT-01：local %sで成功表示せず保存通知とdraftを保持する', async outcome => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-signed-out');
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('失わないlocal draft');
+    await page.evaluate(outcome === 'unknown' ? 'fixture.failWrites()' : 'fixture.failReads(true)');
+    await page.locator('#save').click(); await page.locator('#save-status').filter({ hasText: outcome === 'unknown' ? '保存結果は不明' : '拒否' }).waitFor();
+    expect(await page.locator('#editor-view .editor-saved').isVisible()).toBe(false);
+    expect(await page.locator('#save-status').isVisible()).toBe(true);
+    expect(await page.locator('#memo-title').inputValue()).toBe('失わないlocal draft');
+    expect(await page.locator('#editor-view').isVisible()).toBe(true);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each(['conflict', 'rejected', 'unknown'])('UAT-01：cloud %sで保存しましたを出さず重要通知とdraftを維持する', async outcome => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, `cloud-edit-${outcome}`);
+    await page.locator('#product-cloud-items button.open-card').first().click();
+    await page.getByRole('button', { name: 'このクラウドメモを編集', exact: true }).click();
+    const editor = page.locator('#product-cloud-editor'); await page.getByLabel('クラウドの本文', { exact: true }).fill('失わないdraft');
+    await editor.getByRole('button', { name: '保存する', exact: true }).click();
+    await editor.getByRole('status').filter({ hasText: outcome === 'unknown' ? '保存できたか不明' : '保存は拒否' }).waitFor();
+    expect(await editor.locator('.editor-saved').isVisible()).toBe(false);
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('失わないdraft');
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(0);
+  } finally { await context.close(); }
+}, 15000);
 
 it.each(['local', 'cloud'])('スマホ一覧のタグ検索幅・矢印余白とPC配置を維持する：%s', async mode => {
   for (const width of [320, 390, 650, 1200]) {
@@ -97,7 +195,7 @@ it.each([[320, 568], [390, 667], [568, 320]])('縦に短いスマホでも操作
     const url = await prepareProductPreview(context, root, false), page = await context.newPage();
     await page.goto(url); await page.locator('#new').waitFor();
     await page.locator('#new').click(); await page.locator('#memo-title').fill('短い画面の合成メモ');
-    await page.locator('#save').click(); await page.locator('#detail-view').waitFor(); await page.locator('#back').click();
+    await page.locator('#save').click(); await openSavedDetail(page); await page.locator('#back').click();
     const raw = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     expect(await page.locator('#cards').evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(160);
     const main = page.locator('body > main'), box = await main.boundingBox();
@@ -143,7 +241,7 @@ it.each([1200, 800, 650, 390, 320])('local切替領域とview別スクロール�
     const url = await prepareProductPreview(context, root, false), page = await context.newPage();
     await page.goto(url); await page.locator('#new').waitFor();
     await page.locator('#new').click(); await page.locator('#memo-title').fill('合成スクロール'); await page.locator('#save').click();
-    await page.locator('#detail-view').waitFor();
+    await openSavedDetail(page);
     await page.evaluate(() => {
       const key = 'myhomepage.memo.data.v2', data = JSON.parse(localStorage.getItem(key)!);
       const seed = data.memos[0];
@@ -385,7 +483,7 @@ it.each([1200, 650, 390, 320])('編集の定型通知だけを隠しスマホは
     expect(await page.locator('#memo-body').inputValue()).toBe('保持する本文');
     expect(await page.evaluate('fixture.calls.writes')).toBe(0);
     await page.screenshot({ path: fileURLToPath(new URL(`.product/mobile-editor-notice-order-${width}.png`, root)) });
-    await page.locator('#save').click(); await page.locator('#detail-view').waitFor();
+    await page.locator('#save').click(); await openSavedDetail(page);
     await expect.poll(() => page.locator('.memo-product').getAttribute('data-page')).toBe('detail'); await order();
     await page.screenshot({ path: fileURLToPath(new URL(`.product/mobile-detail-two-actions-${width}.png`, root)) });
     await page.locator('#back').click(); await page.locator('#list-view').waitFor();
@@ -460,7 +558,7 @@ it.each(['local', 'cloud'])('全幅の編集画面で上部ナビと左右の停
       await stop.click(); expect(await page.evaluate('fixture.voiceCalls.start')).toBe(1); expect(await page.evaluate('fixture.voiceCalls.abort')).toBe(1);
       await save.scrollIntoViewIfNeeded(); await page.screenshot({ path: fileURLToPath(new URL(`.product/editor-actions-${mode}-${width}.png`, root)) });
       await save.click();
-      if (mode === 'local') { await page.locator('#detail-view').waitFor(); expect(await page.evaluate('fixture.calls.writes')).toBe(1); }
+      if (mode === 'local') { await openSavedDetail(page); expect(await page.evaluate('fixture.calls.writes')).toBe(1); }
       else { await editor.getByRole('status').filter({ hasText: '成功' }).waitFor(); expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']); expect(await page.evaluate('fixture.calls.writes')).toBe(0); }
       expect(await page.evaluate('fixture.calls.fetch')).toBe(0);
     } finally { await context.close(); }
@@ -473,7 +571,7 @@ it.each([1200, 900, 651, 390])('長いlocal本文は操作へ重ならず詳細�
     const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
     const content = Array.from({ length: 100 }, (_, index) => `長文${index}：${'折り返す本文'.repeat(10)}`).join('\n');
     await page.locator('#new').click(); await page.locator('#memo-title').fill('長文の合成メモ'); await page.locator('#memo-body').fill(content);
-    await page.locator('#save').click(); await page.locator('#detail-view').waitFor();
+    await page.locator('#save').click(); await openSavedDetail(page);
     const before = await page.evaluate('fixture.calls.writes');
     const metrics = await page.locator('#detail-view').evaluate(node => {
       const body = node.querySelector('#detail-body')!;
@@ -503,7 +601,7 @@ it.each([1200, 900, 390])('local詳細/編集のPC表示を調整しスマホ・
   try {
     const page = await fakeProduct(context, 'cloud-edit-signed-out'); await page.locator('#new').waitFor();
     await page.locator('#new').click(); await page.locator('#memo-title').fill('PC表示のメモ'); await page.locator('#memo-body').fill('本文');
-    await page.locator('#save').click(); await page.locator('#detail-view').waitFor();
+    await page.locator('#save').click(); await openSavedDetail(page);
     const before = await page.evaluate('fixture.calls.writes');
     expect(await page.getByRole('button', { name: '〈 前のメモ', exact: true }).count()).toBe(1);
     expect(await page.getByRole('button', { name: '次のメモ 〉', exact: true }).count()).toBe(1);
@@ -987,8 +1085,8 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     await page.locator('#new').click();
     await page.locator('#memo-title').fill('画面確認の合成メモ'); await page.locator('#memo-body').fill('日本語の本文を保存します。');
     await page.screenshot({ path: fileURLToPath(new URL(`.product/layout-editor-${width}.png`, root)) });
-    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
-    if (width === 1440) expect(await page.locator('#save-status').isVisible()).toBe(true);
+    await page.locator('#save').click(); await openSavedDetail(page);
+    expect(await page.locator('#editor-view .editor-saved').isVisible()).toBe(false);
     await page.getByRole('button', { name: '音声で本文へ追記', exact: true }).click();
     expect(await page.getByRole('status').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).isVisible()).toBe(true);
     expect(await page.locator('#detail-view').isVisible()).toBe(true);

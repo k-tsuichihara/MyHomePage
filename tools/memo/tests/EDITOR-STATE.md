@@ -4,6 +4,8 @@
 
 ## Q04 Step 4：cloud単件編集への再利用
 
+Q05 UAT-01の承認済み変更：製品UIでは確定保存後も編集を継続し、保存ボタン付近へ成功通知を表示する。local compositionは既存controllerの`keepEditingAfterSave`を指定し、settleSaveの成功・baseline/revision判定を変えずroute/screenだけeditにする。未指定の隔離controller契約と純粋editorの返却screenは従来どおり。cloudは既存editor表示を維持し、C04のsavedを受理した場合だけ成功通知を出す。追加編集で成功通知を消し、UNKNOWN/競合/拒否/古い応答を成功へ変換しない。
+
 以下のlocal契約と既定APIは維持する。`createEditor`の追加引数`source`をcloudにした場合も、ドラフト・dirty・要求整形/固定・ID再利用防止・saving・navigation ticketを同じ関数で扱う。local/cloud間でeditorやattemptを共有しない。`settleSave`はlocalだけを受け付ける。
 
 cloudはC04型を受ける`settleCloudSave/settleCloudResolution`で接続し、LocalSaveResultへ変換しない。C01/C04が検証した保存要求の成功だけでbaseline（送信時rawDraft）と返却されたrevisionを反映し、送信後の追加編集は保持する。成功も現在snapshotの証明ではなく、一覧を書き換えたり自動loadしたりしない。競合/拒否はC04分類からrejectedへ、不明/古い応答はattemptを保持するunknownへ接続する。独自の競合照合・revision加算は行わない。

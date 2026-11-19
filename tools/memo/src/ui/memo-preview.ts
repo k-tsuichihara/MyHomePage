@@ -29,6 +29,8 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
   const title = element<HTMLInputElement>('memo-title'), body = element<HTMLTextAreaElement>('memo-body');
   const search = element<HTMLInputElement>('search'), sort = element<HTMLSelectElement>('sort');
   const cards = element<HTMLUListElement>('cards');
+  const saved = doc.createElement('span'); saved.className = 'editor-saved'; saved.setAttribute('role', 'status');
+  element('save').before(saved);
   let composing = false, lastGeneration = -1, lastRoute = '', lastSession = '';
   let listSignature = '', filterSignature = '', editorTagSignature = '', managerSignature = '';
   let feedback = '', displayedToken: number | null = null, frame = 0, stopped = false;
@@ -46,7 +48,8 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
     const pending = controller.dispatch(command);
     render();
     const result = await pending;
-    if (result.kind === 'blocked' && result.reason !== 'writing') feedback = messages[result.reason] ?? `操作を停止しました（${result.reason}）。`;
+    if (result.kind === 'blocked' && result.reason !== 'writing'
+      && !(command.kind === 'adjacent' && result.reason === 'not-in-result')) feedback = messages[result.reason] ?? `操作を停止しました（${result.reason}）。`;
     render();
   };
   const selected = (id: string) => Array.from(element(id).querySelectorAll<HTMLInputElement>('input:checked')).map(node => node.value);
@@ -160,6 +163,9 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
 
   function render() {
     const state = controller.getState(), busy = state.write.kind === 'writing', ready = state.read.kind === 'ready';
+    const savedHere = !feedback && state.route.kind === 'edit' && state.editor?.save.kind === 'saved' && !isDirty(state.editor)
+      && state.write.kind === 'succeeded' && state.write.attempt.command.kind === 'save';
+    saved.textContent = savedHere ? '保存しました' : ''; saved.hidden = !savedHere;
     if (doc.documentElement.dataset.productLayout === 'review2') {
       const saveNotice = element('save-status');
       if (saveNotice.dataset.notice !== state.write.kind) saveNotice.hidden = false;
@@ -261,13 +267,15 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
       for (const { memo, tags } of state.list?.result.items ?? []) {
         const row = doc.createElement('li'); row.dataset.id = memo.id; row.dataset.revision = String(memo.revision);
         const open = button(`${!doc.getElementById('list-voice-slot') && memo.pinnedAt ? '📌 ' : ''}${memo.title}`, () => { void send({ kind: 'detail', id: memo.id }); }, busy || !ready);
-        open.className = 'open-card'; const preview = doc.createElement('p'); preview.textContent = Array.from(memo.body).slice(0, 80).join('');
+        open.className = 'open-card'; open.setAttribute('aria-label', open.textContent!);
+        const caption = doc.createElement('span'); caption.className = 'card-title'; caption.textContent = open.textContent; open.replaceChildren(caption);
+        const preview = doc.createElement('span'); preview.textContent = Array.from(memo.body).slice(0, 80).join('');
         preview.className = 'card-preview';
-        const metadata = doc.createElement('p'); metadata.className = 'card-meta';
+        const metadata = doc.createElement('span'); metadata.className = 'card-meta';
         const tagNames = doc.createElement('span'); tagNames.textContent = tags.map(tag => tag.name).join('・');
-        const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新 ${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; metadata.append(tagNames, updated);
+        const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新：${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; metadata.append(tagNames, updated);
         const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
-        const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙ 操作'; menu.append(summary);
+        const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙'; summary.setAttribute('aria-label', 'メモの操作'); menu.append(summary);
         const action = (name: string, value: 'pin' | 'unpin' | 'trash' | 'restore') => button(name, () => {
           void send({ kind: 'mutate', operation: { kind: 'state', id: memo.id, action: value, expectedRevision: memo.revision } });
         }, busy || !ready);
@@ -279,7 +287,7 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
             void send({ kind: 'mutate', operation: { kind: 'permanent-delete', id: memo.id, expectedRevision: memo.revision } });
           }, busy || !ready));
         }
-        row.append(open, preview, metadata, pin, menu); fragment.append(row);
+        open.append(preview, metadata); row.append(open, pin, menu); fragment.append(row);
       }
       cards.replaceChildren(fragment); cards.scrollTop = scroll;
     }
@@ -336,5 +344,5 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
   const observe = () => { if (stopped) return; if (controller.getState().generation !== lastGeneration) render(); frame = win.requestAnimationFrame(observe); };
   // 初回loadは起動接続層が完了を確認してからmountする。ここでは重複読込しない。
   render(); frame = win.requestAnimationFrame(observe);
-  return () => { stopped = true; for (const apply of pendingVoice.splice(0)) apply(); if (voice) delete voice.append; win.cancelAnimationFrame(frame); win.cancelAnimationFrame(scrollFrame); };
+  return () => { stopped = true; saved.remove(); for (const apply of pendingVoice.splice(0)) apply(); if (voice) delete voice.append; win.cancelAnimationFrame(frame); win.cancelAnimationFrame(scrollFrame); };
 }

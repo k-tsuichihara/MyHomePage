@@ -256,3 +256,22 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 .memo-product[data-page=list] .sort-control>.sort-caption{grid-row:4}
 .memo-product[data-page=list] .sort-control select{grid-row:5}
 }
+
+/* カード本文・日時も同じnative buttonの領域。右のメニューは兄弟要素のまま。 */
+.memo-product .memo-cards>li,.memo-product #product-cloud-items>li{display:block}
+.memo-product .open-card{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,380px);gap:3px 16px;min-height:70px}
+.memo-product .card-title{grid-column:1;grid-row:1;overflow-wrap:anywhere}
+.memo-product .open-card .card-preview{display:block;min-width:0;font-size:14px;font-weight:400}
+.memo-product .open-card .card-meta{font-weight:400;margin:0;min-width:0}
+.memo-product .card-meta time{font-size:13px}
+.memo-product details[open] button{border:0;border-radius:0}
+.memo-product .editor-footer:has(.editor-saved){position:relative;margin-top:30px}
+.memo-product #product-cloud-editor>.cloud-editor-footer:has(.editor-saved){margin-top:30px}
+.memo-product .editor-saved{position:absolute;right:0;bottom:100%;margin:0 0 5px;color:#236b3a;font-size:14px}
+@media(max-width:800px){
+.memo-product .memo-cards>li,.memo-product #product-cloud-items>li{padding-right:75px}
+.memo-product .open-card{grid-template-columns:minmax(0,1fr)}
+.memo-product .open-card .card-preview{grid-column:1;grid-row:2}
+.memo-product .open-card .card-meta{grid-column:1;grid-row:3;flex-wrap:wrap}
+.memo-product .card-meta time{font-size:12px}
+}

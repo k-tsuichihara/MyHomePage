@@ -1,5 +1,15 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 UAT-01：保存後編集継続・カードUX
+
+Humanの01-2/01-3/01-4指摘を[UAT正本](HUMAN-UAT-v1.1.0.md)にFAILとして記録。製品local controllerだけ保存後もeditへ留まり、成功・baseline/revision・読戻しの判定は維持する。cloudは従来どおりeditor継続。両方で確定savedかつ追加未保存変更がない場合だけ保存ボタン直上へ「保存しました」を表示する。保存中の追加編集・失敗・UNKNOWN等では表示しない。
+
+抑制通知はlocalの`adjacent`要求が`not-in-result`で停止した場合のみ。その他のblocked、保存拒否、読取失敗、UNKNOWN、不整合・離脱確認は維持。カードはタイトル・本文・タグ・日時を同じnative buttonにまとめ、ケバブdetailsは兄弟要素のまま。Enter/Spaceによる標準button操作、既存closureの対象・メニュー処理を維持する。日時の既存toLocaleString形式は変えず「更新：」と文字サイズだけ調整する。ケバブsummaryの見える「操作」を削除しaria-labelは保持、項目buttonのborder/radiusだけ除去して既存hoverを維持する。
+
+PC/390/320pxの製品fake、local controllerと既存製品/メモリ回帰で確認する。保存後detailを観察する既存試験は、編集継続をassertした後、一覧→カードの明示操作でdetailを開く。AI GateのPASSをHuman PASSへ昇格せず、UAT-01の影響箇所再確認後に02へ進む。実通信・Human再実施・実機/マイク・公開なし。
+
+AI Gate結果：全Vitest59ファイル/2,005件、Playwright E2E83件、typecheck、local/cloud product build、diff checkはPASS。保存通知用の余白を常時確保する最終CSS調整後も、製品layout80件＋preview5件（headedの幅追従/合成データの実localStorage保存を含む）を再実行して85件PASS。旧保存後detail待ちを残していたpreview2件は編集継続の確認へ更新し、期待する幅・保存・外部通信拒否のassertを維持した。UAT固有8件とcontroller3件を追加し、local/cloudの失敗・UNKNOWNで成功表示しないこと、成功後の再編集、本文/日時クリック、ケバブ分離、Enter操作、既存モーダル等を確認する。合成画像・ログはignored `.product/uat01-*`だけへ保存しGit/公開へ含めない。実Supabase/Auth/RPC/DB/SQL通信0件、Human再確認は未実施。UAT-01はFAILのまま。
+
 ## スマホ編集の定型通知・操作順（現行）
 
 650px以下の編集画面で、既存`data-routine=true`のidle/読込完了/clean通知だけをPC同様に省略する。未保存の追加編集・入力エラー・拒否・UNKNOWN・読込失敗・音声非対応等は維持し、通知領域を無条件に非表示にしない。重要な複数行メッセージを切らないよう編集時の高さ制限を外す。未保存検知/確認や保存状態の分類は変更しない。
