@@ -16,6 +16,7 @@
 - loadの応答には世代を付け、書込開始・新しいloadで古いloadを失効させる。古い応答は一覧や編集へ反映しない。ロード成功でもeditorを再生成せず、編集基準のメモ／関連と現在値を比較しchanged/missing/trashed/missing-tag/id-existsを明示する。revisionを自動更新しない。
 - 保存後の自動load中も明示loadを開始できる。readは「最後に開始したload」のloading/ready/failedであり、保存専用の読込成功を表すものではない。古い自動loadが先に終わっても最新load完了まではloadingを維持し、後から終わっても最新の成功・失敗・一覧を変更しない。保存コマンドのdoneも最新loadの成功保証ではなく、write/readを独立して確認する。
 - queryとscrollTopを保持し、編集／read-only詳細へ入る時の一覧順をdetailListへ固定して前後移動に使う。保存済みの対象不在・結果外では別メモへ暗黙に移動しない。新規は通常一覧先頭の直前から「次」で先頭へ進む。対象なしは確認前にno-op、対象ありは既存departure確認（cancelでdraft保持／承認で保存せず対象edit）を使う。
+- 通常一覧のListContextをcontroller寿命内で保持し、ゴミ箱表示中のnewもその文脈を使って通常一覧へ復帰する。音声新規も同じnewコマンドを使用する。通常queryの成功時に同じcontextを保持し、ゴミ箱中のload成功時も新dataへ既存queryMemosで再適用する。失敗時はreadyにならず、古い対象を現在値として利用しない。新しいStorageや検索・並替判定は作らない。
 
 ## 確認・追加操作
 

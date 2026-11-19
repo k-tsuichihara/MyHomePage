@@ -19,7 +19,7 @@
 }
 /* 編集画面のみ、端末幅を問わず上部ナビと停止/保存のフッターを使う。 */
 .memo-product #editor-view{display:flex;flex-direction:column}
-.memo-product #editor-view>.detail-actions{flex-wrap:nowrap;gap:8px;margin:0}
+.memo-product :is(#editor-view,#product-cloud-editor)>.detail-actions{flex-wrap:nowrap;gap:8px;margin:0}
 .memo-product #editor-next{margin-left:auto}
 .memo-product #memo-form{display:grid;padding-top:14px;flex:0 0 auto}
 .memo-product #memo-form>label{order:0}.memo-product #memo-form>fieldset{order:1}
@@ -44,7 +44,7 @@
 .memo-product #product-cloud-editor>.cloud-editor-footer{order:5;display:flex;justify-content:space-between;flex-wrap:nowrap;gap:12px;margin-top:16px}
 .memo-product #product-cloud-editor>button,.memo-product #product-cloud-editor>[role=group],.memo-product #product-cloud-editor>[role=status]{order:6}
 @media(max-width:650px){
-.memo-product #editor-view>.detail-actions button{font-size:12px;padding:8px 6px;min-width:44px;min-height:44px;white-space:nowrap}
+.memo-product :is(#editor-view,#product-cloud-editor)>.detail-actions button{font-size:12px;padding:8px 6px;min-width:44px;min-height:44px;white-space:nowrap}
 .memo-product #memo-form>.section-heading,.memo-product #product-cloud-editor>.pc-cloud-body-heading{flex-wrap:wrap;gap:8px}
 .memo-product #memo-form>.section-heading>label,.memo-product #product-cloud-editor>.pc-cloud-body-heading>span{flex-basis:100%}
 .memo-product #editor-voice-slot,.memo-product #product-cloud-editor>.pc-cloud-body-heading>.pc-voice-button{margin-left:auto;white-space:nowrap}

@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { createDuplicateEditor } from '../src/memo-duplicate';
 import { createLocalMemoController } from '../src/local-memo-controller';
-import { isDirty } from '../src/editor-state';
+import { createEditor, editDraft, isDirty } from '../src/editor-state';
 import { DUPLICATE_DRAFT_ID } from '../src/memo-duplicate';
 import { NEW_STORAGE_KEY, OLD_STORAGE_KEY } from '../src/local-migration';
 import { MEMO, OTHER, TAG, NOW, state, token, saveFixture } from './local-save-fixtures';
@@ -40,6 +40,15 @@ it('cloud複製も共通draft契約を使い、新規ID・空baseline・revision
   expect(Object.keys(editor.draft).sort()).toEqual(['body', 'tagIds', 'title']);
   expect(editor.draft).toEqual({ title: source.memo.title, body: source.memo.body, tagIds: [TAG] });
   expect(editor.unresolved).toEqual([]); expect(editor.usedRequestIds).toEqual([]); expect(isDirty(editor)).toBe(true);
+});
+it('cloud編集からの複製も同じ変換を使い、未保存値でなく確認済みbaselineだけをコピーする', () => {
+  const saved = createEditor(MEMO, 'source', { memo: state().memos[0]!, tagIds: [TAG] }, 'cloud');
+  const dirty = editDraft(saved, { title: '未保存', body: 'コピーしない', tagIds: [] });
+  const copied = createDuplicateEditor('copy', dirty, { id: token(301), source: 'cloud' });
+  expect(copied.draft).toEqual(saved.baseline); expect(copied.id).not.toBe(MEMO);
+  expect(copied.expectedRevision).toBeNull(); expect(copied.baseline).toEqual({ title: '', body: '', tagIds: [] });
+  expect(copied.unresolved).toEqual([]); expect(copied.usedRequestIds).toEqual([]);
+  expect(() => createDuplicateEditor('copy', createEditor(token(302), 'unsaved'), { id: token(303), source: 'cloud' })).toThrow();
 });
 it('保存前は書込・永続ID採番0件、明示保存だけ新規作成し元メモを保護', async () => {
   const f = fixture(); const before = f.storage.values.get(NEW_STORAGE_KEY);

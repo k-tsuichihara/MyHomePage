@@ -14,6 +14,7 @@ export function appDepartureReason(app: Pick<LocalAppState, 'unresolved' | 'writ
 
 export type NavigationTarget = { readonly kind: 'list' } | { readonly kind: 'detail'; readonly id: string }
   | { readonly kind: 'edit'; readonly id: string }
+  | { readonly kind: 'duplicate'; readonly id: string }
   | { readonly kind: 'switch-source' } | { readonly kind: 'logout' };
 export interface LeaveConfirmation { readonly state: EditorState; readonly target: NavigationTarget }
 export type NavigationDecision = { kind: 'blocked'; reason: 'saving' | 'stale-confirmation' }
@@ -22,7 +23,7 @@ export type NavigationDecision = { kind: 'blocked'; reason: 'saving' | 'stale-co
   | { kind: 'allowed'; target: NavigationTarget; retained: EditorState };
 
 function target(input: NavigationTarget): NavigationTarget {
-  if (input.kind === 'detail' || input.kind === 'edit') return { kind: input.kind, id: uuid(input.id) };
+  if (input.kind === 'detail' || input.kind === 'edit' || input.kind === 'duplicate') return { kind: input.kind, id: uuid(input.id) };
   if (input.kind === 'list' || input.kind === 'switch-source' || input.kind === 'logout') return { kind: input.kind };
   throw new Error('Invalid navigation target');
 }

@@ -244,6 +244,8 @@
 
 PR #122レビューのP2追補（Human観測とは区別）：cloud一覧復帰の失敗・古いAuth・読取中の追加入力でeditor/一覧条件を失わないよう、読取成功時だけ解放する。単件回復は同じ有効な離脱確認tokenへの承認後に元プレビュー戻りを再開し、cancelや追加編集による失効では再開しない。ゴミ箱表示中の新規/音声新規にも保持済みの通常一覧文脈を渡す。本追補のAI Gateは全Vitest59ファイル2,029件、Playwright E2E83件、typecheck・local/cloud build・diff check PASS。上記のdraft保持・cancel/古い承認拒否/承認後preview復帰・通常一覧条件の復帰を合成製品試験で確認し、実通信0・余計なwriteなし。詳細契約は[製品UI契約のP2追補](PRODUCT-UI-INTEGRATION.md)を参照。これらの異常・stale分岐をHumanへ故意に再現させる独立ケースは追加しない。R01の具体的操作とUAT-08の代表利用を維持し、Human再確認結果は未実施のままとする。
 
+追加P2追補：同じ通常一覧文脈の保持をlocalのゴミ箱からの通常/音声新規にも接続し、cloud編集画面へ独立した「複製」を継承した。複製は未保存値ではなく確認済み内容を新規未保存editorへ渡し、既存離脱確認・save/resolveを使う。AI Gateは全Vitest59ファイル2,045件、E2E83件、typecheck・local/cloud build・diff check PASS。PC/390/320pxの配置、cancel/古い確認/UNKNOWN/busyの保護、複製押下だけでは追加RPC/writeなしを確認。Humanの次の操作は下のR01と既存UAT-03の複製等を維持し、確認済み操作を再実施対象へ戻さない。実通信0・Human再確認未実施、UAT-01 FAILのまま。
+
 <a id="uat01-recheck"></a>
 
 ### 次にHumanが行う影響箇所の再確認（すべて未実施）

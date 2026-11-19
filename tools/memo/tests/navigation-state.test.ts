@@ -7,7 +7,7 @@ import { createPendingMigration } from '../src/migration';
 
 const editor = () => createEditor(MEMO, 's', { memo: state().memos[0]!, tagIds: [TAG] });
 const dirty = () => editDraft(editor(), { title: ' 未保存 ', body: '\u0000', tagIds: [TAG] });
-const targets: NavigationTarget[] = [{ kind: 'list' }, { kind: 'detail', id: OTHER }, { kind: 'edit', id: OTHER }, { kind: 'switch-source' }, { kind: 'logout' }];
+const targets: NavigationTarget[] = [{ kind: 'list' }, { kind: 'detail', id: OTHER }, { kind: 'edit', id: OTHER }, { kind: 'duplicate', id: OTHER }, { kind: 'switch-source' }, { kind: 'logout' }];
 
 describe('ドラフト保護と遷移確認', () => {
   it.each(targets)('保存拒否後のcleanでも失敗確認を要求する: %j', target => {

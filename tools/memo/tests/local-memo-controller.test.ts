@@ -41,6 +41,34 @@ function modify(f: ReturnType<typeof fixture>, update: (value: ReturnType<typeof
 }
 
 describe('ローカル機能の一連の接続', () => {
+  it('ゴミ箱から新規でも最後の通常一覧条件・位置を使い、cancel/承認で対象編集へ進む', async () => {
+    const f = fixture(); await f.dispatch({ kind: 'load' });
+    await f.dispatch({ kind: 'query', options: { text: '元の', selectedTagIds: [TAG], sort: 'created-asc' }, scrollTop: 42 });
+    const normal = f.get().list;
+    await f.dispatch({ kind: 'query', options: { view: 'trash', text: 'ゴミ箱だけの条件', sort: 'updated-desc' }, scrollTop: 81 });
+    await f.dispatch({ kind: 'new' });
+    expect(f.get().detailList).toEqual(normal); expect(f.get().list).toEqual(normal);
+    await f.dispatch({ kind: 'draft', value: { title: '未保存', body: '保持する', tagIds: [] } });
+    const draft = f.get().editor;
+    await f.dispatch({ kind: 'adjacent', direction: 'next' });
+    await f.dispatch({ kind: 'confirm', token: f.get().confirmation!.token, accepted: false });
+    expect(f.get().editor).toBe(draft);
+    await f.dispatch({ kind: 'adjacent', direction: 'next' }); await approve(f);
+    expect(f.get().route).toEqual({ kind: 'edit', id: MEMO });
+    await f.dispatch({ kind: 'list' }); expect(f.get().list).toEqual(normal); expect(f.storage.writes).toHaveLength(0);
+  });
+  it('ゴミ箱表示中の再loadでも通常一覧の条件を新dataで再評価し、古い対象を復活させない', async () => {
+    const f = fixture(); await f.dispatch({ kind: 'load' });
+    await f.dispatch({ kind: 'query', options: { text: '元の', selectedTagIds: [TAG], sort: 'created-asc' }, scrollTop: 42 });
+    await f.dispatch({ kind: 'query', options: { view: 'trash' }, scrollTop: 81 });
+    modify(f, value => { value.memos[0]!.title = '一致しなくなった'; value.memos[0]!.revision++; });
+    await f.dispatch({ kind: 'load' }); await f.dispatch({ kind: 'new' });
+    expect(f.get().detailList!.result.resultCount).toBe(0);
+    expect(f.get().detailList!.result.query).toEqual({ view: 'normal', text: '元の', selectedTagIds: [TAG], sort: 'created-asc' });
+    expect(f.get().detailList!.scrollTop).toBe(42);
+    expect(await f.dispatch({ kind: 'adjacent', direction: 'next' })).toMatchObject({ reason: 'not-in-result' });
+    expect(f.get().confirmation).toBeNull(); expect(f.storage.writes).toHaveLength(0);
+  });
   it('新規の前後対象を先に確認し、cancelでdraft保持・approveで通常編集へ移動する（書込0）', async () => {
     const f = fixture(); await f.dispatch({ kind: 'load' });
     await f.dispatch({ kind: 'query', options: { text: '元の', selectedTagIds: [TAG], sort: 'created-asc' }, scrollTop: 42 });

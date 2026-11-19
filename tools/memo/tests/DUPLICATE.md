@@ -2,11 +2,19 @@
 
 根拠はReview8統合仕様§5と正式drawio（一覧の︙、詳細の独立ボタン、タイトル・本文・タグをコピー、ピン非継承、手動保存）、PR #16の承認条件。
 
-- 保存済み通常メモだけを複製し、編集中の未保存値は複製元にしない。ゴミ箱・不在・読込不能時は拒否する。
+- 保存済み通常メモだけを複製し、編集中の未保存値は複製元にしない。localはゴミ箱・不在・読込不能時に拒否する。cloudは有効な編集contextの確認済みbaselineを利用し、一覧復帰loadの失敗だけでは複製入口を失わない。Auth/currentness失効、saving、UNKNOWN等の未解決要求は既存境界で停止する。
 - 新規編集の空のbaselineにコピー値を設定し、直後から未保存確認を適用する。入力は独立したメモリ値で、複製元を変更しない。
 - 保存前は仮の編集IDを用い、永続IDとして照合・保存しない。初回の明示保存時に新IDを採番する。保存APIやv2形式を変更せず、expectedRevision=nullで既存saveへ渡す。ID衝突時は上書きせず拒否し、自動採番し直さない。
 - 既存の離脱確認・世代失効・結果不明要求保持・同時書込抑止を再利用する。保存成功前の再読込でコピー内容を再生成しない。タグが不在になれば既存のmissing-tag契約で停止する。
 - 保存成功時のrevision=1、日時新規、pinnedAt/deletedAt/lastRequestId=nullは既存saveが設定する。複製元の更新日時・revision・内容は不変。
+
+## Q05：通常画面を編集へ統一した後のcloud複製
+
+cloud編集画面にも「前→複製→次」の独立ボタンを設け、一覧メニューと同じ`createDuplicateEditor`で新規editorを作る。pure関数は従来の検証済みMemo入力に加え、保存済みEditorStateのbaselineを受け付ける。baselineは既存の保存内容正規化を通し、dirtyな現在draft・元ID/revision/pin等のメタデータは引き継がない。別の保存済み値やrevision管理をUIへ持たない。
+
+dirty/rejectedの離脱は既存requestNavigation/confirmNavigationのduplicate対象ticketを使う。cancel・確認後編集・Auth世代失効ではコピーを始めない。有効承認後だけ新IDと新sessionを既存createIdから生成し、空baseline・expectedRevision=nullの既存cloud新規editorへ接続する。未保存の新規/複製editorにはさらに複製する入口を出さず、save/resolve中・UNKNOWNでは開始を止める。既知のnot-foundも対象にしない。保存成功後の次の複製は更新された確認済みbaselineを使う。
+
+押下だけではload/save/resolveもlocal writeも発生しない。保存は既存C04 save、UNKNOWN後は既存の明示resolveをそのまま使い、requestId生成・凍結・再送禁止は変更しない。cloudでは新規開始時点で既存createIdから保存先IDを作り、localの仮ID→初回保存時採番とは区別する。
 
 ## 検証
 

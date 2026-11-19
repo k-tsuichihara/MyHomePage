@@ -10,6 +10,7 @@ import type { createLocalMemoStore } from './local-memo-store';
 import type { LocalLoadResult } from './local-data-store';
 import type { CommandResult, ControllerCommand, ControllerAttempt, Destination, LocalAppState, Mutation, WriteCommand } from './local-app-state';
 import type { MemoData } from './types';
+import type { ListContext } from './navigation-state';
 import { createDuplicateEditor } from './memo-duplicate';
 import { parseDeleteTargets, parsePermanentDelete, sameTargets } from './local-delete-operations';
 
@@ -34,6 +35,8 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
   let readEpoch = 0, serial = 0;
   // 仮IDを保存先のIDと照合しない。最初の明示保存後は通常の新規編集と同じ契約に戻す。
   let duplicateSession: string | null = null;
+  // 表示中のゴミ箱とは別に、最後の通常一覧条件・位置を保持する。再load時は同じ条件で再評価する。
+  let normalList: ListContext | null = null;
   const patch = (value: Partial<LocalAppState>) => { app = immutable({ ...app, ...value, generation: app.generation + 1 }); };
   const busy = () => app.write.kind === 'writing';
   const ready = () => app.read.kind === 'ready' && app.data !== null;
@@ -71,6 +74,8 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     }
     const value = result.kind === 'loaded' ? validateLocalFormat(result.value).value : null;
     const data: MemoData = value ? { memos: value.memos, tags: value.tags, memoTags: value.memoTags } : { memos: [], tags: [], memoTags: [] };
+    normalList = prepared.context.result.query.view === 'normal' ? prepared.context
+      : immutable({ result: queryMemos(data, normalList?.result.query), scrollTop: normalList?.scrollTop ?? 0 });
     patch({ data, storageVersion: value?.version ?? null, list: prepared.context, usage: countTagUsage(data), read: { kind: 'ready' }, editorIssue: issue(data) });
     return done;
   }
@@ -110,8 +115,10 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     const editor = destination.kind === 'duplicate' ? createDuplicateEditor(sessionId, initial!)
       : editing ? createEditor(id!, sessionId, initial) : null;
     duplicateSession = destination.kind === 'duplicate' ? sessionId : null;
+    const newList = destination.kind === 'new' ? normalList : null;
     patch({ route: id ? { kind: editing ? 'edit' : 'detail', id: editor?.id ?? id } : { kind: 'list' },
-      detailList: destination.kind === 'list' ? null : app.route.kind === 'list' ? app.list : app.detailList,
+      list: newList ?? app.list,
+      detailList: destination.kind === 'list' ? null : newList ?? (app.route.kind === 'list' ? app.list : app.detailList),
       editor,
       editorAnchor: editing && destination.kind !== 'duplicate' && initial ? initial : null, editorIssue: null, confirmation: null, retainedEditors: retained });
     return done;
@@ -240,7 +247,9 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
     if (command.kind === 'save' || command.kind === 'mutate') return write(command, accepted);
     if (command.kind === 'query') {
       if (!ready() || !Number.isFinite(command.scrollTop) || command.scrollTop < 0) return blocked('not-ready');
-      patch({ list: { result: queryMemos(app.data, command.options), scrollTop: command.scrollTop } }); return done;
+      const list = immutable({ result: queryMemos(app.data, command.options), scrollTop: command.scrollTop });
+      if (list.result.query.view === 'normal') normalList = list;
+      patch({ list }); return done;
     }
     if (command.kind === 'adjacent') {
       if (!app.detailList || app.route.kind === 'list') return blocked('no-detail');

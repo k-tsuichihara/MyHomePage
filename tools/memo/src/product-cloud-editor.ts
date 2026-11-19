@@ -78,6 +78,8 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   save.className = 'primary';
   const saved = doc.createElement('span'); saved.className = 'editor-saved'; saved.setAttribute('role', 'status');
   const resolve = button('クラウドの保存結果を照合', () => { void diagnose(); });
+  const canDuplicate = () => !!editor && editor.expectedRevision !== null && candidatesCurrent() && !working && !pending && !closeTicket
+    && !editor.unresolved.length && !(editor.save.kind === 'rejected' && editor.save.reason === 'not-found');
   async function leave(destination: NavigationTarget) {
     if (!editor || working) return;
     if (pending) { notice = '保存結果の照合が必要です。自動再送や編集の破棄は行いません。'; render(); return; }
@@ -87,6 +89,13 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     changed();
   }
   async function finishLeave(destination: NavigationTarget) {
+    if (destination.kind === 'duplicate') {
+      if (!editor || !canDuplicate() || uuidKey(destination.id) !== uuidKey(editor.id)) return;
+      const before = editor, context = auth()!, view = deps.viewKey(), tags = candidates, list = navigation;
+      editor = null;
+      if (!open(before, () => deps.auth.isCurrent(context) && deps.selected() && deps.viewKey() === view, tags, true, list ?? undefined)) editor = before;
+      return;
+    }
     if (destination.kind === 'list') {
       const context = auth(); if (!editor || !context || !deps.returnToList) return;
       const before = editor, view = deps.viewKey(), list = navigation;
@@ -130,6 +139,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     if (id) void leave({ kind: 'edit', id });
   };
   const previous = button('前のメモ', () => adjacent('previous')), next = button('次のメモ', () => adjacent('next'));
+  const copy = button('複製', () => { if (canDuplicate() && editor) void leave({ kind: 'duplicate', id: editor.id }); });
   const close = button('クラウド編集を閉じる', () => { void leave({ kind: 'list' }); });
   const confirmation = doc.createElement('div'); confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'クラウド編集を閉じる確認');
   const proceed = button('変更を破棄して編集を閉じる', () => {
@@ -140,10 +150,10 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     closeTicket = null; changed();
   });
   confirmation.append(proceed, button('クラウド編集を続ける', () => { closeTicket = null; render(); }));
-  root.append(previous, next, title, body, tagField, tagNotice, voiceStart, save, resolve, close, confirmation, status); save.before(saved); parent.append(root, voice.section);
+  root.append(previous, copy, next, title, body, tagField, tagNotice, voiceStart, save, resolve, close, confirmation, status); save.before(saved); parent.append(root, voice.section);
   if (doc.documentElement.dataset.productLayout === 'review2') {
     const nav = doc.createElement('nav'); nav.className = 'detail-actions'; nav.setAttribute('aria-label', 'クラウド編集の前後移動');
-    setPcButtonLabel(doc, previous, '〈 前のメモ'); setPcButtonLabel(doc, next, '次のメモ 〉'); nav.append(previous, next); root.prepend(nav);
+    setPcButtonLabel(doc, previous, '〈 前のメモ'); setPcButtonLabel(doc, next, '次のメモ 〉'); nav.append(previous, copy, next); root.prepend(nav);
     const titleLabel = doc.createElement('label'); titleLabel.textContent = 'タイトル（最大100文字）';
     title.before(titleLabel); titleLabel.append(title);
     titleLabel.className = 'pc-title-field';
@@ -177,7 +187,9 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     voice.status.hidden = !deps.selected();
     const available = editor && auth();
     previous.disabled = next.disabled = !available || working || !!closeTicket;
-    proceed.textContent = closeTicket?.target.kind === 'edit' ? '変更を破棄して移動' : '変更を破棄して編集を閉じる';
+    copy.hidden = editor?.expectedRevision == null; copy.disabled = !canDuplicate();
+    proceed.textContent = closeTicket?.target.kind === 'duplicate' ? '変更を破棄して複製'
+      : closeTicket?.target.kind === 'edit' ? '変更を破棄して移動' : '変更を破棄して編集を閉じる';
     const savedHere = !!available && !working && !notice && editor!.save.kind === 'saved' && !isDirty(editor!);
     saved.textContent = savedHere ? '保存しました' : ''; saved.hidden = !savedHere;
     if (voiceContext && (!editor || !voiceCurrent())) { voice.stop(); voiceContext = null; }
@@ -274,13 +286,13 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     } catch { if (!disposed) notice = '照合結果は不明です。編集内容を保持し、自動再送しません。'; }
     finally { working = false; if (!disposed) changed(); }
   }
-  function open(initial?: { memo: Memo; tagIds: string[] }, valid: () => boolean = () => true, tags: readonly Tag[] | null = null, duplicate = false, listContext?: ListContext) {
+  function open(initial?: { memo: Memo; tagIds: string[] } | EditorState, valid: () => boolean = () => true, tags: readonly Tag[] | null = null, duplicate = false, listContext?: ListContext) {
     if (disposed || editor || working || !valid() || !deps.selected()) return false;
     try {
       const context = deps.auth.getContext(); if (!context || !deps.auth.isCurrent(context)) return false;
       editor = duplicate && initial
         ? createDuplicateEditor(deps.createId(), initial, { id: deps.createId(), source: 'cloud' })
-        : createEditor(initial?.memo.id ?? deps.createId(), deps.createId(), initial, 'cloud');
+        : createEditor(initial && 'memo' in initial ? initial.memo.id : deps.createId(), deps.createId(), initial && 'memo' in initial ? initial : undefined, 'cloud');
       navigation = listContext ?? null;
       candidates = tags === null ? null : Object.freeze([...tags]); candidateContext = context; candidateView = deps.viewKey();
       tagInputs = []; tagField.replaceChildren();
