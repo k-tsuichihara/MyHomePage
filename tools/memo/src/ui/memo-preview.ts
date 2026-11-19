@@ -266,7 +266,9 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
       listSignature = listKey; const scroll = cards.scrollTop, fragment = doc.createDocumentFragment();
       for (const { memo, tags } of state.list?.result.items ?? []) {
         const row = doc.createElement('li'); row.dataset.id = memo.id; row.dataset.revision = String(memo.revision);
-        const open = button(`${!doc.getElementById('list-voice-slot') && memo.pinnedAt ? '📌 ' : ''}${memo.title}`, () => { void send({ kind: 'detail', id: memo.id }); }, busy || !ready);
+        const open = button(`${!doc.getElementById('list-voice-slot') && memo.pinnedAt ? '📌 ' : ''}${memo.title}`, () => {
+          void send({ kind: doc.documentElement.dataset.productLayout === 'review2' && memo.deletedAt === null ? 'edit' : 'detail', id: memo.id });
+        }, busy || !ready);
         open.className = 'open-card'; open.setAttribute('aria-label', open.textContent!);
         const caption = doc.createElement('span'); caption.className = 'card-title'; caption.textContent = open.textContent; open.replaceChildren(caption);
         const preview = doc.createElement('span'); preview.textContent = Array.from(memo.body).slice(0, 80).join('');
@@ -276,14 +278,15 @@ export function mountMemoPreview(doc: Document, controller: Controller, voice?: 
         const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新：${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; metadata.append(tagNames, updated);
         const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
         const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙'; summary.setAttribute('aria-label', 'メモの操作'); menu.append(summary);
+        const options = doc.createElement('div'); options.className = 'card-menu-items'; menu.append(options);
         const action = (name: string, value: 'pin' | 'unpin' | 'trash' | 'restore') => button(name, () => {
           void send({ kind: 'mutate', operation: { kind: 'state', id: memo.id, action: value, expectedRevision: memo.revision } });
         }, busy || !ready);
-        if (memo.deletedAt === null) menu.append(action(memo.pinnedAt ? 'ピン解除' : 'ピン留め', memo.pinnedAt ? 'unpin' : 'pin'),
+        if (memo.deletedAt === null) options.append(action(memo.pinnedAt ? 'ピン解除' : 'ピン留め', memo.pinnedAt ? 'unpin' : 'pin'),
           button('複製', () => { void send({ kind: 'duplicate', id: memo.id }); }, busy || !ready), action('ゴミ箱へ', 'trash'));
         else {
-          menu.append(action('復元する', 'restore'));
-          if (state.storageVersion === 3) menu.append(button('完全削除', () => {
+          options.append(action('復元する', 'restore'));
+          if (state.storageVersion === 3) options.append(button('完全削除', () => {
             void send({ kind: 'mutate', operation: { kind: 'permanent-delete', id: memo.id, expectedRevision: memo.revision } });
           }, busy || !ready));
         }

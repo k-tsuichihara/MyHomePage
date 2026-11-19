@@ -257,6 +257,8 @@ const app = createProductLocalApp(document, {
   mode.startsWith('cloud') && mode !== 'cloud-no-host' ? { target: targets, controller: cloudPort } : undefined);
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
+  // 前後移動・復元後等でも使われる詳細viewの表示回帰専用。製品入口には公開しない。
+  openLocalDetail: () => app.controller.dispatch({ kind: 'detail', id: app.controller.getState().editor!.id }),
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
   generatedIds, changePin: (kind: 'state' | 'revision') => { changedPin = kind; }, changeTag: (kind: 'both' | 'name' | 'revision' = 'both') => { changedTag = kind; }, changeTrashSet: () => { changedTrashSet = true; },
   stateArgs: () => stateArgs, stateResult: () => stateResult, releaseState: () => releaseState?.(),

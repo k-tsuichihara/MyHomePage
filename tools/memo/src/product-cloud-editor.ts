@@ -72,6 +72,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   const candidatesCurrent = () => !!editor && !!auth() && !!candidateContext
     && deps.auth.isCurrent(candidateContext) && deps.viewKey() === candidateView;
   const save = button('クラウドへ保存', () => { void submit(); });
+  save.className = 'primary';
   const saved = doc.createElement('span'); saved.className = 'editor-saved'; saved.setAttribute('role', 'status');
   const resolve = button('クラウドの保存結果を照合', () => { void diagnose(); });
   const close = button('クラウド編集を閉じる', () => {
