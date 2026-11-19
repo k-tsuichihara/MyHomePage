@@ -41,6 +41,24 @@ function modify(f: ReturnType<typeof fixture>, update: (value: ReturnType<typeof
 }
 
 describe('ローカル機能の一連の接続', () => {
+  it.each(['saved', 'rejected', 'unknown'])('製品の保存後編集継続は%sでも成功判定・draftを変えない', async outcome => {
+    const f = fixture(state(), store => ({ ...store, save: outcome === 'saved' ? store.save : async () => outcome === 'rejected'
+      ? { kind: 'rejected', reason: 'conflict', writeOutcome: 'not-attempted' } as const
+      : { kind: 'unknown', reason: 'storage-failure', writeOutcome: 'unverified' } as const }));
+    let serial = 600;
+    const c = createLocalMemoController({ store: f.store, createId: () => token(++serial), keepEditingAfterSave: true });
+    await c.dispatch({ kind: 'load' }); await c.dispatch({ kind: 'edit', id: MEMO });
+    await c.dispatch({ kind: 'draft', value: { title: '編集継続', body: '保持する本文', tagIds: [TAG] } });
+    await c.dispatch({ kind: 'save' });
+    expect(c.getState().route).toEqual({ kind: 'edit', id: MEMO });
+    expect(c.getState().editor!.draft.body).toBe('保持する本文');
+    expect(c.getState().editor!.save.kind).toBe(outcome);
+    if (outcome === 'saved') {
+      expect(c.getState().editor!.screen).toBe('edit'); expect(isDirty(c.getState().editor!)).toBe(false);
+      await c.dispatch({ kind: 'draft', value: { title: '編集継続', body: '続けて更新', tagIds: [TAG] } });
+      await c.dispatch({ kind: 'save' }); expect(c.getState().editor!.expectedRevision).toBe(state().memos.find(row => row.id === MEMO)!.revision + 2);
+    } else expect(isDirty(c.getState().editor!)).toBe(true);
+  });
   it('読込→検索→詳細→前後→編集→保存→一覧復帰で条件・スクロールを保持', async () => {
     const f = fixture(); await f.dispatch({ kind: 'load' });
     await f.dispatch({ kind: 'query', options: { text: '', selectedTagIds: [TAG], sort: 'created-asc' }, scrollTop: 87.5 });

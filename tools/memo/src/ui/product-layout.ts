@@ -5,6 +5,10 @@ export function mountProductLayout(doc: Document) {
   doc.documentElement.dataset.productLayout = 'review2';
   const win = doc.defaultView!;
   const click = (event: Event) => {
+    // メニューの表示だけを閉じる。保存・遷移・確認操作は発行しない。
+    for (const menu of doc.querySelectorAll<HTMLDetailsElement>('.memo-product .memo-cards details[open],.memo-product #product-cloud-items details[open]')) {
+      if (!menu.contains(event.target as Node)) menu.open = false;
+    }
     const node = (event.target as Element).closest<HTMLElement>('[data-open-dialog],[data-close-dialog]');
     if (!node) return;
     const id = node.dataset.openDialog ?? node.dataset.closeDialog;

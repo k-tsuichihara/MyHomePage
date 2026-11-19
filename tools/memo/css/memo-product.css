@@ -232,11 +232,10 @@ html[data-product-layout] body:has(.memo-product)>main{overflow-y:auto}
 .memo-product .tag-controls>.tag-chip-strip,.memo-product .tag-controls>.cloud-filter-wrap{grid-row:5}
 }
 
-/* 一覧だけの最終調整。詳細・モーダルや処理結果には適用しない。 */
+/* 一覧の通知と、新規・保存・編集で共有するhover。処理結果の分類は変えない。 */
 .memo-product[data-page=list] #product-session>[data-voice-routine=true],.memo-product[data-page=list] .statuses [data-voice-routine=true]{display:none!important}
 .memo-product[data-page=list] .statuses:not(:has(p:not(:empty):not([data-routine=true]):not([data-voice-routine=true]):not([hidden]))){display:none}
-.memo-product[data-page=list] #new,.memo-product[data-page=list] .cloud-actions>button:first-child{background:#275e9d;color:#fff;border-color:#275e9d}
-.memo-product[data-page=list] #new:hover,.memo-product[data-page=list] .cloud-actions>button:first-child:hover{background:#dbeafe;color:#173f6b}
+.memo-product .primary:hover{background:#dbeafe;color:#173f6b}
 @media(max-width:650px){
 .memo-product[data-page=list] .statuses{max-height:none}
 .memo-product[data-page=list] .statuses [data-routine=true]{display:none!important}
@@ -255,4 +254,30 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 @media(max-width:380px){
 .memo-product[data-page=list] .sort-control>.sort-caption{grid-row:4}
 .memo-product[data-page=list] .sort-control select{grid-row:5}
+}
+
+/* カード本文・日時も同じnative buttonの領域。右のメニューは兄弟要素のまま。 */
+.memo-product .memo-cards>li,.memo-product #product-cloud-items>li{display:block}
+.memo-product .open-card{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,380px);gap:3px 16px;min-height:70px}
+.memo-product .card-title{grid-column:1;grid-row:1;overflow-wrap:anywhere}
+.memo-product .open-card .card-preview{display:block;min-width:0;font-size:14px;font-weight:400}
+.memo-product .open-card .card-meta{font-weight:400;margin:0;min-width:0}
+.memo-product .card-meta time{font-size:13px}
+.memo-product .open-card:hover{background:transparent}
+.memo-product .open-card:focus:not(:focus-visible){outline:none;box-shadow:none}
+.memo-product #save-status[data-notice=succeeded][data-routine=true]{display:none!important}
+.memo-product details[open] button{border:0;border-radius:0}
+.memo-product .memo-cards details,.memo-product #product-cloud-items details{width:32px}
+.memo-product .memo-cards details[open],.memo-product #product-cloud-items details[open]{background:transparent;box-shadow:none;border-radius:0}
+.memo-product .memo-cards summary,.memo-product #product-cloud-items summary{box-sizing:border-box;width:32px;height:34px;text-align:center}
+.memo-product .card-menu-items{position:absolute;right:0;top:100%;min-width:140px;background:white;box-shadow:0 6px 18px #1b2d4d30;border-radius:8px}
+.memo-product .editor-footer:has(.editor-saved){position:relative;margin-top:30px}
+.memo-product #product-cloud-editor>.cloud-editor-footer:has(.editor-saved){margin-top:30px}
+.memo-product .editor-saved{position:absolute;right:0;bottom:100%;margin:0 0 5px;color:#236b3a;font-size:14px}
+@media(max-width:800px){
+.memo-product .memo-cards>li,.memo-product #product-cloud-items>li{padding-right:75px}
+.memo-product .open-card{grid-template-columns:minmax(0,1fr)}
+.memo-product .open-card .card-preview{grid-column:1;grid-row:2}
+.memo-product .open-card .card-meta{grid-column:1;grid-row:3;flex-wrap:wrap}
+.memo-product .card-meta time{font-size:12px}
 }

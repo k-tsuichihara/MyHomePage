@@ -16,6 +16,8 @@ import { parseDeleteTargets, parsePermanentDelete, sameTargets } from './local-d
 export interface LocalControllerDependencies {
   store: Pick<ReturnType<typeof createLocalMemoStore>, 'load' | 'save' | 'changeState' | 'saveTag' | 'deleteTag' | 'deletePermanently' | 'emptyTrash'>;
   createId: () => string;
+  /** 製品UIは確定保存後も入力欄・選択範囲を保って編集を続ける。 */
+  keepEditingAfterSave?: boolean;
 }
 const done: CommandResult = { kind: 'done' };
 const blocked = (reason: string): CommandResult => ({ kind: 'blocked', reason });
@@ -198,9 +200,9 @@ export function createLocalMemoController(deps: LocalControllerDependencies) {
       let editor = settleSave(app.editor, saving.attempt.context, result);
       success = editor.save.kind === 'saved';
       // PR #10の保存試行の成功と、最新ドラフトの画面状態を分ける。
-      if (success && isDirty(editor)) editor = immutable({ ...editor, screen: 'edit' });
+      if (success && (deps.keepEditingAfterSave || isDirty(editor))) editor = immutable({ ...editor, screen: 'edit' });
       const anchor = success && result.kind === 'saved' ? structuredClone(result.value) : app.editorAnchor;
-      patch({ editor, editorAnchor: anchor, route: { kind: success && !isDirty(editor) ? 'detail' : 'edit', id: editor.id } });
+      patch({ editor, editorAnchor: anchor, route: { kind: success && !deps.keepEditingAfterSave && !isDirty(editor) ? 'detail' : 'edit', id: editor.id } });
     }
     if (success) {
       const deletedCount = result.kind === 'deleted' || result.kind === 'not-needed' ? result.count : undefined;

@@ -375,7 +375,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   }
   if (productLayout) {
     const actions = doc.createElement('div'); actions.className = 'cloud-actions';
-    newCloud.textContent = '＋ 新規作成'; newCloudVoice.textContent = '音声メモ';
+    newCloud.textContent = '＋ 新規作成'; newCloud.className = 'primary'; newCloudVoice.textContent = '音声メモ';
     const mic = doc.createElement('span'); mic.textContent = '🎙'; mic.setAttribute('aria-hidden', 'true');
     newCloudVoice.className = 'voice-memo-button'; newCloudVoice.setAttribute('aria-label', '音声メモ'); newCloudVoice.prepend(mic, ' ');
     actions.append(newCloud, newCloudVoice); root.prepend(actions);

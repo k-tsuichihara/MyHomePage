@@ -4,6 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { chromium } from '@playwright/test';
 
+async function waitSavedEditor(page: import('@playwright/test').Page) {
+  await page.locator('#editor-view .editor-saved').waitFor();
+  expect(await page.locator('#editor-view').isVisible()).toBe(true);
+  expect(await page.locator('#detail-view').isVisible()).toBe(false);
+}
+
 it('製品候補は公開外枠と相対URLを保持し、旧JSを実行しない', async () => {
   const root = new URL('../', import.meta.url);
   execFileSync(process.execPath, ['scripts/build-product.mjs'], { cwd: fileURLToPath(root) });
@@ -118,16 +124,16 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await page.locator('#memo-title').fill('合成製品メモ');
     await page.locator('#memo-body').fill('合成本文');
     await page.locator('#save').click();
-    await page.locator('#detail-view').waitFor({ state: 'visible' });
-    expect(await page.locator('#detail-title').textContent()).toBe('合成製品メモ');
+    await waitSavedEditor(page);
+    expect(await page.locator('#memo-title').inputValue()).toBe('合成製品メモ');
     expect(await page.evaluate(() => (window as unknown as { __speechProbe: { calls: number } }).__speechProbe.calls)).toBe(0);
     const beforeVoice = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
-    await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    await page.locator('#editor-view').getByRole('button', { name: '音声で本文へ追記' }).click();
     await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '合成本文合成音声追記');
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeVoice);
-    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
+    await page.locator('#save').click(); await waitSavedEditor(page);
     await page.evaluate(() => { (window as unknown as { __speechProbe: { defer: boolean } }).__speechProbe.defer = true; });
-    await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    await page.locator('#editor-view').getByRole('button', { name: '音声で本文へ追記' }).click();
     const editorBody = page.locator('#memo-body');
     await editorBody.fill('手入力'); await editorBody.focus();
     await editorBody.evaluate(node => {
@@ -141,9 +147,9 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await page.waitForFunction(() => (document.getElementById('memo-body') as HTMLTextAreaElement).value === '手入力変換中合成音声追記');
     expect(await editorBody.evaluate(node => (node as HTMLTextAreaElement).selectionStart)).toBe(2);
     await editorBody.press('End'); await editorBody.pressSequentially('さらに入力');
-    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
-    expect(await page.locator('#detail-body').textContent()).toBe('手入力変換中合成音声追記さらに入力');
-    await page.locator('#detail-view').getByRole('button', { name: '音声で本文へ追記' }).click();
+    await page.locator('#save').click(); await waitSavedEditor(page);
+    expect(await page.locator('#memo-body').inputValue()).toBe('手入力変換中合成音声追記さらに入力');
+    await page.locator('#editor-view').getByRole('button', { name: '音声で本文へ追記' }).click();
     await page.locator('#editor-view').waitFor({ state: 'visible' });
     await editorBody.focus();
     await editorBody.dispatchEvent('compositionstart');
@@ -152,8 +158,10 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     await page.getByRole('button', { name: '音声入力を停止', exact: true }).click();
     await editorBody.dispatchEvent('compositionend');
     expect(await editorBody.inputValue()).toBe(beforeStoppedVoice);
-    await page.locator('#save').click(); await page.locator('#detail-view').waitFor({ state: 'visible' });
-    expect(await page.locator('#detail-body').textContent()).toBe(beforeStoppedVoice);
+    await page.locator('#save').click(); await waitSavedEditor(page);
+    expect(await page.locator('#memo-body').inputValue()).toBe(beforeStoppedVoice);
+    // 復元は編集中に開始しない既存ガードを維持する。保存後、明示的に一覧へ戻る。
+    await page.locator('#back').click();
     const beforeBackup = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
     expect(JSON.parse(beforeBackup!).version).toBe(3);
     expect(JSON.parse(beforeBackup!).deletedMemoIds).toEqual([]);
@@ -166,7 +174,7 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     expect(backup.format).toBe('myhomepage.memo.local-backup');
     expect(backup.data.memos[0].title).toBe('合成製品メモ');
     expect(backup).not.toHaveProperty('migration');
-    // 保存済みeditorを保持する詳細画面からも、両復元のファイル診断を開始できる。
+    // 編集を終了した通常一覧から、両復元のファイル診断を開始できる。
     await page.getByLabel('単件回復のバックアップJSON').setInputFiles({ name: 'detail-recovery.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
     await page.getByRole('region', { name: '完全削除後の回復', exact: true }).getByRole('button', { name: /をプレビュー/ }).first().waitFor();
     await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({ name: 'detail-restore.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) });
@@ -174,7 +182,6 @@ it.each(['normal', 'initial', 'maintenance', 'v2-original', 'missing-css', 'corr
     expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(beforeBackup);
     await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true }).getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
     // 実製品compositionの同一storeで削除→読取専用プレビュー→単件回復を確認する。
-    await page.locator('#back').click();
     await page.locator('#cards summary').first().click();
     await page.getByRole('button', { name: 'ゴミ箱へ', exact: true }).click();
     await page.locator('#confirm-yes').click();

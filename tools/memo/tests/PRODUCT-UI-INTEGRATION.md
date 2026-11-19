@@ -1,5 +1,23 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 UAT-01：保存後編集継続・カードUX
+
+追加指摘（U01-11/12）：productの`save-status`だけ、succeededかつメモsaveコマンドのとき既存`data-routine`をtrueにし、保存ボタン上の「保存しました」と重複する上部通知を非表示にする。状態・結果分類・通知要素自体は保持し、拒否/UNKNOWN/読取失敗や削除等の通知は対象外。共通Bootstrapのbutton:focusによる黒枠は製品カードだけ`:focus:not(:focus-visible)`で抑制し、マウス操作でもblurは発行しない。既存の青い3px keyboard focus-visibleを維持する。1200/390/320pxのlocal/cloud製品試験でpointer-down時の枠なし、Tab/Shift+Tab後の青いfocus、保存成功通知の集約、既存の失敗/UNKNOWN表示を確認する。
+
+U01-11/12のAI Gate：製品layout80件＋product HTML8件＋preview5件＝関連Vitest93件、Playwright83件、typecheck、local/cloud product build、diff checkはPASS。直前`19f1a3c`の全Vitest2,005件PASSを基準に、今回の表示変更は関連回帰で確認し、全Vitestは再実行していない。実通信・Human再確認なし、UAT-01はFAILのまま。
+
+追加指摘（U01-06〜10）：通常メモカードはlocalの既存editコマンド／cloudの既存編集開始callbackへ直接接続する。ゴミ箱と編集機能未注入のcloudは詳細の読取専用を維持。primaryクラスの通常/hoverを新規・保存・編集で共有し、カードbuttonだけhover背景を透明にする。ケバブsummaryを固定幅にして操作パネルを独立配置し、外側クリックは既存layoutのclick/cleanup管理からopen属性を閉じるだけとする。通知・保存・Auth/RPCを発行しない。詳細画面の表示回帰は前後移動/復元で使う既存controller経路のfixtureから継続し、通常カード入口の製品試験は編集開始をassertする。
+
+U01-06〜10のAI Gate：全Vitest59ファイル/2,005件、Playwright E2E83件、typecheck、local/cloud product build、diff checkはPASS。製品layout80件の中でlocal/cloud各1200/390/320pxの直接編集、カードhover背景なし、primaryの通常/hover配色、summary開閉前後の座標一致、パネル内クリック保持・外側クリック閉鎖と無追加RPC/writeを確認する。旧detail入口を前提にした製品HTMLの復元回帰は、編集を明示終了した一覧から診断を開始し、既存の編集/復元ガードを緩めていない。Human再確認・実通信は0。UAT記録はFAIL1/未実施7/SKIP2を維持する。
+
+Humanの01-2/01-3/01-4指摘を[UAT正本](HUMAN-UAT-v1.1.0.md)にFAILとして記録。製品local controllerだけ保存後もeditへ留まり、成功・baseline/revision・読戻しの判定は維持する。cloudは従来どおりeditor継続。両方で確定savedかつ追加未保存変更がない場合だけ保存ボタン直上へ「保存しました」を表示する。保存中の追加編集・失敗・UNKNOWN等では表示しない。
+
+抑制通知はlocalの`adjacent`要求が`not-in-result`で停止した場合のみ。その他のblocked、保存拒否、読取失敗、UNKNOWN、不整合・離脱確認は維持。カードはタイトル・本文・タグ・日時を同じnative buttonにまとめ、ケバブdetailsは兄弟要素のまま。Enter/Spaceによる標準button操作、既存closureの対象・メニュー処理を維持する。日時の既存toLocaleString形式は変えず「更新：」と文字サイズだけ調整する。ケバブsummaryの見える「操作」を削除しaria-labelは保持、項目buttonのborder/radiusだけ除去して既存hoverを維持する。
+
+PC/390/320pxの製品fake、local controllerと既存製品/メモリ回帰で確認する。保存後detailを観察する既存fixture試験は、編集継続をassertした後、前後移動/復元でも使われる既存controllerのdetail経路で表示回帰を継続する。通常カード入口・実製品HTMLの試験は編集開始をassertし、復元操作前は明示的に編集を終了して一覧へ戻る。AI GateのPASSをHuman PASSへ昇格せず、UAT-01の影響箇所再確認後に02へ進む。実通信・Human再実施・実機/マイク・公開なし。
+
+初回修正時のAI Gate結果：全Vitest59ファイル/2,005件、Playwright E2E83件、typecheck、local/cloud product build、diff checkはPASS。保存通知用の余白を常時確保する最終CSS調整後も、製品layout80件＋preview5件（headedの幅追従/合成データの実localStorage保存を含む）を再実行して85件PASS。旧保存後detail待ちを残していたpreview2件は編集継続の確認へ更新し、期待する幅・保存・外部通信拒否のassertを維持した。UAT固有8件とcontroller3件を追加し、local/cloudの失敗・UNKNOWNで成功表示しないこと、成功後の再編集、本文/日時クリック、ケバブ分離、Enter操作、既存モーダル等を確認する。合成画像・ログはignored `.product/uat01-*`だけへ保存しGit/公開へ含めない。実Supabase/Auth/RPC/DB/SQL通信0件、Human再確認は未実施。UAT-01はFAILのまま。
+
 ## スマホ編集の定型通知・操作順（現行）
 
 650px以下の編集画面で、既存`data-routine=true`のidle/読込完了/clean通知だけをPC同様に省略する。未保存の追加編集・入力エラー・拒否・UNKNOWN・読込失敗・音声非対応等は維持し、通知領域を無条件に非表示にしない。重要な複数行メッセージを切らないよう編集時の高さ制限を外す。未保存検知/確認や保存状態の分類は変更しない。

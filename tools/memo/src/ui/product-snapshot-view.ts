@@ -44,6 +44,12 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     dialog.append(...nodes); dialog.addEventListener('cancel', event => { event.preventDefault(); nodes[nodes.length - 1]?.click(); });
     root.replaceChildren(dialog); openProductDialog(dialog);
   };
+  const editMemo = (id: string, token: object) => {
+    const latest = current(token), selected = latest?.memos.find(row => uuidKey(row.id) === uuidKey(id));
+    if (!edit || !latest || !selected || selected.deletedAt !== null) return;
+    const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
+    if (edit(selected, tagIds, active!.valid, latest.tags)) clear();
+  };
   const detail = (id: string, token: object) => {
     const value = current(token), memo = value?.memos.find(row => uuidKey(row.id) === uuidKey(id)); if (!value || !memo) return;
     const tags = value.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(memo.id))
@@ -65,12 +71,9 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       }
       root.prepend(nav);
     }
-    if (edit && memo.deletedAt === null) root.append(button('このクラウドメモを編集', () => {
-      const latest = current(token), selected = latest?.memos.find(row => uuidKey(row.id) === uuidKey(id)); if (!latest || !selected) return;
-      const tagIds = latest.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(selected.id)).map(row => row.tagId);
-      const valid = active!.valid;
-      if (edit(selected, tagIds, valid, latest.tags)) clear();
-    }));
+    if (edit && memo.deletedAt === null) {
+      const startEdit = button('このクラウドメモを編集', () => { if (root.contains(startEdit)) editMemo(id, token); }); startEdit.className = 'primary'; root.append(startEdit);
+    }
     const action = memo.deletedAt === null ? 'trash' : 'restore';
     const label = action === 'trash' ? 'ゴミ箱へ移動' : '復元';
     if (duplicate && memo.deletedAt === null) {
@@ -186,31 +189,36 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         // 検索結果の添字ではなく、現在snapshotのIDをclosureに結び付ける。DOMへIDを出さない。
         const open = button(memo.title, () => {
           if (!root.contains(open) || !current(token)) return;
-          rememberScroll(); detail(memo.id, token);
+          rememberScroll();
+          if (productLayout && edit && memo.deletedAt === null) editMemo(memo.id, token);
+          else detail(memo.id, token);
         });
         row.append(open);
         if (productLayout) {
           open.className = 'open-card';
-          const preview = text('p', memo.body); preview.className = 'card-preview';
-          const meta = text('p', ''); meta.className = 'card-meta';
+          open.setAttribute('aria-label', memo.title);
+          const caption = doc.createElement('span'); caption.className = 'card-title'; caption.textContent = memo.title; open.replaceChildren(caption);
+          const preview = doc.createElement('span'); preview.textContent = memo.body; preview.className = 'card-preview';
+          const meta = doc.createElement('span'); meta.className = 'card-meta';
           const tagNames = doc.createElement('span'); tagNames.textContent = tags.map(tag => tag.name).join('・');
-          const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新 ${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; meta.append(tagNames, updated);
+          const updated = doc.createElement('time'); updated.dateTime = memo.updatedAt; updated.textContent = `更新：${new Date(memo.updatedAt).toLocaleString('ja-JP')}`; meta.append(tagNames, updated);
           const pin = doc.createElement('span'); pin.className = 'pin-indicator'; pin.textContent = memo.pinnedAt ? '📌' : ''; pin.setAttribute('aria-label', memo.pinnedAt ? 'ピン留め済み' : 'ピン留めなし');
-          const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙ 操作'; menu.append(summary);
+          const menu = doc.createElement('details'), summary = doc.createElement('summary'); summary.textContent = '︙'; summary.setAttribute('aria-label', 'メモの操作'); menu.append(summary);
+          const options = doc.createElement('div'); options.className = 'card-menu-items'; menu.append(options);
           // 既存詳細の操作入口へ委譲し、確認・要求固定・currentnessを複製しない。
           const action = (label: string, existing: string) => {
             const item = button(label, () => {
               if (!root.contains(item) || !current(token)) return;
               rememberScroll(); detail(memo.id, token);
               Array.from(root.querySelectorAll('button')).find(node => (node.dataset.presentationLabel ?? node.textContent) === existing)?.click();
-            }); menu.append(item);
+            }); options.append(item);
           };
           if (memo.deletedAt === null) {
             if (changeState) action(memo.pinnedAt ? 'ピン留め解除' : 'ピン留め', memo.pinnedAt ? 'ピン留め解除' : 'ピン留め');
             if (duplicate) action('複製', 'このクラウドメモを複製');
             if (changeState) action('ゴミ箱へ', 'ゴミ箱へ移動');
           } else { if (changeState) action('復元', '復元'); if (deletePermanently) action('完全削除', '完全削除'); }
-          row.append(preview, meta, pin, menu);
+          open.append(preview, meta); row.append(pin, menu);
         }
         rows.append(row);
       });
