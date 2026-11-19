@@ -43,7 +43,7 @@ const enter = async () => {
     if ('restore' in environment) mountRestorePreview(document, environment.restore);
     if (initialEnvironment) mountInitialRestorePreview(document, initialEnvironment.initial);
     if ('recovery' in environment) mountDeletedRecoveryPreview(document, environment.recovery, () => {
-      const route = environment.controller.getState().route; return route.kind === 'detail' ? route.id : null;
+      const route = environment.controller.getState().route; return route.kind === 'edit' ? route.id : null;
     });
   }
   mountMemoPreview(document, environment.controller);

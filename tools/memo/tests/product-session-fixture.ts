@@ -26,13 +26,14 @@ let lateVoiceResult: VoiceRecognition['onresult'];
 // 合成音声試験以外もnative認識器へ到達させず、unsupportedを確実に再現する。
 Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: undefined });
 Object.defineProperty(window, 'webkitSpeechRecognition', { configurable: true, value: undefined });
-if (mode === 'cloud-voice' || (mode.startsWith('cloud-voice-') && mode !== 'cloud-voice-unsupported')) Object.defineProperty(window, 'SpeechRecognition', { value: class implements VoiceRecognition {
+if (mode === 'cloud-list-voice' || mode === 'cloud-voice' || (mode.startsWith('cloud-voice-') && mode !== 'cloud-voice-unsupported')) Object.defineProperty(window, 'SpeechRecognition', { value: class implements VoiceRecognition {
   lang = ''; continuous = false; interimResults = false;
   onresult: VoiceRecognition['onresult'] = null; onerror = null; onend = null;
   start() { voiceCalls.start++; latestVoice = this; lateVoiceResult = this.onresult; }
   abort() { voiceCalls.abort++; }
 } });
 let releaseRead: (() => void) | undefined;
+let holdNextRead = false;
 let releaseSave: (() => void) | undefined;
 let releaseResolve: (() => void) | undefined;
 let releaseState: (() => void) | undefined;
@@ -185,7 +186,9 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
       : operationMode === 'cloud-edit-deleted' || operationMode === 'cloud-edit-resolve-pending-deleted' ? { status: 'previously-applied-deleted' } : { status: 'saved', result: saved() } };
   }
   if (rpc !== 'memo_load_snapshot') throw new Error('write-not-allowed');
-  if (mode === 'cloud-pending' || mode === 'cloud-snapshot-pending') await new Promise<void>(resolve => { releaseRead = resolve; });
+  if (mode === 'cloud-pending' || mode === 'cloud-snapshot-pending' || holdNextRead) {
+    holdNextRead = false; await new Promise<void>(resolve => { releaseRead = resolve; });
+  }
   if (mode === 'cloud-failure' || snapshotMode === 'failure') throw new Error('synthetic-email@example.invalid synthetic-password raw-provider-token');
   return { provenance: mode === 'cloud-unverified' || snapshotMode === 'unverified' ? 'unverified' : 'single-rpc', status: 200,
     body: mode === 'cloud-permission' || snapshotMode === 'permission' ? null
@@ -257,9 +260,8 @@ const app = createProductLocalApp(document, {
   mode.startsWith('cloud') && mode !== 'cloud-no-host' ? { target: targets, controller: cloudPort } : undefined);
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
-  // 前後移動・復元後等でも使われる詳細viewの表示回帰専用。製品入口には公開しない。
-  openLocalDetail: () => app.controller.dispatch({ kind: 'detail', id: app.controller.getState().editor!.id }),
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
+  holdNextRead: () => { holdNextRead = true; },
   generatedIds, changePin: (kind: 'state' | 'revision') => { changedPin = kind; }, changeTag: (kind: 'both' | 'name' | 'revision' = 'both') => { changedTag = kind; }, changeTrashSet: () => { changedTrashSet = true; },
   stateArgs: () => stateArgs, stateResult: () => stateResult, releaseState: () => releaseState?.(),
   invalidateSnapshot: () => targets.setDirty(false),

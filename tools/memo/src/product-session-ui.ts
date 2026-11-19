@@ -83,17 +83,17 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   }
   let cloudEditor: ReturnType<typeof mountProductCloudEditor> | undefined;
   const snapshotView = cloud ? mountProductSnapshot(doc, root,
-    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices) =>
-      !isBusy() && !stateUncertain() && !busy && !pending && (cloudEditor?.start(memo, tags, valid, choices) ?? false) : undefined,
+    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices, context) =>
+      !isBusy() && !stateUncertain() && !busy && !pending && (cloudEditor?.start(memo, tags, valid, choices, context) ?? false) : undefined,
     cloud.controller.changeState && local.createId ? startStateChange : undefined,
     cloud.controller.deletePermanently && local.createId ? (memo, valid) => startStateChange(memo, 'delete-permanently', valid) : undefined,
     cloud.controller.emptyTrash && local.createId ? startEmptyTrash : undefined,
     cloud.controller.saveTag && local.createId ? { canStart: () => !closed && !unavailable && !busy && !pending && !isBusy()
       && !loading && !stateUncertain() && !cloudEditor?.getState() && !!cloudContext(), save: startSaveTag, feedback: stateStatus } : undefined,
     cloud.controller.deleteTag ? startDeleteTag : undefined,
-    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices) =>
+    cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices, context) =>
       !isBusy() && !stateUncertain() && !busy && !pending && !loading && !!cloudContext()
-      && (cloudEditor?.duplicate(memo, tags, valid, choices) ?? false) : undefined) : undefined;
+      && (cloudEditor?.duplicate(memo, tags, valid, choices, context) ?? false) : undefined) : undefined;
   const anchor = doc.getElementById('product-status');
   const slot = doc.getElementById('product-session-slot');
   if (slot) slot.append(root); else if (anchor) anchor.after(root); else doc.body.prepend(root);
@@ -242,13 +242,14 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const reason = appDepartureReason(decision.app);
     return reason || decision.tickets.length ? { kind: 'confirmation-required', reason: reason ?? 'unsaved' } : { kind: 'allowed' };
   };
-  const readCloud = async () => {
-    if (!cloud || closed || loading || cloud.target.current().target !== 'cloud') return;
+  const readCloud = async (listContext?: import('./navigation-state').ListContext | null, commitReturn?: () => boolean): Promise<boolean> => {
+    if (!cloud || closed || loading || cloud.target.current().target !== 'cloud') return false;
     const auth = cloudContext();
-    if (!auth) { refresh(); return; }
+    if (!auth) { refresh(); return false; }
     const selection = cloud.target.current();
     snapshotView?.clear();
-    selectionTicket = {};
+    // 一覧復帰のeditor文脈は、失敗時に引き続き使えるよう成功確定まで失効させない。
+    if (!commitReturn) selectionTicket = {};
     // 明示再読取へ進んだら前の成功案内だけを片付ける。不明要求・失敗通知は残す。
     if (stateRecord?.result?.kind === 'completed' && stateRecord.result.result.kind === 'ok') stateStatus.textContent = '';
     loading = true; cloudStatus.textContent = 'クラウド読取中です。書込は行いません。';
@@ -259,7 +260,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         if (!closed && cloud.target.current().target === 'cloud' && session.isCurrent?.(auth)) {
           cloudStatus.textContent = '停止：切替前のクラウド応答を反映しません。';
         }
-        return;
+        return false;
       }
       cloudStatus.textContent = result.kind === 'completed'
         ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ピン留め/解除・ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : cloud.controller.saveTag ? 'タグの単件作成・改名ができます。' : cloud.controller.deleteTag ? 'タグの単件削除ができます。' : '書込未接続です。'}`
@@ -268,10 +269,17 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         : result.kind === 'stale-response' ? '停止：古いクラウド応答を反映しません。'
           : '停止：クラウド読取を完了できませんでした。';
       if (result.kind === 'completed' && result.result.kind === 'ok') {
-        snapshotView?.show(result.result.value, () => !closed && cloud.target.current() === selection && !!session.isCurrent?.(auth));
+        if (commitReturn && !commitReturn()) return false;
+        if (commitReturn) selectionTicket = {};
+        // editor解放によるC05のdirty更新後の選択状態に、今回検証済みの一覧を結び付ける。
+        const displayedSelection = cloud.target.current();
+        snapshotView?.show(result.result.value, () => !closed && cloud.target.current() === displayedSelection && !!session.isCurrent?.(auth), listContext);
+        return true;
       }
+      return false;
     } catch { if (!closed && cloud.target.current() === selection) cloudStatus.textContent = 'UNKNOWN：読取結果を確認できません。自動再試行しません。'; }
     finally { loading = false; if (closed) cloud.controller.dispose(); else refresh(); }
+    return false;
   };
   const applyTarget = (result: StorageTargetDecision, intent: 'logout' | StorageTarget,
     from: ReturnType<ProductCloudHost['target']['current']>) => {
@@ -368,7 +376,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   form.addEventListener('submit', onSubmit);
   if (cloud?.controller.save && cloud.controller.resolve && session.getContext && session.isCurrent && local.createId) {
     cloudEditor = mountProductCloudEditor(doc, root, { writer: { save: cloud.controller.save, resolve: cloud.controller.resolve },
-      auth: { getContext: session.getContext, isCurrent: session.isCurrent }, createId: local.createId,
+      loader: cloud.controller.load, returnToList: readCloud, auth: { getContext: session.getContext, isCurrent: session.isCurrent }, createId: local.createId,
       selected: () => !closed && !unavailable && cloud.target.current().target === 'cloud', viewKey: () => selectionTicket, changed: refresh, now: local.now });
     newCloud.addEventListener('click', onNewCloud); root.append(newCloud);
     newCloudVoice.addEventListener('click', onNewCloudVoice); root.append(newCloudVoice);

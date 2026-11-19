@@ -63,12 +63,12 @@ export function mountProductLayout(doc: Document) {
     const app = doc.getElementById('memo-app');
     if (app?.inert) for (const dialog of app.querySelectorAll<HTMLDialogElement>('dialog[open]')) dialog.close();
     const backup = doc.getElementById('backup-dialog') as HTMLDialogElement | null;
-    const detail = doc.getElementById('detail-view');
-    // 復元成功後の通常詳細遷移は既存controllerが決める。モーダルは表示だけを追従する。
+    const editorView = doc.getElementById('editor-view');
+    // 復元成功後の通常編集遷移は既存controllerが決める。モーダルは表示だけを追従する。
     const returned = doc.querySelector<HTMLButtonElement>('#product-backup-slot button[data-return-preview]');
     let link = doc.getElementById('product-return-preview') as HTMLButtonElement | null;
-    if (returned && detail && !detail.hidden) {
-      if (!link) { backup?.close(); link = doc.createElement('button'); link.id = 'product-return-preview'; link.type = 'button'; link.textContent = 'バックアッププレビューに戻る'; detail.append(link); }
+    if (returned && editorView && !editorView.hidden) {
+      if (!link) { backup?.close(); link = doc.createElement('button'); link.id = 'product-return-preview'; link.type = 'button'; link.textContent = 'バックアッププレビューに戻る'; editorView.append(link); }
       link.onclick = () => { if (backup && returned.isConnected) { openProductDialog(backup); returned.click(); } };
     } else link?.remove();
   };

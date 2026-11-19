@@ -1,12 +1,45 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 UAT-01追加決定：通常メモを編集へ統一（PR #121後・現行）
+
+U01-13/14を[Human UAT正本](HUMAN-UAT-v1.1.0.md)へ記録。UAT-01=FAIL、PASS=0/FAIL=1/NOT STARTED=7/SKIP=2を維持し、02以降は未開始。Human再確認は今回の影響箇所だけであり、AI Gateを受入の代用にしない。
+
+| 棚卸しした入口 | 現行の遷移・残す用途 |
+| --- | --- |
+| local一覧・検索/タグ/sort結果・再度開く | 通常はedit。controller入口で旧detail要求もeditへ正規化 |
+| local保存完了 | 純粋editor/controllerともeditを維持。一時的なkeepEditingAfterSave切替を削除 |
+| local前後移動 | 既存ListContextの通常対象を先に確認し、既存departure確認後にedit。結果外/端は無通知・無書込 |
+| 新規/複製draftの前後 | 通常一覧先頭の直前を仮位置にし、次→先頭。通常新規/音声新規にはゴミ箱表示中でも通常一覧文脈を渡す。cloudはactive.normal、localもcontroller寿命中に通常ListContextを保持しload時に再評価。cancelは同じdraft、承認は保存せず対象editor |
+| 完全削除後の単件回復 | 作成確認後に通常edit。元preview戻りは既存一覧離脱を通し、確認tokenと回復state参照に継続を結び付ける。同じ有効確認の承認後だけsourceを再開し、cancel・編集等による失効・保存先変更では再開しない |
+| cloud一覧・前後 | 編集注入済み通常hostはedit。前後は凍結したListContextのIDを使い、明示移動の既存C04 loadで現在の本文/revisionを検証 |
+| cloud一覧復帰 | 明示的な編集終了時に既存load。読取が現在の成功と確定するまでeditor/一覧条件を保持し、成功時だけ既存hostへ解放を通知する。旧query/scrollだけを新snapshotへ適用し、過去データは混ぜない。失敗・古いcontextではdraftを失わず、旧一覧を復活させない |
+| cloudカード操作 | 同じ正式handlerをメニューから直接使用。detailを生成して旧ボタンをclickする中継経路を削除 |
+| cloud編集の複製 | 独立した複製ボタンから既存createDuplicateEditor→新規editor/save/resolveへ接続。確認済みbaselineだけをコピーし、dirtyは既存離脱確認、cancel/古い確認/失効Auth/UNKNOWN/busyは保護。複製にloadやwriteは不要 |
+| read-only詳細 | ゴミ箱、編集未注入のcloud読取host、backup/復元前previewは維持。通常editorへの迂回として使わない |
+
+cloudは取得開始時のeditor参照・Auth user/generation・保存先/view keyを結果反映前に再確認し、古い読取結果や読取中の追加入力を上書きしない。保存/resolve中・UNKNOWN pendingでは既存C04/navigation/C05境界で離脱を止める。保存成功後の自動loadは追加せず、利用者の移動だけが読取を開始する。local書込へのfallback、新RPC、retry、同期は追加しない。
+
+削除した旧通常詳細専用部分：cloud詳細の「編集」中継ボタン、カードメニューのdetail→疑似click、保存後detailへの切替オプション、通常detailを人工的に開くテストfixture。detailの型・local描画・前後・不可逆操作確認はゴミ箱の読取専用と隔離read-only hostで使うため残す。共通テキスト描画はバックアップ等の専用previewでも利用する。既存テストは通常メモを直接editorで検証し、旧detail経由の迂回を残さない。
+
+追加AI Gate観点：新規/保存済みの対象あり・なし、cancel/approve、一覧条件/scroll、local write0、cloudの明示loadのみ、stale Auth/user/target/editor、保存成功継続/失敗/UNKNOWN、単件回復元preview、ゴミ箱readonly、既存レイアウト/preview/backup。実通信・Human再確認・公開は行わない。
+
+AI Gate：全Vitest59ファイル2,023件、Playwright E2E83件、typecheck、local/cloud product build、diff checkはPASS。最後のread-only長文試験を実際のゴミ箱へ移し、正常一覧復帰のquery境界を明示した後、関連24件とtypecheck/buildを追加確認した。UAT表・各ケースの結果10件と相対リンク37件も整合。Windowsの制限内E2Eではassert後の終了待ちが続いたため、同一の外部通信遮断付きE2Eを制限外で再実行し、83件PASS・exit 0を確認した。実Supabase/Auth/RPC/DB/SQL通信0件、実マイク・実スマホ・Human再確認・公開は未実施。
+
+PR #122のP2追補：cloud一覧復帰の成否を既存hostが返し、取得成功/現在性とeditor参照を確認した時だけ解放する。失敗時は選択ticketも更新せず、元の編集・一覧条件で利用者の次の明示操作を待つ。単件回復は新たな離脱判定を作らず、既存controllerのconfirm結果が同じtoken・回復stateに対する承認成功の場合だけsourceを再開する。新規用tagChoicesの一覧文脈をactive.normalへ統一し、音声新規にも同じ境界を使う。UNKNOWNの自動再送・write・fallbackは追加しない。
+
+P2追補のAI Gate：全Vitest59ファイル2,029件、Playwright E2E83件、typecheck、local/cloud product build、diff check PASS。cloud一覧復帰のfailed/unverified・Auth世代変更・読取中編集でdraft/条件を保持し、次の明示操作でだけ復帰する製品試験を追加。ゴミ箱からの通常/音声新規で通常一覧の前後対象と検索/タグ/sortの復帰を確認。生成HTMLの実localStorage合成試験では、単件回復後のsource離脱cancel・確認後追加入力/旧承認の拒否・有効承認後のpreview復帰を追加し、書込が増えないことを確認した。実通信0、Human再確認未実施。
+
+追加P2追補：localの通常一覧文脈をcontroller内に保持し、ゴミ箱経由のnew/音声newも通常側の条件・位置・前後対象を使う。再load時には新dataで同じ純粋queryを再評価し、古い結果を混ぜない。cloud編集には独立した複製ボタンを戻し、既存のnavigation ticket・複製純粋関数・新規editorを使用する。複製元は確認済みbaselineであり、未保存値をコピーしない。複製のための追加load/RPC・local write・新状態機械は追加しない。PC/390/320pxでlocalと同じ上部ナビスタイルを再利用する。
+
+追加P2のAI Gate：全Vitest59ファイル2,045件、Playwright E2E83件、typecheck、local/cloud product build、diff check PASS。localの通常文脈保持/再load時の再評価をunitで、通常/音声新規を製品経路で確認。cloud編集複製は3幅、dirty cancel/古い承認、Auth失効、busy/UNKNOWN、保存後baseline、一覧復帰失敗後の追加loadなしの複製を確認した。新規ID・revision null・タグ引継ぎ・pin非継承・明示saveのみ・local write0を既存複製/新規保存の回帰と合わせて検証。実通信0、Human再確認未実施。
+
 ## Q05 UAT-01：保存後編集継続・カードUX
 
 追加指摘（U01-11/12）：productの`save-status`だけ、succeededかつメモsaveコマンドのとき既存`data-routine`をtrueにし、保存ボタン上の「保存しました」と重複する上部通知を非表示にする。状態・結果分類・通知要素自体は保持し、拒否/UNKNOWN/読取失敗や削除等の通知は対象外。共通Bootstrapのbutton:focusによる黒枠は製品カードだけ`:focus:not(:focus-visible)`で抑制し、マウス操作でもblurは発行しない。既存の青い3px keyboard focus-visibleを維持する。1200/390/320pxのlocal/cloud製品試験でpointer-down時の枠なし、Tab/Shift+Tab後の青いfocus、保存成功通知の集約、既存の失敗/UNKNOWN表示を確認する。
 
 U01-11/12のAI Gate：製品layout80件＋product HTML8件＋preview5件＝関連Vitest93件、Playwright83件、typecheck、local/cloud product build、diff checkはPASS。直前`19f1a3c`の全Vitest2,005件PASSを基準に、今回の表示変更は関連回帰で確認し、全Vitestは再実行していない。実通信・Human再確認なし、UAT-01はFAILのまま。
 
-追加指摘（U01-06〜10）：通常メモカードはlocalの既存editコマンド／cloudの既存編集開始callbackへ直接接続する。ゴミ箱と編集機能未注入のcloudは詳細の読取専用を維持。primaryクラスの通常/hoverを新規・保存・編集で共有し、カードbuttonだけhover背景を透明にする。ケバブsummaryを固定幅にして操作パネルを独立配置し、外側クリックは既存layoutのclick/cleanup管理からopen属性を閉じるだけとする。通知・保存・Auth/RPCを発行しない。詳細画面の表示回帰は前後移動/復元で使う既存controller経路のfixtureから継続し、通常カード入口の製品試験は編集開始をassertする。
+追加指摘（U01-06〜10）：通常メモカードはlocalの既存editコマンド／cloudの既存編集開始callbackへ直接接続する。ゴミ箱と編集機能未注入のcloudは詳細の読取専用を維持。primaryクラスの通常/hoverを新規・保存・編集で共有し、カードbuttonだけhover背景を透明にする。ケバブsummaryを固定幅にして操作パネルを独立配置し、外側クリックは既存layoutのclick/cleanup管理からopen属性を閉じるだけとする。通知・保存・Auth/RPCを発行しない。PR #121後の全通常入口は上記の追加決定に従いeditへ統一する。
 
 U01-06〜10のAI Gate：全Vitest59ファイル/2,005件、Playwright E2E83件、typecheck、local/cloud product build、diff checkはPASS。製品layout80件の中でlocal/cloud各1200/390/320pxの直接編集、カードhover背景なし、primaryの通常/hover配色、summary開閉前後の座標一致、パネル内クリック保持・外側クリック閉鎖と無追加RPC/writeを確認する。旧detail入口を前提にした製品HTMLの復元回帰は、編集を明示終了した一覧から診断を開始し、既存の編集/復元ガードを緩めていない。Human再確認・実通信は0。UAT記録はFAIL1/未実施7/SKIP2を維持する。
 
@@ -30,7 +63,7 @@ PC/390/320pxの製品fake、local controllerと既存製品/メモリ回帰で�
 
 ## 編集画面の操作配置（PC/スマホ共通・現行）
 
-localの既存「前のメモ→複製→次のメモ」をタイトル入力上へ戻し、次を右端に配置する。狭い幅では44px以上の操作領域を保ちつつ文字サイズ/余白を調整して一行に収める。cloud編集に前後移動機能は新設しない。local/cloudとも既存の停止buttonを実要素のまま保存と同じfooterへ移し、停止を左端・保存を右端・自然幅・12px以上の間隔で一行に置く。停止/保存のhandlerは変更せず、localのdisposeでは移動した停止buttonも解放する。cloudの保存ラベルも「保存する」へ揃える。
+localの既存「前のメモ→複製→次のメモ」をタイトル入力上へ戻し、次を右端に配置する。狭い幅では44px以上の操作領域を保ちつつ文字サイズ/余白を調整して一行に収める。cloud編集の前後移動はPR #121後の追加決定で同じ既存ListContext/navigationへ接続する。local/cloudとも既存の停止buttonを実要素のまま保存と同じfooterへ移し、停止を左端・保存を右端・自然幅・12px以上の間隔で一行に置く。停止/保存のhandlerは変更せず、localのdisposeでは移動した停止buttonも解放する。cloudの保存ラベルも「保存する」へ揃える。
 
 編集画面ではスマホにも`< 一覧へ`、14pxのタイトル余白、12pxのタグ補足、一覧と共通の赤い音声追記ボタン、文字数/離脱補足の非表示、認識サービス説明を追記と本文の間へ配置する方針を適用する。詳細画面のスマホ表示・PC詳細の下部ナビ・長文スクロール、完成済み一覧/各モーダルは変更しない。保存上限・未保存確認・voice/C04/C05/Auth/UNKNOWN等の既存契約を維持する。
 

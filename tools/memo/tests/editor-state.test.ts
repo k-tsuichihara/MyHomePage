@@ -73,7 +73,7 @@ describe('保存スナップショットと追加編集', () => {
     expect(operation.attempt.request.title).toBe('保存タイトル'); expect(operation.attempt.rawDraft.title).toBe(' 保存タイトル ');
     const result = settleSave(operation.state, operation.attempt.context, saved(operation.attempt));
     expect(isDirty(result)).toBe(false); expect(result.draft).toEqual(raw.draft);
-    expect(result.expectedRevision).toBe(4); expect(result.screen).toBe('detail');
+    expect(result.expectedRevision).toBe(4); expect(result.screen).toBe('edit');
   });
   it('新規保存の成功後はrevision=1で、無題補完をドラフトへ強制しない', () => {
     const raw = editDraft(createEditor(MEMO, 'new'), { title: ' ', body: '本文', tagIds: [] });

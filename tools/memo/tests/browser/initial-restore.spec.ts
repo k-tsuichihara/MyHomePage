@@ -43,9 +43,12 @@ test('専用確認取消・ファイル差替え・遅延中の連打を保護',
 test('通常新規利用を妨げず、最初の保存後は初期復元を拒否', async ({ page }) => {
   await page.goto('/?scenario=initial'); await page.locator('#new').click();
   await page.getByLabel('タイトル', { exact: true }).fill('通常の初回メモ'); await page.locator('#save').click();
-  await expect(page.locator('#save-status')).toContainText('保存は成功'); await upload(page);
+  await expect(page.locator('#save-status')).toContainText('保存は成功'); await page.locator('#back').click();
+  await upload(page);
   await area(page).getByRole('button', { name: '初期復元の確認へ' }).click(); await expect(area(page)).toContainText('停止');
-  await expect(area(page).getByRole('dialog')).toHaveCount(0); await expect(page.locator('#detail-title')).toHaveText('通常の初回メモ');
+  await expect(area(page).getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: '通常の初回メモ', exact: true }).click();
+  await expect(page.locator('#memo-title')).toHaveValue('通常の初回メモ');
 });
 test('不正行を含むファイルは全体拒否し、部分復元しない', async ({ page }) => {
   await page.goto('/?scenario=initial'); const value = backup(); value.data.memos[1]!.title = '';
