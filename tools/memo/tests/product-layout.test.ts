@@ -22,6 +22,91 @@ beforeAll(async () => {
 }, 30000);
 afterAll(async () => { await browser?.close(); });
 
+it.each(['dirty', 'saved', 'generation', 'expired', 'user', 'dispose', 'stale-confirm'])('UAT-05製品決定：dirty localのD05 cancel後だけcloud再開し既存離脱を使う：%s', async change => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-d05-login'); await page.locator('#new').waitFor();
+    expect(await page.getByRole('button', { name: 'クラウド利用を続ける', exact: true }).isVisible()).toBe(false);
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('保護するlocal draft');
+    await page.locator('#product-auth-open').click(); const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+    await dialog.getByLabel('メールアドレス', { exact: true }).fill('synthetic-email@example.invalid');
+    await dialog.getByLabel('パスワード', { exact: true }).fill('synthetic-password');
+    await dialog.getByRole('button', { name: 'ログイン', exact: true }).click();
+    if (change === 'stale-confirm') await page.evaluate('fixture.refreshAuth()');
+    await dialog.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+    expect(await page.evaluate('fixture.target().target')).toBe('local'); expect(await page.locator('#memo-title').inputValue()).toBe('保護するlocal draft');
+    expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+    await page.locator('#product-auth-open').click(); const resume = dialog.getByRole('button', { name: 'クラウド利用を続ける', exact: true });
+    if (change === 'stale-confirm') { expect(await resume.isVisible()).toBe(false); return; }
+    expect(await page.getByText('現在の保存先：ローカル（ログイン中）', { exact: true }).count()).toBe(1);
+    await resume.waitFor(); const old = await resume.elementHandle();
+    if (change === 'generation') { await page.evaluate('fixture.refreshAuth()'); await resume.waitFor(); }
+    if (['expired', 'user', 'dispose'].includes(change)) {
+      if (change === 'expired') await page.evaluate('fixture.expired()');
+      if (change === 'user') await page.evaluate('fixture.differentUser(); fixture.emit()');
+      if (change === 'dispose') await page.evaluate('fixture.dispose()');
+      await old!.evaluate(node => (node as HTMLButtonElement).dispatchEvent(new Event('click')));
+      expect(await resume.isVisible()).toBe(false); expect(await page.evaluate('fixture.rpcNames')).toEqual([]); return;
+    }
+    if (change === 'saved') {
+      await dialog.getByRole('button', { name: '閉じる', exact: true }).click();
+      await page.evaluate('fixture.holdWrite()'); await page.locator('#save').click(); await page.locator('#product-auth-open').click();
+      await old!.evaluate(node => (node as HTMLButtonElement).dispatchEvent(new Event('click'))); expect(await page.evaluate('fixture.rpcNames')).toEqual([]);
+      await dialog.getByRole('button', { name: '閉じる', exact: true }).click(); await page.evaluate('fixture.releaseWrite()'); await waitSavedEditor(page);
+      await page.locator('#product-auth-open').click(); await resume.click();
+    } else {
+      await resume.click(); await dialog.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+      expect(await page.locator('#memo-title').inputValue()).toBe('保護するlocal draft');
+      await page.locator('#product-auth-open').click(); await resume.click(); await dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).click();
+    }
+    await page.locator('#product-cloud-items').waitFor(); expect(await page.evaluate('fixture.target().target')).toBe('cloud');
+    expect(await page.getByText('現在の保存先：クラウド（ログイン中）', { exact: true }).count()).toBe(1);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(change === 'saved' ? 1 : 0);
+    expect(await page.evaluate('fixture.calls.fetch')).toBe(0); expect(await resume.isVisible()).toBe(false);
+    for (const name of ['ローカルを選択', 'クラウドを選択', 'セッションを復元']) expect(await page.getByRole('button', { name, exact: true }).count()).toBe(0);
+  } finally { await context.close(); }
+}, 20000);
+
+it.each([1200, 390, 320])('UAT-05：認証ラベル/操作行と正常・エラー色を既存判定から表示：幅%s', async width => {
+  for (const mode of ['cloud-edit-signed-out', 'cloud-d05-restore-blocked', 'cloud-failure']) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, mode); await page.locator('#product-auth-open:not([disabled])').waitFor();
+      await page.locator('#product-auth-open').click();
+      const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+      expect(await dialog.getByText(mode === 'cloud-edit-signed-out' ? '現在の保存先：ローカル（未ログイン）' : mode === 'cloud-d05-restore-blocked' ? '現在の保存先：ローカル（認証を確認できません）' : '現在の保存先：クラウド（ログイン中）', { exact: true }).count()).toBe(1);
+      expect(await dialog.getByLabel('メールアドレス', { exact: true }).isVisible()).toBe(true);
+      expect(await dialog.getByLabel('パスワード', { exact: true }).isVisible()).toBe(true);
+      const login = await dialog.getByRole('button', { name: 'ログイン', exact: true }).boundingBox(), logout = await dialog.getByRole('button', { name: 'ログアウト', exact: true }).boundingBox();
+      expect(login!.y).toBe(logout!.y); expect(login!.x + login!.width).toBeLessThan(logout!.x);
+      const status = page.locator(mode === 'cloud-failure' ? '#product-cloud-state' : '#product-session-state');
+      const error = mode !== 'cloud-edit-signed-out';
+      expect(await status.getAttribute('data-notice')).toBe(error ? 'error' : 'routine');
+      expect(await status.evaluate(node => getComputedStyle(node).color === 'rgb(180, 35, 24)')).toBe(error);
+      if (!error) {
+        if (width === 1200) {
+          await dialog.getByRole('button', { name: '閉じる', exact: true }).click();
+          await page.locator('#new').click(); await page.locator('#memo-title').fill('未保存の合成draft');
+          await page.locator('#product-auth-open').click();
+          await dialog.getByLabel('メールアドレス', { exact: true }).fill('synthetic-email@example.invalid');
+          await dialog.getByLabel('パスワード', { exact: true }).fill('synthetic-password');
+          await dialog.getByRole('button', { name: 'ログイン', exact: true }).click();
+          await dialog.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+          expect(await page.locator('#product-auth-feedback').textContent()).toBe('離脱をキャンセルしました。');
+          expect(await page.locator('#product-auth-feedback').getAttribute('data-notice')).toBe('routine');
+          expect(await page.locator('#product-auth-feedback').evaluate(node => getComputedStyle(node).color)).not.toBe('rgb(180, 35, 24)');
+          expect(await page.locator('#memo-title').inputValue()).toBe('未保存の合成draft');
+          await page.locator('#product-auth-open').click();
+        }
+      }
+      for (const name of ['ローカルを選択', 'クラウドを選択', 'セッションを復元']) expect(await dialog.getByRole('button', { name, exact: true }).count()).toBe(0);
+      expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    } finally { await context.close(); }
+  }
+}, 20000);
+
 it.each([320, 390, 650, 1200])('UAT-02追加：タグ折返しと縦scroll、複数タグでも日時位置を維持：幅%s', async width => {
   for (const cloud of [false, true]) {
     const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
@@ -809,10 +894,7 @@ it('cloudの明示再読取では古い成功案内だけを片付ける', async
     await page.locator('#product-cloud-items summary').first().click();
     await page.locator('#product-cloud-items details').first().getByRole('button', { name: 'ピン留め', exact: true }).click();
     await page.locator('#product-cloud-trash-state').filter({ hasText: '要求の成功を確認' }).waitFor();
-    await page.locator('#product-auth-open').click();
-    await page.getByRole('button', { name: 'ローカルを選択', exact: true }).click();
-    await page.locator('#product-auth-open').click();
-    await page.getByRole('button', { name: 'クラウドを選択', exact: true }).click();
+    await page.getByRole('button', { name: 'クラウドを再読取', exact: true }).click();
     await page.locator('#product-cloud-items').waitFor();
     expect(await page.locator('#product-cloud-trash-state').textContent()).toBe('');
     expect(await page.locator('#product-cloud-trash-state').isVisible()).toBe(false);
@@ -1381,7 +1463,7 @@ it('初期復元UNKNOWNから認証画面を閉じて回復操作へ戻れる', 
     const auth = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
     for (const method of ['button', 'escape']) {
       await page.locator('#product-auth-open').click();
-      expect(await auth.getByRole('button', { name: 'ローカルを選択', exact: true }).isDisabled()).toBe(true);
+      expect(await auth.getByRole('button', { name: 'ローカルを選択', exact: true }).count()).toBe(0);
       if (method === 'button') await auth.getByRole('button', { name: '閉じる', exact: true }).click(); else await page.keyboard.press('Escape');
       expect(await auth.isVisible()).toBe(false);
     }

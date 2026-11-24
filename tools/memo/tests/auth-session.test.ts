@@ -24,249 +24,94 @@ function fixture() {
 }
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
-describe('C03 認証状態と通信なしSDK境界', () => {
-  it('生成だけでは復元・ログイン・ログアウト・保存先アクセスをしない', () => {
-    const f = fixture(); expect(f.auth.getContext()).toBeNull();
-    expect(f.api.getSession).not.toHaveBeenCalled(); expect(f.api.signInWithPassword).not.toHaveBeenCalled();
-    expect(f.api.signOut).not.toHaveBeenCalled();
+describe('SDK標準sessionに接続する製品用adapter', () => {
+  it('生成・購読だけではSDKを呼ばない', async () => {
+    const f = fixture(); f.auth.subscribe(() => {}); await flush();
+    expect(f.api.getSession).not.toHaveBeenCalled(); expect(f.api.getUser).not.toHaveBeenCalled();
+    expect(f.api.signInWithPassword).not.toHaveBeenCalled();
   });
-  it('Authイベント購読が失敗した場合は認証を開始しない', async () => {
-    const f = fixture(); f.api.onAuthStateChange.mockImplementationOnce(() => { throw new Error('private'); });
-    const auth = createMemoAuthSession(f.api); expect(await auth.restore()).toBe('blocked');
-    expect(await auth.login('a', 'b')).toBe('blocked'); expect(auth.getContext()).toBeNull();
-    expect(f.api.getSession).not.toHaveBeenCalled();
+  it.each(['login', 'restore'] as const)('%sはSDK結果で認証し追加getUserを呼ばない', async kind => {
+    const f = fixture(); expect(await (kind === 'login' ? f.auth.login('a', 'b') : f.auth.restore())).toBe('applied');
+    expect(f.auth.getContext()).not.toBeNull(); expect(f.api.getUser).not.toHaveBeenCalled();
+    expect(f.auth.getState().userId).toBe(A);
   });
-  it('ログインは資格情報を変更せず一度だけ渡し、状態に秘密を出さない', async () => {
-    const f = fixture(); expect(await f.auth.login(' a@example.invalid ', ' synthetic password ')).toBe('applied');
-    expect(f.api.signInWithPassword).toHaveBeenCalledExactlyOnceWith({ email: ' a@example.invalid ', password: ' synthetic password ' });
-    expect(f.auth.getState().phase).toBe('authenticated'); expect(f.auth.getContext()?.userId).toBe(A);
-    expect(JSON.stringify(f.auth.getState())).not.toMatch(/synthetic|password|example|token/);
-    expect(Object.isFrozen(f.auth.getState())).toBe(true);
-  });
-  it('別controllerで同じSDK保存先のセッションを復元できる（永続APIは模擬）', async () => {
-    const f = fixture(); await f.auth.restore(); f.auth.dispose();
-    const next = createMemoAuthSession(f.api, () => 100_000); await next.restore();
-    expect(next.getState().userId).toBe(A); next.dispose();
-  });
-  it('セッションなしは未ログインで空クラウドデータと混同しない', async () => {
+  it('初期復元のnullは未ログイン、loginのnullは成功にしない', async () => {
     const f = fixture(); f.setSession(null); expect(await f.auth.restore()).toBe('applied');
-    expect(f.auth.getState().phase).toBe('signed-out'); expect(f.api.getUser).not.toHaveBeenCalled();
+    expect(f.auth.getState().phase).toBe('signed-out'); expect(await f.auth.login('a','b')).toBe('blocked');
   });
-  it.each([{}, { ...session(), expires_at: '200' }, { ...session(), access_token: '' }, session('bad-id')])('不正セッションは書込停止 %#', async raw => {
+  it.each([{}, { user: { id: 'invalid' }, access_token: 'private', expires_at: 200 }, session(A, 1)])('不正sessionや期限切れからcontextを発行しない：%#', async raw => {
     const f = fixture(); f.setSession(raw); expect(await f.auth.restore()).toBe('blocked'); expect(f.auth.getContext()).toBeNull();
   });
-  it('SDKのユーザー確認とセッションの所有者不一致を拒否', async () => {
-    const f = fixture(); f.setUser({ id: B }); await f.auth.restore(); expect(f.auth.getState().reason).toBe('invalid-session');
-  });
-  it('エラーなしでもログインにsessionがなければ成功扱いしない', async () => {
-    const f = fixture(); f.setSession(null); expect(await f.auth.login('a', 'b')).toBe('blocked');
-    expect(f.auth.getState().reason).toBe('invalid-session');
-  });
-  it('session取得エラーとgetUser確認エラーを認証済みにしない', async () => {
-    const f = fixture(); f.api.getSession.mockResolvedValueOnce({ data: { session: session() }, error: { message: 'private' } });
-    expect(await f.auth.restore()).toBe('blocked'); expect(f.api.getUser).not.toHaveBeenCalled();
-    f.api.getUser.mockResolvedValueOnce({ data: { user: { id: A } }, error: { message: 'private' } });
-    expect(await f.auth.restore()).toBe('blocked'); expect(f.auth.getContext()).toBeNull();
-  });
-  it('期限到達はcontext照合時にも停止し、同一ユーザーを再認証対象として保持', async () => {
-    const f = fixture(); await f.auth.restore(); const c = f.auth.getContext()!; f.time(200_000);
-    expect(f.auth.isCurrent(c)).toBe(false); expect(f.auth.getState().reauthenticateUserId).toBe(A);
-  });
-  it('期限切れセッション自体は復元しない', async () => {
-    const f = fixture(); f.setSession(session(A, 100)); await f.auth.restore(); expect(f.auth.getState().reason).toBe('expired');
-  });
-  it('getUser待機中の期限切れも拒否', async () => {
-    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getUser']>>>();
-    f.api.getUser.mockReturnValueOnce(d.promise); const operation = f.auth.restore(); await flush(); f.time(200_000);
-    d.resolve({ data: { user: { id: A } }, error: null }); expect(await operation).toBe('blocked');
-  });
-  it('失効後の別ユーザーログインを拒否し、同一ユーザー再認証だけ許可', async () => {
+  it('期限切れと再認証では同一ownerだけを許可する', async () => {
     const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
-    f.time(201_000); f.auth.getState(); f.setSession(session(B, 300)); f.setUser({ id: B });
-    expect(await f.auth.login('b@example.invalid', 'synthetic')).toBe('blocked');
-    expect(f.auth.getState().reason).toBe('different-user'); expect(f.auth.getState().reauthenticateUserId).toBe(A);
-    f.setSession(session(A, 300)); f.setUser({ id: A.toUpperCase() });
-    expect(await f.auth.login('a@example.invalid', 'synthetic')).toBe('applied'); expect(f.auth.isCurrent(old)).toBe(false);
+    f.time(200_000); expect(f.auth.isCurrent(old)).toBe(false); expect(f.auth.getState().reauthenticateUserId).toBe(A);
+    f.setSession(session(B,400)); expect(await f.auth.login('a','b')).toBe('blocked');
+    expect(f.auth.getState().reason).toBe('different-user');
+    f.setSession(session(A,400)); expect(await f.auth.login('a','b')).toBe('applied'); expect(f.auth.isCurrent(old)).toBe(false);
   });
-  it('別インスタンス・偽造・変更前世代のcontextを受理しない', async () => {
-    const f = fixture(), g = fixture(); await f.auth.restore(); await g.auth.restore();
-    const c = f.auth.getContext()!; expect(f.auth.isCurrent({ ...c })).toBe(false); expect(g.auth.isCurrent(c)).toBe(false);
-    await f.auth.restore(); expect(f.auth.isCurrent(c)).toBe(false);
-  });
-  it('現在の認証失効通知だけを受け付け、再認証後へ古い要求を流用しない', async () => {
+  it('SDK通知を標準の状態更新として受け取り、再確認やtoken一致条件を追加しない', async () => {
     const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
-    expect(f.auth.requireReauthentication(old)).toBe(true); expect(f.auth.getContext()).toBeNull();
-    await f.auth.login('a', 'b'); expect(f.auth.requireReauthentication(old)).toBe(false);
-    expect(f.auth.getState().phase).toBe('authenticated');
-    expect(f.auth.requireReauthentication({ ...f.auth.getContext()! })).toBe(false);
-  });
-  it('二重操作を抑止しログアウト開始直後から旧contextを使わせない', async () => {
-    const f = fixture(); await f.auth.restore(); const c = f.auth.getContext()!;
-    const d = deferred<{ error: unknown }>(); f.api.signOut.mockReturnValueOnce(d.promise);
-    const first = f.auth.logout(); expect(f.auth.isCurrent(c)).toBe(false);
-    expect(await f.auth.logout()).toBe('busy'); expect(await f.auth.login('a', 'b')).toBe('busy');
-    d.resolve({ error: null }); expect(await first).toBe('applied');
-    expect(f.api.signOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' });
-    expect(f.auth.getState().phase).toBe('signed-out');
-  });
-  it('通常ログアウトはlocalを明示し、global・others・既定引数へ切り替えない', async () => {
-    const f = fixture(); await f.auth.restore(); await f.auth.logout();
-    expect(f.api.signOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' });
-    expect(f.auth.getContext()).toBeNull();
-  });
-  it('SDKログインイベントと応答が重なっても復元確認後だけcontextを発行', async () => {
-    const f = fixture(); f.api.signInWithPassword.mockImplementationOnce(async () => { f.emit('SIGNED_IN'); return { data: { session: session() }, error: null }; });
-    await f.auth.login('a', 'b'); await flush(); expect(f.auth.getState().phase).toBe('authenticated');
-    expect(f.api.signInWithPassword).toHaveBeenCalledTimes(1);
-  });
-  it('ログアウトイベントと完了が重なっても再認証を勝手に実行しない', async () => {
-    const f = fixture(); await f.auth.restore(); f.api.signOut.mockImplementationOnce(async () => {
-      f.setSession(null); f.emit('SIGNED_OUT'); return { error: null };
-    });
-    await f.auth.logout(); await flush(); expect(f.auth.getState().phase).toBe('signed-out');
-    expect(f.api.signInWithPassword).not.toHaveBeenCalled();
-  });
-  it('イベントは即時に旧contextを無効化し、SDK再呼出しはcallbackの後', async () => {
-    const f = fixture(); await f.auth.restore(); const c = f.auth.getContext()!, calls = f.api.getSession.mock.calls.length;
-    f.emit(); expect(f.auth.isCurrent(c)).toBe(false); expect(f.api.getSession).toHaveBeenCalledTimes(calls);
-    await flush(); expect(f.auth.getState().phase).toBe('authenticated');
-  });
-  it('イベント連続通知の古い予約は実行しない', async () => {
-    const f = fixture(); f.emit(); f.emit(); await flush(); expect(f.api.getSession).toHaveBeenCalledTimes(1);
-  });
-  it('再確認中にイベントが続いてもSDK確認を無限再実行しない', async () => {
-    const f = fixture(); f.api.getSession.mockImplementation(async () => {
-      f.emit('USER_UPDATED'); return { data: { session: session() }, error: null };
-    });
-    f.emit(); await flush(); expect(f.api.getSession).toHaveBeenCalledTimes(1);
-    expect(f.auth.getContext()).toBeNull();
-  });
-  it('ログイン成功直後の同一イベント重複は新しい確認済みcontextを利用できる', async () => {
-    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
-    f.api.signInWithPassword.mockImplementationOnce(async () => {
-      f.emit('SIGNED_IN'); f.emit('SIGNED_IN'); return { data: { session: session() }, error: null };
-    });
-    expect(await f.auth.login('a', 'b')).toBe('applied'); await flush();
+    const reads = f.api.getSession.mock.calls.length;
+    f.setSession({ ...session(A,400), access_token: 'changed-token' }); f.emit();
     expect(f.auth.getState().phase).toBe('authenticated'); expect(f.auth.isCurrent(old)).toBe(false);
-    expect(f.auth.isCurrent(f.auth.getContext()!)).toBe(true); expect(f.api.getSession).toHaveBeenCalledTimes(1);
-    expect(f.api.signInWithPassword).toHaveBeenCalledTimes(1);
+    expect(f.api.getSession).toHaveBeenCalledTimes(reads); expect(f.api.getUser).not.toHaveBeenCalled();
+    f.setSession(session(B,400)); f.emit(); expect(f.auth.getContext()).toBeNull(); expect(f.auth.getState().reauthenticateUserId).toBe(A);
   });
-  it('イベント再確認中の同一トークン更新イベントも確認成功をblockedへ戻さない', async () => {
-    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
-    f.api.getSession.mockImplementationOnce(async () => {
-      f.emit('TOKEN_REFRESHED'); f.emit('TOKEN_REFRESHED'); return { data: { session: session() }, error: null };
-    });
-    f.emit('TOKEN_REFRESHED'); expect(f.auth.getContext()).toBeNull(); await flush();
-    expect(f.auth.getState().phase).toBe('authenticated'); expect(f.auth.isCurrent(old)).toBe(false);
-    expect(f.api.getSession).toHaveBeenCalledTimes(2);
-  });
-  it.each(['getSession', 'getUser'] as const)('ログイン後の再確認%s失敗は停止し、明示restoreでのみ今回の再確認をやり直す', async method => {
-    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
-    f.api.signInWithPassword.mockImplementationOnce(async () => {
-      f.setSession({ ...session(), access_token: 'synthetic-new-token' }); f.emit('TOKEN_REFRESHED');
-      return { data: { session: session() }, error: null };
-    });
-    f.api[method].mockRejectedValueOnce(new Error('synthetic-private'));
-    // getUserは先にログイン応答の確認で使うため、失敗はその次の読取確認に限定する。
-    if (method === 'getUser') f.api.getUser.mockReset().mockResolvedValueOnce({ data: { user: { id: A } }, error: null })
-      .mockRejectedValueOnce(new Error('synthetic-private')).mockResolvedValue({ data: { user: { id: A } }, error: null });
-    await f.auth.login('a', 'b'); await flush();
-    expect(f.auth.getState().phase).toBe('blocked'); expect(f.auth.getState().reauthenticateUserId).toBe(A);
-    expect(f.auth.getContext()).toBeNull(); expect(f.auth.isCurrent(old)).toBe(false);
-    const calls = f.api.getSession.mock.calls.length; await flush(); expect(f.api.getSession).toHaveBeenCalledTimes(calls);
-    expect(await f.auth.restore()).toBe('applied'); expect(f.auth.getState().phase).toBe('authenticated');
-    expect(f.auth.isCurrent(old)).toBe(false); expect(f.api.signInWithPassword).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(f.auth.getState())).not.toContain('synthetic');
-  });
-  it.each([
-    { ...session(), access_token: 'synthetic-other-token' }, session(A, 300), session(B), null,
-  ])('再確認中のトークン・期限・ユーザー・失効の相違を重複扱いしない %#', async eventSession => {
-    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
-    f.api.getSession.mockImplementationOnce(async () => {
-      f.setSession(eventSession); f.emit('TOKEN_REFRESHED'); return { data: { session: session() }, error: null };
-    });
-    f.emit(); await flush(); expect(f.auth.getContext()).toBeNull(); expect(f.auth.isCurrent(old)).toBe(false);
-    expect(f.api.getSession).toHaveBeenCalledTimes(2); expect(f.api.signInWithPassword).not.toHaveBeenCalled();
-  });
-  it('イベントの生sessionだけを認証根拠にせず、SDKの現在値を確認する', async () => {
+  it('SDKのsession消失はcloud owner対応を保持して操作停止する', async () => {
     const f = fixture(); await f.auth.restore(); f.setSession(null); f.emit('SIGNED_OUT');
-    await flush(); expect(f.auth.getState().phase).toBe('blocked');
-    expect(f.auth.getState().reauthenticateUserId).toBe(A); expect(f.auth.getContext()).toBeNull();
+    expect(f.auth.getState()).toMatchObject({ phase:'blocked', reason:'expired', reauthenticateUserId:A });
   });
-  it('ログイン確認中に別ユーザーへ変化しても旧応答からcontextを復活させない', async () => {
-    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getUser']>>>();
-    f.api.getUser.mockReturnValueOnce(d.promise); const p = f.auth.login('a', 'b'); await flush();
-    f.setSession(session(B)); f.setUser({ id: B }); f.emit('SIGNED_IN');
-    expect(f.auth.getContext()).toBeNull(); d.resolve({ data: { user: { id: A } }, error: null });
-    await p; expect(f.auth.getContext()).toBeNull(); await flush();
-    expect(f.auth.getState().reason).toBe('different-user'); expect(f.auth.getContext()).toBeNull();
+  it('logoutはlocal scopeで実行し、owner対応も明示解除する', async () => {
+    const f=fixture(); await f.auth.restore(); const old=f.auth.getContext()!; await f.auth.logout();
+    expect(f.api.signOut).toHaveBeenCalledExactlyOnceWith({scope:'local'}); expect(f.auth.getState()).toMatchObject({phase:'signed-out',reauthenticateUserId:null});
+    expect(f.auth.isCurrent(old)).toBe(false);
   });
-  it.each(['login', 'restore'] as const)('%sのgetUser完了と保留イベント照合の間にもcontextを公開しない', async kind => {
-    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getUser']>>>();
-    f.api.getUser.mockReturnValueOnce(d.promise);
-    const operation = kind === 'login' ? f.auth.login('a', 'b') : f.auth.restore();
-    await flush(); f.setSession(null); f.emit('SIGNED_OUT');
-    d.resolve({ data: { user: { id: A } }, error: null });
-    // verifyの継続直後、runのawait継続前に外部処理がcontextを要求する順序を再現する。
-    await Promise.resolve();
-    const context = f.auth.getContext(); const usable = context ? f.auth.isCurrent(context) : false;
-    expect(context).toBeNull(); expect(usable).toBe(false);
-    await operation; await flush(); expect(f.auth.getContext()).toBeNull();
-    expect(f.auth.getState().phase).toBe('blocked');
-    expect(f.api.signInWithPassword).toHaveBeenCalledTimes(kind === 'login' ? 1 : 0);
+  it('処理中は二重実行せず、旧contextを即時無効化する', async () => {
+    const f=fixture(); await f.auth.restore(); const old=f.auth.getContext()!, d=deferred<{error:unknown}>();
+    f.api.signOut.mockReturnValueOnce(d.promise); const p=f.auth.logout();
+    expect(f.auth.isCurrent(old)).toBe(false); expect(await f.auth.login('a','b')).toBe('busy');
+    expect(await f.auth.logout()).toBe('busy'); d.resolve({error:null}); expect(await p).toBe('applied');
   });
-  it('検証完了と公開の間に破棄した状態へ遅い検証結果を反映しない', async () => {
-    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getUser']>>>();
-    f.api.getUser.mockReturnValueOnce(d.promise); const operation = f.auth.restore(); await flush();
-    d.resolve({ data: { user: { id: A } }, error: null }); await Promise.resolve();
-    f.auth.dispose(); const disposed = f.auth.getState();
-    expect(await operation).toBe('stale'); expect(f.auth.getState()).toBe(disposed); expect(f.auth.getContext()).toBeNull();
+  it.each(['login','restore'] as const)('%s中の同一user通知はtoken/期限が変わっても標準sessionとして反映する', async kind => {
+    const f=fixture(), changed={...session(A,400), access_token:'new-token'};
+    const method=kind==='login'?'signInWithPassword':'getSession';
+    f.api[method].mockImplementationOnce(async()=>{ f.setSession(changed); f.emit(); return {data:{session:session()},error:null}; });
+    expect(await (kind==='login'?f.auth.login('a','b'):f.auth.restore())).toBe('applied');
+    expect(f.auth.getState()).toMatchObject({phase:'authenticated',userId:A,expiresAt:400}); expect(f.api.getUser).not.toHaveBeenCalled();
   });
-  it('検証後でも公開直前に期限を迎えた場合はcontextを発行しない', async () => {
-    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getUser']>>>();
-    f.api.getUser.mockReturnValueOnce(d.promise); const operation = f.auth.restore(); await flush();
-    d.resolve({ data: { user: { id: A } }, error: null }); await Promise.resolve(); f.time(200_000);
-    await operation; expect(f.auth.getState().reason).toBe('expired'); expect(f.auth.getContext()).toBeNull();
+  it('古いlogin応答よりSDKの後続user通知を優先し、旧login完了でD05へ進ませない',async()=>{
+    const f=fixture(), d=deferred<Awaited<ReturnType<MemoAuthApi['signInWithPassword']>>>();
+    f.api.signInWithPassword.mockReturnValueOnce(d.promise); const p=f.auth.login('a','b');
+    f.setSession(session(B)); f.emit('SIGNED_IN'); d.resolve({data:{session:session(A)},error:null});
+    expect(await p).toBe('stale'); expect(f.auth.getState().userId).toBe(B); expect(f.api.getSession).not.toHaveBeenCalled();
   });
-  it('破棄後の遅い応答・イベントは無効、購読解除は一度', async () => {
-    const f = fixture(), d = deferred<Awaited<ReturnType<MemoAuthApi['getSession']>>>();
-    f.api.getSession.mockReturnValueOnce(d.promise); const p = f.auth.restore(); f.auth.dispose(); f.auth.dispose(); f.emit();
-    d.resolve({ data: { session: session() }, error: null }); expect(await p).toBe('stale');
-    expect(f.auth.getState().phase).toBe('disposed'); expect(f.unsubscribe).toHaveBeenCalledTimes(1);
-    expect(await f.auth.login('a', 'b')).toBe('stale');
+  it('login中のSIGNED_OUTから旧認証を復活させない',async()=>{
+    const f=fixture(); f.api.signInWithPassword.mockImplementationOnce(async()=>{f.setSession(null);f.emit('SIGNED_OUT');return {data:{session:session()},error:null};});
+    expect(await f.auth.login('a','b')).toBe('stale');expect(f.auth.getState().phase).toBe('signed-out');expect(f.auth.getContext()).toBeNull();
   });
-  it.each(['getSession', 'getUser', 'signInWithPassword', 'signOut'] as const)('%sの機密例外を返さず、自動再実行しない', async method => {
-    const f = fixture(); f.api[method].mockRejectedValueOnce(new Error('synthetic-private-token'));
-    const result = method === 'signOut' ? await f.auth.logout() : method === 'signInWithPassword' ? await f.auth.login('a', 'b') : await f.auth.restore();
-    expect(result).toBe('blocked'); expect(JSON.stringify(f.auth.getState())).not.toContain('synthetic-private');
-    expect(f.api[method]).toHaveBeenCalledTimes(1); expect(f.auth.getContext()).toBeNull();
+  it('既存ownerの処理中に別user通知が届いてもdraft所有者を差し替えない',async()=>{
+    const f=fixture();await f.auth.restore();f.api.getSession.mockImplementationOnce(async()=>{f.setSession(session(B));f.emit();return {data:{session:session(A)},error:null};});
+    expect(await f.auth.restore()).toBe('blocked');expect(f.auth.getState().reauthenticateUserId).toBe(A);
   });
-  it('ログアウト拒否は成功とせず以前のユーザーとの対応を残す', async () => {
-    const f = fixture(); await f.auth.restore(); f.api.signOut.mockResolvedValueOnce({ error: { message: 'private' } });
-    expect(await f.auth.logout()).toBe('blocked'); expect(f.auth.getState().reauthenticateUserId).toBe(A);
+  it('logout失敗中の通知で自動復帰せず、再送も行わない',async()=>{
+    const f=fixture();await f.auth.restore();f.api.signOut.mockImplementationOnce(async()=>{f.emit();return {error:new Error('private')};});
+    expect(await f.auth.logout()).toBe('blocked');await flush();expect(f.auth.getContext()).toBeNull();
+    expect(f.api.getSession).toHaveBeenCalledTimes(1);expect(f.api.signOut).toHaveBeenCalledTimes(1);
+    f.emit();expect(f.auth.getState().phase).toBe('authenticated');
   });
-  it.each([
-    ['error', 'restore'], ['throw', 'restore'], ['error', 'event'], ['throw', 'event'],
-  ] as const)('ログアウト%sと待機中イベントでは自動復帰せず、後続%sで再確認する', async (failure, recovery) => {
-    const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
-    const d = deferred<{ error: unknown }>();
-    f.api.signOut.mockImplementationOnce(async () => {
-      const result = await d.promise;
-      if (failure === 'throw') throw new Error('synthetic-private');
-      return result;
-    });
-    const operation = f.auth.logout(); f.emit('TOKEN_REFRESHED');
-    d.resolve({ error: { message: 'synthetic-private' } });
-    expect(await operation).toBe('blocked'); await flush();
-    expect(f.auth.getState().phase).toBe('blocked'); expect(f.auth.getState().reauthenticateUserId).toBe(A);
-    expect(f.auth.getContext()).toBeNull(); expect(f.auth.isCurrent(old)).toBe(false);
-    expect(f.api.getSession).toHaveBeenCalledTimes(1); expect(f.api.getUser).toHaveBeenCalledTimes(1);
-    await flush(); expect(f.api.getSession).toHaveBeenCalledTimes(1);
-    if (recovery === 'restore') expect(await f.auth.restore()).toBe('applied');
-    else { f.emit('TOKEN_REFRESHED'); await flush(); }
-    expect(f.auth.getState().phase).toBe('authenticated'); expect(f.auth.isCurrent(old)).toBe(false);
-    expect(f.api.signOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' });
-    expect(f.api.signInWithPassword).not.toHaveBeenCalled();
+  it.each(['getSession','signInWithPassword','signOut'] as const)('%sの例外をUIへ渡さず再送しない',async method=>{
+    const f=fixture();f.api[method].mockRejectedValueOnce(new Error('synthetic-private-token'));
+    const p=method==='getSession'?f.auth.restore():method==='signInWithPassword'?f.auth.login('a','b'):f.auth.logout();
+    expect(await p).toBe('blocked');expect(JSON.stringify(f.auth.getState())).not.toContain('synthetic-private');expect(f.api[method]).toHaveBeenCalledTimes(1);
+  });
+  it('subscribe初期化失敗時はcontextを発行しない',async()=>{
+    const f=fixture();f.api.onAuthStateChange.mockImplementationOnce(()=>{throw new Error('private');});
+    const auth=createMemoAuthSession(f.api);expect(await auth.login('a','b')).toBe('blocked');expect(auth.getContext()).toBeNull();
+  });
+  it('dispose後の遅い応答とSDK通知を反映せず、一度だけ解除する',async()=>{
+    const f=fixture(),d=deferred<Awaited<ReturnType<MemoAuthApi['getSession']>>>();f.api.getSession.mockReturnValueOnce(d.promise);
+    const p=f.auth.restore();f.auth.dispose();f.auth.dispose();f.emit();d.resolve({data:{session:session()},error:null});
+    expect(await p).toBe('stale');expect(f.auth.getState().phase).toBe('disposed');expect(f.unsubscribe).toHaveBeenCalledTimes(1);
   });
 });
 

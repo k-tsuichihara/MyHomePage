@@ -1,5 +1,7 @@
 # メモツール v1.1.0 リリース進捗管理
 
+Q05最新状況：UAT-01〜04 PASS、05は旧方式の実loginがblockedとなりFAIL/停止中。オーナー決定で追加transport診断を停止し、SDK標準Auth＋製品用adapterへ簡素化する。safeFetch/追加getUser/通知厳密照合と再確認連鎖/Storage allowlist/sticky停止/一時診断と専用buildを撤去し、SDK2.119.0・専用storageKey・D05/C05・user/generation/旧draft保護・C04/DB安全性を維持する。今回の実装はofflineまでで、実Auth/RPC/DB/SQL/cloud write・公開は未承認、UAT PASSへ読み替えない。R05の既存Human PASSは維持。[UAT正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)と[Auth契約](../tools/memo/tests/AUTH-SESSION.md)を参照。集計はPASS4/FAIL1/NOT STARTED3/SKIP2、Q05実施中を維持する。
+
 ## Q04：v1.1.0最小応答受入の承認済み変更
 
 厳密single-rpc認定・完全response provenance証明は未認定のまま延期し、v1.1.0公開条件から外す。製品senderの既存HTTP安全検査を通過した`validated-http`を既存adapterのschema/所有者/要求照合へ接続する。`unverified`を無条件に成功へ変更せず、既存Auth/権限/競合/UNKNOWN/無再送/local分離を維持する。詳細・AI Gate方針は[応答受入契約](../tools/memo/tests/SINGLE-RPC-ACCEPTANCE.md)冒頭を正本とする。
@@ -130,7 +132,7 @@ Q04 Step 4第6単位：通常cloudメモ1件のゴミ箱移動を既存C04 chang
 | Q02 | 合成メモリUI・ブラウザE2E | 完了 | [ブラウザ契約](../tools/memo/tests/BROWSER-UI.md)、tests/browser/、PR #12以降 | 過去記録83件PASS。実OS日本語IME・実端末受入とは別 |
 | Q03 | 隔離ChromiumのStorage/Web Locks・形式/切替試験 | 完了 | [永続化](../tools/memo/tests/LOCAL-PERSISTENCE.md)、Phase B、[切替設計](../tools/memo/tests/RELEASE-TRANSITION.md)、PR #14・#15・#17・#26 | 過去記録22/16/20件PASS。容量・再起動は記録範囲に限定 |
 | Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 完了 | PR #102、既存Q04実行記録、オーナー完了判断 | 個人利用v1.1.0の技術ゲートとしてCOMPLETE。既存S04/Q04-READ/Case13/Case6と製品Auth/D05/logout観測を再利用。single-rpc・完全response provenanceは未認定のまま延期。追加Human Gate・実通信は行わない。主要操作/実マイク等はQ05へ |
-| Q05 | 実機・IME・主要操作・ドラフト保護等の最小UAT | 進行中 | [Human UAT計画・進捗正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)、現行layout_review2.drawio、製品UI統合契約、オーナー判断 | PR #122マージ後、HumanがR01-A/B/Cを実操作し全期待結果を満たし追加指摘なしと報告。UAT-01 PASSを維持。統合R02はHuman実操作で全5項目PASS・追加指摘なし、U02問題9件は受入済み。本来のタグ作成/検索/編集取消/削除確認、割当変更、一覧条件操作、pin/unpin操作に個別Human結果記録がなく、UAT-02はFAIL維持、PASS1/FAIL1/NOT STARTED6/SKIP2。次は正本L02の未記録部分だけ（既に実施済みなら結果追記で再操作不要）。UAT-03以降は未開始。R01-C 8〜10はUAT-03へ再利用し、同操作の再実施・全UATのやり直しなし。実スマホ・実マイクは承認済みSKIPのまま本番配置後へ |
+| Q05 | 実機・IME・主要操作・ドラフト保護等の最小UAT | 進行中 | [Human UAT計画・進捗正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)、現行layout_review2.drawio、製品UI統合契約、オーナー判断 | PR #122マージ後、HumanがR01-A/B/Cを実操作し全期待結果を満たし追加指摘なしと報告。UAT-01 PASSを維持。統合R02はHuman実操作で全5項目PASS・追加指摘なし、U02問題9件は受入済み。今回L02-1〜5も全Human PASS。R02とL02を本来の手順1〜6へ照合し、未確認項目0・未解決問題0のためUAT-02正式PASS、PASS4/FAIL1/NOT STARTED3/SKIP2。Q05は継続中。UAT-03-1/03-2、R01-Cの既存Human証拠と今回の一覧離脱cancelで入力保持・複製の明示保存/元との分離/元不変のHuman最終PASSを照合し、03の未確認項目0・未解決問題0で正式PASS。今回UAT-04-1〜4のゴミ箱移動/切替・復元/内容確認・完全削除確認cancel/保持・承認後非表示を全Human PASSと報告。既存read-only等の証拠も再利用し04の未確認項目0・未解決問題0で正式PASS。UAT-05は旧方式の05-2実loginがblockedで未完了、FAIL/停止中。追加診断は停止し、SDK標準Auth＋製品用adapterへ簡素化、offline AI Gateまで完了。レビューと別途実通信承認後に既存05手順2〜5の再開を判断する。R05の幅/ラベル/操作行/エラー表示はHuman PASS。正式決定により通常製品UIの旧保存先2入口/restoreボタンを廃止し、dirty localのD05 cancel後だけ「クラウド利用を続ける」を既存C05/departureへ接続。自動restore/内部APIは維持、回復はlogin。明示cloud読取を保存先切替から分離。05手順2〜5だけHuman再開待ち、R05の再実施不要、実Auth/cloud追加操作は別途明示承認。R02/L02の再実施不要。R01-C 8〜10はUAT-03へ再利用し、同操作の再実施・全UATのやり直しなし。実スマホ・実マイクは承認済みSKIPのまま本番配置後へ |
 
 ## 7. 本番移行・公開
 

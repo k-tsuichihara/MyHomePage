@@ -11,7 +11,7 @@ export interface BrowserAuthEnvironment extends Pick<BrowserLocalEnvironment, 'o
 export function createBrowserMemoAuth(env: BrowserAuthEnvironment, permit: PersistencePermit | undefined,
   config: { url: string; publicKey: string }, transport: typeof fetch, rpcSender?: AuthenticatedRpcSender) {
   requirePersistencePermit(env, permit);
-  // SDK側の専用キー検査を通った操作だけがここへ到達する。列挙・clearは公開しない。
+  // SDKへメモ専用storageKeyを設定する。Permit検査を維持し、列挙・clearは公開しない。
   return createMemoSdkAuth(config, {
     getItem: key => env.getStorage().getItem(key),
     setItem: (key, value) => env.getStorage().setItem(key, value),

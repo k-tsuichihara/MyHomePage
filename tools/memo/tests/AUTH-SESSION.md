@@ -1,221 +1,65 @@
 # C03：Auth・セッション接続契約と試験方針
 
-製品senderの現在の応答受入は[SINGLE-RPC-ACCEPTANCE](SINGLE-RPC-ACCEPTANCE.md)冒頭を正本とする。`validated-http`から通常の内容検証へ進めるが、Authの現在user/generation/期限・送信直前検査は変更しない。以下の「常にunverified」は以前の製品senderの履歴。厳密single-rpc・完全出所証明は未認定のまま延期する。
+## v1.1.0の現行方針：SDK標準Auth＋製品用adapter
 
-## 通常product entryへのSDK所有接続準備
+Q05のオーナー承認により、読書管理と同様にSupabase SDK標準Authを利用する。SDKは2.119.0を維持する。[Review8 §1.1](../doc/v1.1.0/memo_v1_1_implementation_review8.md)が製品仕様の正本。今回の実装は実Auth通信・UAT再開・公開の承認ではない。
 
-`product-cloud-app.ts`が既存`createMemoSdkAuth`を生成・所有し、同じsessionをC04/C05と製品UIへ注入する。専用キーStorage・Auth allowlist・SDK patch/disposeは既存実装をそのまま使う。Browser Authのloopback＋Permit入口を製品へ転用せず、通常製品のHTTPS/top-level/page境界を使う。接続先は既存MEMO_RPC_ORIGINのdev-sandboxだけで、実行時publishable key入力を除き任意設定を受け取らない。資格情報/キーをbuildに埋め込まない。
+- メールアドレス＋パスワードでSDKのsignInWithPasswordを呼ぶ。
+- sessionの永続化・自動更新・復元とonAuthStateChangeはSDK標準動作を利用する。
+- メモ専用storageKeyは `myhomepage.memo.auth.v1`。persistSession/autoRefreshTokenはtrue。email/password方式のためdetectSessionInUrlはfalse、debugはfalse。
+- logoutは既存どおり `signOut({ scope: 'local' })`。他アプリのセッション保存先へ統合しない。
+- Auth用safeFetch、Auth Response再構築、Auth独自URL/redirect/status/JSON/timeout処理は撤去する。SDKへ注入fetchを直接渡す。実製品ではブラウザfetch、offline試験では合成fetchを使用する。
+- login/restore成功の追加getUser照合、SDK通知のtoken/期限厳密一致、通知後の再確認連鎖を撤去する。SDKのsessionを製品用状態へ反映する。
+- SDK内部Storageキーallowlistとsticky停止は撤去し、SDKへ設定済みの専用Storageを直接渡す。Auth sessionの通常永続化は維持するが、cloudメモ/draftをlocalへ保存しない。
+- 一時診断のobserver/パネル/通信予算/専用build/runner/scriptと、それだけを検証する試験は撤去する。`preview:auth-diagnostic`は使用しない。
 
-既存local/保守buildは変更せず、明示的なcloud候補buildだけSDKを含む。設定開始前のAuth/Storage0と生成entry→実SDK＋合成HTTPの配線を試験する。Auth専用キーの通常session永続化は従来契約であり、tokenをDOM/ログ/URL/生成資産へ出すものではない。[製品UI契約](PRODUCT-UI-INTEGRATION.md)の現在状態/起動方法を正本とする。実Auth/Storage復元・refresh・受入は未実施、C03は進行中。以下の「未結線」は各時点の履歴として保持する。
+## 製品用adapterが維持する安全境界
 
-## Q04 Step 4：製品候補UIへの注入接続（2026-11-14）
+`createMemoAuthSession`は既存getState/subscribe/login/restore/logout/getContext/isCurrent/prepareRpc/requireReauthentication/disposeの接続契約を維持する。新しいAuthサーバー検証を実装しない。
 
-既存sessionのgetState/subscribe/restore/login/logout/disposeだけを型として渡す製品UI接続を追加した。Authそのものの判定・SDK・token・Storage境界は変更しない。[製品UI契約](PRODUCT-UI-INTEGRATION.md)を参照。通知は再描画のきっかけに限り、getStateの現在値を再取得し、低いgenerationとdispose後の通知を反映しない。C03のgetContext/isCurrentによる書込認可を置き換えない。
+- 公開state/contextはuser・generation・期限・固定の失敗分類だけ。password/token/session本体やprovider例外をUI・ログへ渡さない。
+- SDK sessionのuser ID・期限・token有無を、context/送信準備に必要な最小限の型として読む。追加getUser・JWT独自検証・通知token比較は行わない。
+- SDK通知はuser/期限だけを受け取り、新しいgenerationへ反映する。callbackからSDKを再呼出ししない。TOKEN_REFRESHED等の同一userの更新も旧contextを無効化する。
+- 処理中に来た通知は最後のuser/期限だけを保留する。token・session本体を保留しない。同一userなら期限/tokenの厳密一致を要求しない。後続通知が別user/session消失なら、古いlogin/restore完了でD05へ進めない。
+- 既存ownerの認証失効・別user通知では旧draft/snapshotを新userへ引き継がない。同一user再認証まで操作停止する。明示logout成功でowner対応を解除する。
+- 操作開始時は旧contextを無効化し、SDK待機中の二重操作はbusyとする。dispose後の遅い完了・通知は反映しない。
+- getState/getContext/isCurrentで期限切れを検出した場合と、現在のC04要求が失効を認定した場合は操作を停止する。独自refresh/retry/pollingを追加しない。
+- prepareRpcはSDK getSessionで現在の資格情報を取得し、owner/generation/期限を送信前に再確認する。1回限りのtransport、wasSent、古いcontext拒否を維持する。ここでもgetUserは呼ばない。
+- 表示購読は非同期・解除可能。低いgeneration、購読例外、dispose後の通知を製品操作の許可として利用しない。
 
-生成済み製品候補HTML＋既存session/合成API＋メモリStorageでChromium11件を追加。実SDK生成、実Storage、実Auth/RPCは使用しない。通常entryはsession未注入でlocal-only、C03は引き続き進行中。loopback＋Permit・SDKパッチ・build安全条件は維持する。実製品のsession復元/refresh/失効/ログアウトは未検証。
+RLS・auth.uid()・RPC内所有者確認・直接DML禁止はDB側の既存契約を維持する。SQL/RLS/GRANTは変更しない。C04の正式8 RPC・引数・HTTP/schema/owner/要求照合・revision/requestId/conflict/UNKNOWN・自動再送禁止も維持する。Auth側の簡素化をRPC側へ拡張しない。
 
-C04へはBearer値ではなく、現在の`AuthContext`に結び付いた1回限りのRPC transportを渡す。資格情報は内部で取得し、資格情報取得後と送信直前にも認証世代・所有者・期限を再確認する。状態通知はこの送信許可の代わりにはならない。`src/cloud-rpc-sender.ts`に固定開発origin・8 RPC・引数・timeout・redirect拒否を検証する通信なしsender境界を追加したが、経路出所を証明できないため常に`unverified`を返す。`createMemoSdkAuth()`へのsender注入、実SDK・製品HTTP・本番originへの接続は未実装である。後続の製品composition rootだけが別承認後にsenderをAuth生成時へ注入し、UIへsenderやBearerを公開しない。詳細は[CLOUD-CONTROLLER.md](CLOUD-CONTROLLER.md)を参照する。
+## 製品UIとD05/C05
 
-## UI非依存の状態購読・ライフサイクル
+- 未ログイン→local、login成功→既存D05/C05を通ってcloud、logout→local。
+- dirty/UNKNOWN/保存中の離脱保護、cancel時のtarget/draft保持、busy時の操作抑止を維持する。
+- dirty localのD05 cancel後に限る「クラウド利用を続ける」を維持する。常設のlocal/cloud選択・手動restoreボタンは復活させない。
+- 保存先表示は「現在の保存先：ローカル（未ログイン）」「現在の保存先：クラウド（ログイン中）」「現在の保存先：ローカル（ログイン中）」。
+- Auth失効時は既存C05契約どおりcloud選択とdraftを保持し、cloud操作を停止する。通常の明示logoutとの違いを維持する。
+- local/cloud同期・転送・暗黙fallbackを追加しない。UNKNOWNを成功扱いしない。
 
-`createMemoAuthSession`へ`subscribe(listener): () => void`だけを追加する。登録後に最新状態をmicrotaskで通知し、以降も確定した`MemoAuthState`を非同期通知する。同期処理中の中間状態はまとめ、同じ購読へ同世代を二重通知しない。全遷移の監査ログではなく画面表示用であり、通知の`authenticated`を操作許可として保持しない。操作開始時・応答反映前は引き続き`getContext()/isCurrent()`を使う。
+## SDK生成・build・終了
 
-例外として、通知コールバックの同期実行中に登録した購読は登録時世代の初回通知を省略し、次の世代変更から配信する。通知内の自己再購読で初回通知が無制限にmicrotaskを予約しないための防御である。その場の現在値が必要なら`getState()`で取得する。通知外の新規購読は従来どおり初回も非同期配信する。ホストは描画ごとに解除なしで購読を増やさず、非同期処理の中から自ら購読や認証操作を無制限に反復しない。この防御は任意の購読先による無制限の非同期処理やメモリ増殖まで保証するものではない。
+`product-cloud-app.ts`が1つのSDK/sessionを所有し、同じsessionをC04/C05/製品UIへ注入する。通常local/保守buildはAuth/cloud混入拒否を維持する。dev-sandboxのcloud候補は実行時publishable key入力後にだけSDKを生成し、自動restoreが通信を開始し得る。通常起動は `npm run preview:product-cloud`、実通信の個別承認前には起動/接続しない。
 
-期限切れは既存の`getState()`（`getContext()/isCurrent()`からも使用）で検出した時に通知する。時間経過だけの自動通知・追加タイマー・ポーリングは設けない。バックグラウンドの描画即時性を保証せず、ホストは復帰/操作時に現在値を確認する。SDK通知による再確認とSDK自身のautoRefreshTokenは維持する。この選択は、表示購読のために新たな認証処理や無制限の監視を増やさず、既存の操作時失効判定を正本とするためである。
+Browser Auth専用入口のloopback＋Permit制約は維持し、製品へ転用しない。既存のHTTPS/top-level/page検査、固定接続設定、秘密キー拒否も維持する。
 
-購読解除は冪等で、既にキューにある未配信通知も止める。`dispose()`は既存contextを同期的に無効化した後、既存購読へ最終`disposed`を最大1回通知し、購読を解放する。dispose後の新規購読は通知しない。購読先の同期例外・非同期拒否を状態/ログへ出さず、認証結果・他の購読を壊さない。通知中に状態が変わった場合、後続購読へ旧状態を配信せず最新状態の配信へ移る。
+SDK 2.119.0の型・既存の限定locks debugパッチ・生成物検証は変更しない。debug/logの安全性を維持し、バージョン変更は行わない。終了はsessionのcontextと購読を直ちに失効させ、SDK initialize後のdisposeを冪等なPromiseで所有する。Storageデータを独自に巻き戻したり削除したりしない。
 
-ホストは既存`createMemoSdkAuth(config, storage, transport)`で1インスタンスを明示生成し、購読を登録して`session.restore()`を待つ。購読は追加のSDK要求を発行せず、独自の初期化ラッパーは追加しない。SDK生成自体は既存のSDK内部初期化・保存先読取・初期イベントを開始し得るため、`restore()`より前のSDK処理がゼロという保証ではない。ログイン/ログアウトは既存APIを使い、離脱確認・二重操作抑止は呼出側の既存契約に従う。終了時は購読解除後に外側の非同期`dispose()`を待つ。内側の`session.dispose()`だけではSDK終了まで待てない。disposeは自動ログアウト・保存領域消去・送信済み操作の取消ではない。
+## 取得済みHuman診断証拠とtransportのoffline切り分け
 
-### 追加試験方針
+旧Auth方式でHumanが承認済みの1回の診断から得た証拠：
 
-- 合成SDK：初回購読、更新/失効/SDK通知、getterでの期限到達、同世代重複なし、解除、再入、購読中追加/解除、同期例外/非同期拒否、dispose・古い応答・購読失敗を検証する。
-- 通知にユーザーID・世代・期限・固定理由以外の秘密値や生例外が混入しないこと、通知時の状態が不変であることを確認する。
-- 実SDK＋合成Map/模擬fetch：生成→購読→明示復元→ログイン→ログアウト→終了の接続を確認し、通信/Storage障害による停止通知も検証する。実サービス・実Storageは使用しない。
-- 型チェック、既存Auth回帰、全Vitest、パッチ試験、Auth/previewビルドを確認する。SDKパッチ・安全ゲート・バージョン・保存先切替・製品UIは変更しない。
+`login-start → checking → transport-exception → password-auth-rejected → blocked`
 
-### 実施結果（2026-11-09）
+旧safeFetchのpassword要求境界で停止し、追加session/getUser/owner照合には未到達。通信上限超過のコードはなく、password誤り・HTTP status・ネットワーク原因のどれとも断定しない。
 
-基準mainは`2f1c6f47522658719adcb52e7e39f005d60c62d6`（PR #52マージ後）。追加24件は状態購読21件と実SDK＋合成Map/模擬fetchのライフサイクル3件。型チェック、全Vitest36ファイル1,472件、既存パッチ23件、隔離Auth Chromium11件、既存メモリE2E83件、auth/auth-browser/previewビルド、差分検査はPASS。メモリE2Eは全ケースの成功表示後にランナーの終了待ちが継続したため、今回起動したpreviewサーバーのPIDと開始時刻を確認して終了し、その後ランナーの83件PASS・終了コード0を確認した。無介入での後処理完了まで保証する結果ではなく、このための設定/製品コード変更や再実行は行っていない。
+旧方式のoffline合成83件では、通信例外/timeout、redirect/応答URL、本文/JSON失敗で同じ列を再現した。正常JSONの400/401等、SDK側schema拒否だけではこの列にならなかった。具体的実原因は未確定のまま、オーナー判断で追加細分化を停止しSDK標準方式を採用した。旧方式専用試験は現行Authの成功条件として残さない。
 
-新しい購読経路の検証はNodeの合成SDK/Storageによるもので、既存Authブラウザ11件は元の隔離入口の回帰である。製品UIでの通知表示・実Authサービス・実アカウント・C04のBearer連携・C05の切替は未実施。既存永続化/形式/切替E2Eと通信なしクラウドは今回再実行していない。SDK元ファイル・パッチ・安全ゲート・公開資産は変更せず、C03は製品接続と受入が残るため進行中を維持する。
+診断欄がPCフッターに隠れる問題もあった。固定コードは回収済みで、一時診断自体を撤去する。実施日時・ブラウザ・応答内容は推測しない。旧診断の承認は今回の実Auth/RPC/DB/cloud writeの承認へ流用しない。UAT-05はFAIL/停止中を維持する。
 
-### PR #53先生レビュー：再購読とE2E終了待ち
+## offline AI Gate
 
-通知内の再購読は対応要と判断した。修正前に自己追加・自己解除後の再登録の2ケースで同世代の通知連鎖を再現した（テスト自体を停止可能にするため8回で打切り）。通知中登録の初回配信を上記のとおり制限し、次の世代には正常に通知することを回帰試験で確認する。「通知中の他購読追加」の既存試験も、この明示した契約に合わせた。
+新仕様では、SDK標準login/session復元/refresh/local logout、user変更・失効・旧generation・遅い完了・購読解除、D05/C05とC04のデータ保護、秘密値非混入を検証する。旧safeFetch/Storage allowlist/token厳密照合を守るだけの試験は整理する。
 
-メモリE2E終了待ちは静的切分けのみ行った。基準main`2f1c6f4`との比較で、previewビルドの依存42ファイル、tests/browser、build-preview/serve-preview、Playwright設定、package.json/lockfileは同一だった。esbuildのメモリ内依存解析にはauth-session/auth-sdk/Supabaseを含まない。通知コードが同E2Eで直接実行される経路は確認できず、この変更を終了待ちの原因とする根拠は得ていない。一方、mainとの実行比較、停止直前のプロセス状態・終了要求の実測はないため原因は未確定である。対象外のランナー・安全ガード・配信コードは修正せず、E2Eも再実行していない。
-
-初回の「83ケース成功・介入後終了コード0」と「無介入の完走」は引き続き別判定とし、後者は未確認として引き継ぐ。次の承認済みメモリE2E/公開前回帰で後処理まで正常終了するか確認し、再発した場合は今回のテスト所有プロセスに限定して終了状態を記録する。再実行や環境・ランナー修正が必要なら原因・影響・作業範囲を報告して承認を得る。未確認を理由に安全ガードを緩めない。
-
-レビュー修正後は型チェック、全Vitest36ファイル1,474件（再購読回帰2件追加）、既存パッチ23件、隔離Authブラウザ11件、auth/auth-browser/previewビルド、差分検査がPASS。通知先が意図的に新しい認証操作や非同期再購読を反復する場合まで防止するものではなく、製品UIの購読管理・実サービスの未検証事項は維持する。
-
-## PR #51後：実ブラウザStorageへの接続と限定ビルドパッチ
-
-### 現在の境界・検証結果
-
-オーナー承認により、以下の固定SDKの`lib/locks`にある`internals.debug`初期化式だけを、esbuild読込時にメモリ上で`false`へ置換する。node_modules、ロック取得・解放・待機・例外処理は変更しない。SDK/TypeScriptの版と既存の型検査設定も維持する。
-
-| 検証対象 | 固定値・条件 |
-|---|---|
-| @supabase/supabase-js | 2.119.0（実package.jsonとlockfileを別々に確認） |
-| @supabase/auth-js | 2.119.0（上記とは別パッケージ。実版・依存指定・lockfileを確認） |
-| 対象 | `node_modules/@supabase/auth-js/dist/module/lib/locks.js`だけ |
-| 元ファイルSHA-256 | `dff51f514d51045d15216c9c76239290b15a646f12e34449234960622e0366ff`（公開SDKのハッシュ） |
-| 置換 | 既知の初期化式1件だけ。前後のコードが不変であることを照合 |
-| 停止 | 版・パス・実体パス・SHA・置換件数の不一致、別経路のauth-js locks混入、成果物に未適用デバッグキー参照が残る場合 |
-
-`scripts/auth-sdk-patch.mjs`をAuthブラウザビルドの共通入口とし、`build:auth`と`build:auth-browser`から使用する。書出しを伴うビルドの開始時に前回のパッチ検証記録を失効させ、検査完了まではJSを書き出さない。失敗時は旧JSが診断用に残り得るが、記録欠落またはハッシュ不一致により専用ランナーの起動前検証で拒否する。出力ディレクトリやJSの存在だけをビルド成功と判断しない。
-
-保証対象は、検証付きビルドと、ビルド成功後だけ起動する`test:auth-browser`の専用ランナーである。同ランナーはSDKと成果物ハッシュ・パッチ記録をサーバー・profile・ブラウザの生成前に再照合し、未適用成果物へフォールバックしない。`build:auth`単独は出力時検証までで、任意の手動配信・別ランナーに起動前検証を自動適用するものではない。それらは今回の保証範囲外とし、今後の接続時に同じ検証を必須とする。この記録はビルドの対応確認であり、署名・悪意ある同一OS利用者への防御・アプリソースの鮮度保証ではない。
-
-SDKを未加工のままブラウザへ直接importする経路は未対応である。将来の製品入口や別ビルドにSDKを追加するときも、この検証付きビルドを利用し、未許可import時のStorage取得0件を確認する。SDK更新・対象変更・ハッシュ更新は別承認とレビューを必要とし、デバッグ初期化修正が上流で提供された場合はパッチ廃止を検討する。
-
-検証は次の順序とし、最初の安全ゲートで失敗した場合は後続を実行しない。
-
-1. `test:auth-patch`：23件。固定版・元SHA・パス・置換件数・前後不変・別経路/CJS混入・成果物照合の拒否、失敗後に残る旧JSの起動検証拒否、ブラウザ相当importでStorage取得0件、navigatorLock/processLockの委譲・例外・直列化・解放を確認する。実Storageを使用しない。
-2. `test:auth-browser`：所有ガード付き新規Chromium profileと専用loopback originで11件。最初に未許可起動のStorage取得0件を確認してから、以下の合成Auth試験を行う。
-
-| ケース | 実測結果と範囲 |
-|---|---|
-| 未許可起動 | PASS。SDK import前から監視し、localStorage getter取得0件・監視対象メソッド呼出し0件を別々に確認して停止 |
-| 保存・再読込・再起動 | PASS。実localStorageの専用キーへ保存し、ページ再読込・管理Chromium終了/再起動後に復元 |
-| localログアウト | PASS。専用セッションを除去し再読込後も未ログイン、旧context無効 |
-| 期限切れ | PASS。合成expires_at注入後のSDK更新と旧context無効化 |
-| 更新拒否 | PASS。書込停止後に明示的な同一ユーザー再認証 |
-| ユーザー照会拒否 | PASS。書込停止後に明示的な同一ユーザー再認証 |
-| Storage取得例外 | PASS。空セッション扱いせず停止、明示的な再初期化で復帰 |
-| 破棄・再初期化・二重操作 | PASS。旧context無効、処理中の二重ログインは送信1件 |
-| 複数タブ通知 | PASS。同一専用originの2タブでログイン通知・localログアウトによる他タブ書込停止 |
-| 遅いSDK更新 | PASS。他タブログアウト後の更新応答でセッション・旧contextを復活させない |
-| ロック | PASS。実Web Locks取得・取得不可例外・解放後再取得、processLockの待機timeoutと再取得、SDK custom lock委譲を確認 |
-
-各ケースで専用4キー以外へのStorage操作拒否、外部要求・機密値ログ・pageerror・Cookieの検出を行う。通常のSDKセッション制御と、明示的に呼ぶロック単体試験は別であり、全Auth操作がWeb Locksを使用するという保証ではない。HTTP応答はメモリ内の合成応答で、Authサービスの更新トークン失効や競合の実証ではない。
-
-Storage監視は専用ランナーの単一`addInitScript`で設置する。`localStorage` getterと`Storage.prototype`のgetItem/setItem/removeItem/key/clearをSDKの静的importより先に監視し、未許可ならキーにかかわらず操作を拒否する。メソッド呼出し回数は拒否された試行も数え、値を収集しない。同じrealmの取得済みStorage参照への通常メソッド呼出しも監視するが、設置前に退避されたネイティブメソッド、別realm、名前付きプロパティ直接操作などを包括的に監視する仕組みではない。固定SDK/固定テスト資産の当該API経路に対する証拠とし、「全Storage操作0件」という一般保証にはしない。
-
-### PR #52先生レビューへの対応
-
-2点とも対応要と判断した。監視をSDK import前へ移し、合成Storageによる3ケースでgetterとメソッドの区別、取得済み参照、専用外キー・列挙・clearの拒否と値の非収集を確認した。ビルド試行前の検証記録失効と、旧JS残存時の起動検証拒否も回帰試験へ追加した。
-
-修正後は型チェック、全Vitest35ファイル1,448件、パッチ専用Node試験23件、隔離Authブラウザ11件、auth/auth-browser/previewビルドがPASS。後述のメモリE2E・永続化/形式/切替E2E・通信なしクラウドの合格は初回実装時の結果であり、この修正では再実行していない。今回の変更はAuth試験監視とビルド検証に限定し、既存のAuth保存ロジック・SDKパッチ対象式・ロック実装を変更しない。
-
-本番Auth、実アカウント、サーバー側local失効、実時間経過による全自動更新/バックオフ、実Storage容量不足・端末固有の拒否、Firefox/WebKitは未検証。製品UI・環境設定・C04/C05は未結線であり、C03は進行中とする。過去の失敗profileは保全したまま触れず、今回成功したprofileだけを既存の所有検証付き手順で破棄する。
-
-### 今回の回帰確認
-
-基準mainは`337556b`（PR #51マージ後）。型チェック、全Vitest34ファイル1,445件（既存1,438件＋ブラウザ許可境界7件）、パッチ専用Node試験22件、Auth隔離ブラウザ11件、既存メモリE2E83件、永続化E2E22件、形式更新E2E16件、切替E2E20件、通信なしクラウド10件がPASS。auth/auth-browser/preview/persistence/format/transition/cloud-offlineの7ビルドを確認した。既存の永続化容量試験はテスト所有の独立profile内で再現してPASSしたが、Auth専用保存先の容量不足試験とは区別する。
-
-通常データ用アダプターの既存許可条件を`requirePersistencePermit`へ切り出し、Auth用もStorage取得前に同じ条件を適用する。旧キー・v2/v3保存形式・保存API・移行/復旧・公開HTML/JS/CSS・メモリE2Eの禁止APIガードは変更しない。SDK元ファイルのSHAは試験・ビルド後も固定値と一致し、node_modulesを直接変更していない。
-
-### 限定パッチ承認前の停止記録（以下は当時の状況）
-
-**安全ゲートで停止中。** 最初の未許可起動試験で、Storage getterの取得回数が期待0件に対し1件になった。getterは拒否を返すため実Storageの値は取得していない。SDK 2.119.0に含まれるauth-jsの`lib/locks`はモジュール初期化時に`internals.debug`を判定し、`supportsLocalStorage()`を呼ぶ。同関数には`lswt-*`キーの書込/除去probeがあり、その後`supabase.gotrue-js.locks.debug`も参照する構造がある。SDK生成時の専用storage注入やdebug:falseでは、このimport時の処理を防げない。
-
-既存のNode試験をブラウザimport時の安全性確認へ流用できないため、後続のブラウザ試験は未実施とした。SDK依存処理の限定的な修正、又は別の隔離方法は設計承認待ちであり、ガードを緩めたりSDKバージョンを変更したりしていない。失敗した所有profileはContext終了後に既存ガードで保全し、自動削除していない。パス・保存内容は公開資料へ載せない。
-
-ここまでの型チェックと接続前の単体20ケース（新規Auth許可7件・既存ローカル境界13件）、専用ビルドはPASS。実ブラウザ試験は最初の安全ゲート1ケースがFAILで停止。再読込・再起動・失効等の後続シナリオは未実施であり合格扱いしない。コミット・push・PR作成前に停止している。
-
-- 既存の所有プロファイル・専用loopback origin・permitを再利用する。Storage取得前の許可判定を通常データ用アダプターと共有し、許可なし・公開origin・埋込画面等は取得0件で停止する。専用入口は本番で使用する許可情報の代替ではない。
-- `browser-auth.ts`はgetStorageを明示注入し、既存SDK接続と専用キー制限を再利用する。Storage列挙・clearを公開せず、旧/新メモキー・読書アプリキーへアクセスしない。SDKのメモ専用BroadcastChannel通知はAuthセッションの通知であり、メモデータ同期ではない。
-- 専用HTMLは合成Auth操作の検証だけを表示する。パスワード欄や実Auth設定の入力機能は作らず、合成資格情報・合成JWTをページ内だけで生成する。ネイティブfetch等を禁止し、SDKへ注入する関数がAuth応答をメモリ内で返す。CSP connect-src none・到達不能proxy・Context要求監視で外部通信を遮断する。
-- 実localStorageの4専用キー以外へのget/set/remove、列挙・clearを試験ページで監視・禁止する。監視にはキー名・件数だけを使い、保存値・本文・資格情報をDOM/Node側/ログへ渡さない。Cookie・IndexedDB等の他の永続APIは使用しない。
-- 合成ログイン→実Storage保存→ページ再読込→同一所有profileでChromium再起動→復元、localログアウト→再読込後の未ログイン、合成期限切れ→SDK更新/更新拒否、ユーザー照会失効→同一ユーザー再認証、明示dispose→再初期化を検証する。期限切れは専用キー内の合成expires_at変更による注入であり、長時間経過の実証ではない。
-- 未許可起動・Storage取得例外・処理中二重操作・古いcontextも検証する。失敗はブラウザ終了後にprofileを保全し、成功した所有profileだけを既存ガードで破棄する。
-- 製品UIへはまだ接続しない。将来の画面ホストはAuthインスタンスを画面再描画ごとに作り直さず、初期化/終了と処理中の離脱を管理する。ログアウト前の離脱確認、C04要求の照合、C05保存先切替は別責務。ページ終了時のdisposeはベストエフォートであり、既に開始した処理やサーバー側操作の取消保証ではない。
-
-## PR #50後のSDK接続作業と型宣言障害
-
-導入時にSDK 2.111.0と2.119.0で、既存TypeScript 7.0.2のDOM型とSDK内部の`PublicKeyCredentialFuture`宣言が衝突し、変更前設定の型チェックはTS2430でFAILした。その時点で停止・報告し、オーナー承認後に下記の対応で再開した。以下のPR #50の合格記録を今回のSDK結線の合格へ流用しない。
-
-オーナー承認により`skipLibCheck: true`を採用する。対象は依存ライブラリだけでなく、プロジェクト内を含む**すべての`.d.ts`の内部型検査**である。`strict`、`noUncheckedIndexedAccess`、`exactOptionalPropertyTypes`等は維持し、製品・テストの`.ts`とSDK公開APIへの代入・呼出しの型検査は続ける。宣言内部の不整合が検出されなくなるため、実SDKを使った通信なし試験で補完する。TypeScript 7.0.2とSDK 2.119.0を固定し、追加の型検査緩和やバージョン変更は別途承認を必要とする。
-
-将来SDK/TypeScriptの更新を承認された際は、通常の型チェックに加えて`tsc --noEmit --skipLibCheck false`で衝突の解消を再確認し、解消済みなら設定を外す変更をレビューする。新しい`.d.ts`を追加する場合も内部検査の省略対象であることを確認する。今回の設定を認証・保存データの実行時検証緩和に流用しない。
-
-### 実SDK・合成保存先の検証方針
-
-- `auth-sdk.ts`は実SDKのcreateClientを既存factoryに接続し、構造的な型適合をコンパイラで確認する。クライアント・資格情報・RPC APIは外へ公開せず、既存session制御と終了処理だけを返す。
-- 保存先とfetchは必須注入。実localStorage等を取得する既定処理は作らない。SDKが使うメモ専用セッションキーと補助キーだけを許可し、旧キー・メモv2/v3キー・他アプリキーを触らせない。Storage例外は固定理由に置換し、読み取り失敗をSDKが内部処理しても書込用contextを発行しない。
-- 専用キーの値はSDKがserializeしたアクセストークン・更新トークン等を含む機密データである。メモのJSONバックアップ対象外であり、Git・ログ・PR・文書へ値を載せない。試験では実アカウントのトークンを使わず、その場で生成した合成値だけをMap内で保持する。
-- fetchは指定originのAuthログイン・更新・ユーザー照会・localログアウトだけを許可し、リダイレクトを拒否。本文のJSON解析失敗・通信例外・エラー本文を固定理由へ置換し、SDK内部ログへの応答断片流出を防ぐ。debugは無効。実設定・環境変数・本番originを試験で読み込まない。
-- 先生レビュー後、fetch入力は文字列・標準URL・標準Requestに限定し、initを一度だけ反映した新しいRequestのURL/methodを完全一致で照合する。そのRequestを送信するため、getter再評価や元オブジェクトの変化で判定と送信が食い違わない。文字列の非正規表記、追加/重複/エンコードされたクエリ等は拒否する。URL/Requestオブジェクトはプラットフォームが既に正規化したURLを判定するため、元の文字列表記を復元して保証するものではない。
-- 許可対象はGET `/auth/v1/user`、POST `/auth/v1/token?grant_type=password`、POST `/auth/v1/token?grant_type=refresh_token`、POST `/auth/v1/logout?scope=local`のみ。本文やヘッダーは標準Requestの処理を経て保持し、Authペイロード検証を独自再実装しない。中断済みの入力を送信せず、Request/initの中断signalも15秒上限と併用する。
-- リダイレクトは要求側でerrorに固定し、3xx・redirected応答・要求と異なる非空の応答URLも拒否する。模擬Responseの空URLは許容するが、それを実HTTPの出所確認の証明にしない。
-- 実SDK＋Map保存先＋模擬fetchで、ログイン、専用キー保存、別クライアント復元、localログアウト、更新・失効、別ユーザー拒否、Storage障害、通信異常・機密情報非表示を確認する。テスト中のglobal fetchは必ず失敗させ、注入fetch以外の通信を禁止する。
-- SDKのautoRefreshTokenは既存契約のtrueを維持する。SDK内部の更新トークン処理に再試行/バックオフがあることと、アプリがログイン・ログアウト・クラウド書込を自動再送しないことを区別する。実SDK・Authサービス全体の更新挙動は本番未検証として引き継ぐ。
-- 終了時はcontrollerのcontextを直ちに失効させ、その後SDKの初期化完了を待ちタイマー・購読を破棄する。実SDKの破棄は既に開始した保存先操作の取消保証ではなく、交換前には処理の完了を待つ必要がある。
-
-SDK 2.119.0のlocalログアウトは、専用保存先のセッションを先に除去してSIGNED_OUTを通知し、その後サーバーへ失効要求を行う。通信が失敗しても既にローカルのセッションが消えている場合がある。アプリはSDKがエラーを返した場合にblockedを維持し、成功・未実行を推測したり元のセッションを書き戻したりしない。SDKのlocal成功を、他端末や既発行JWTの即時失効の保証としない。
-
-### SDK接続の実施結果
-
-基準mainは`b3a8d77`（PR #50マージ後）。型チェックPASS、全Vitest32ファイル1,384件PASS（既存1,358件＋実SDK/保存先26件）、既存メモリE2E83件PASS、auth/preview/persistence/format/transition/cloud-offlineの6ビルドPASS、通信なしクラウド10ケースPASS。実SDK試験はすべてNode＋Map保存先＋模擬fetchであり、global fetchへの呼出し0件、機密情報を含むログ0件を試験で確認した。
-
-旧キー・メモv2/v3データ・他アプリキーの非変更、Storage読取/書込/削除例外、15秒の通信中断、破棄後の遅い応答、更新拒否後の同一ユーザー再認証も確認した。型設定の差分はskipLibCheck追加のみ。実SDKの公開Auth型への適合も`.ts`の型検査で確認する。
-
-実SDKは接続済みだが、実ブラウザの永続保存先・環境設定・製品入口は未結線。実サービスのAuth、再読込/再起動の永続性、複数タブ、SDK更新バックオフ全体、サーバー側local失効は未検証。既存永続化/形式/切替E2Eは今回再実行していない。C03は進行中のまま、C04/C05・本番・実アカウント・DB・読書アプリには接続/変更しない。
-
-### PR #51先生レビュー：通信許可境界
-
-既存の実SDK26ケースは通常Auth通信と通信異常を検証していたが、許可条件を直接確認する試験が不足していた。製品APIに試験入口を追加せず、試験内で実SDKへ注入されるfetchを捕捉し、境界54ケースを追加した。URL・クエリ・ポート・ユーザー情報・パス表記・Request/init・getter例外・body/headers保持・中断・リダイレクト・応答URL・204/JSON/エラー本文を検証する。
-
-実SDKへ渡すfetchの判定と送信対象を同じRequestへ統一し、4通信のURL/method完全一致へ限定した後、型チェック・全Vitest33ファイル1,438件（既存1,384件＋境界54件）・auth/preview/cloud-offlineビルドはPASS。実SDK26ケースも同じ実SDKを使ってPASSしており、SDKの正規通信を遮断していない。今回はSDK未接続の既存メモリUIのE2Eは再実行せず、前回83件PASSと区別する。型設定・SDKバージョン・認証/保存の既存契約は変更しない。
-
-正本は[統合仕様§1.1](../doc/v1.1.0/memo_v1_1_implementation_review8.md)。PR #50の通信なしAuth境界に、今回は実SDK＋注入した専用保存先・fetchを接続する。実SDKのAPIやJSON処理は実行するが、試験のHTTP応答はすべて模擬であり外部通信はしない。公開画面・既存保存先・本番Authへ接続しない。
-
-## 境界
-
-**オーナー承認済み：通常ログアウトは`signOut({ scope: 'local' })`。** 他端末のセッションまで無効化するglobalは採用しない。ただし、同一ブラウザで認証情報の保存先を共有する場合はlocalでも読書アプリへ影響する可能性があり、アプリ単位のログアウトを保証しない。読書アプリのログアウト実装・セッション保存方式の確認は後日とし、今回は同アプリを変更しない。
-
-- 読書アプリの`signInWithPassword`/`signOut`、URL・公開クライアントキーをビルド時に渡す構成を踏襲する。メモ専用クライアント生成は明示関数でのみ行い、モジュール読込だけではクライアント生成・通信・保存領域参照を行わない。SDK追加と注入保存先への接続までを今回行い、製品入口は結線しない。
-- セッション保持はSDKのpersistSession/autoRefreshTokenと専用storageKeyで指定し、セッション保存先は注入する。アカウント共用から他アプリのブラウザセッション共有を推測しない。実際の永続保存先・環境変数の結線と実ブラウザ再読込後の保持は後続の承認付き接続試験で確認する。
-- 状態は認証ユーザーID・世代・期限・固定理由のみ。パスワード・トークン・メール・生例外は状態・通知・ログに含めない。資格情報の記憶・独自トークン保存を行わない。
-- 起動復元と認証イベントの再確認はgetSessionとgetUserを用い、期限とユーザー対応を検証する。イベントコールバック内ではSDKを再呼出しせず、後続microtaskで確認する。新イベント・操作・破棄で旧応答を失効させる。
-- 操作中のイベントは、処理で新しく検証したセッションとユーザーID（UUID大小文字同値）・有効期限・アクセストークンがすべて一致するSIGNED_IN/TOKEN_REFRESHED/INITIAL_SESSIONに限り重複としてまとめる。照合用トークンは処理中だけに保持し、状態・context・ログに含めず消費後に参照を外す。古いcontextを再有効化する判定には使わない。
-- 一致しないイベントは処理完了後に読取専用の再確認を最大1回予約し、再確認中の異なるイベントから再確認を連鎖させない。確認不能なら書込停止する。操作結果appliedだけを認証有効の証拠にせず、呼出側は必ず現在のcontextを確認する。
-- getUser成功時点では検証結果を処理内に保持し、authenticatedをまだ公開しない。呼出元へ戻った後、保留イベント照合・有効期限の再確認・新世代の認証済み公開をawaitなしの同じ同期処理で完了させる。照合前のmicrotask間ではcontextを発行しない。途中の破棄後に検証結果を反映しない。
-- 失効・期限切れ・確認不能時は書込用contextを発行しない。失効前のユーザーIDを再認証対象として保持し、別ユーザーが返った場合は停止する。ドラフトは扱わず、既存controllerのタブ内保持契約を維持する。
-- C04/C05はgetContext/isCurrentを要求開始時と応答反映前に確認し、保存先・画面セッションも独自に照合する。contextは発行元インスタンスと認証世代に結び付ける。C04が現在要求の認証失効を確認した場合はrequireReauthenticationで書込を停止する。古いcontextの通知で新しい認証を停止しない。サーバー権限確認やRPC実行を代行しない。
-- ログアウトは離脱確認・保存中抑止を済ませた呼出側だけが実行する内部入口。C03は保存先や画面を変更しない。失敗時はセッション状態を推測せず書込停止し、利用者による再確認を要求する。自動ログアウト・自動再送を追加しない。
-- ログアウトのエラー応答・例外時は、待機中に保留したAuth通知を消費しても読取再確認を自動予約しない。blockedと旧context無効を維持し、明示的なrestore/login、又は失敗処理後に独立して届いた通知による新しい確認を待つ。成功したログアウトに対するイベント処理は変更しない。
-- 自動切替・取消時の画面維持はC05、クラウド保存・結果不明要求保持はC04の責務。本工程はその製品統合の完成ではない。
-
-## 通信なし試験
-
-### 認証イベントの状態遷移・復帰条件（PR #50先生レビュー対応）
-
-| 入力・状況 | 遷移と利用条件 |
-|---|---|
-| 認証済みで新通知を受信 | 即時blockedで旧contextを無効化し、callback後のcheckingでSDK現在値とgetUserを確認する |
-| ログイン/復元の確認中に同一セッションのイベントが重複 | checking中はcontextを発行しない。getUser確認成功とイベント同一性が成立した場合だけ、新世代のauthenticatedを維持する |
-| ログイン確認中に異なるイベント | 確認成功後もblockedへ戻し、最大1回の読取再確認を行う。ログイン要求を再送しない |
-| 読取再確認中に同一イベントが重複 | 読取・getUser確認が成功した場合、新世代のauthenticatedへ進む。旧contextは復活しない |
-| 再確認失敗、又は再確認中に異なるイベント | blocked・contextなしを維持し、既知の同一ユーザー再認証対象を保持する。自動確認の連鎖も書込/ログイン再送もしない |
-| blockedからの復帰 | 明示restore/login、又は後から独立して届いたSDK通知による新しい確認が必要。SDK現在値・getUser・期限・同一ユーザー条件を満たす場合のみ新contextを発行する。新通知がなければ再確認失敗後に自動再試行しない |
-
-SIGNED_OUT、不正イベント、ユーザー/トークン/期限の相違を同一イベントとして扱わない。イベントに含まれるセッションだけで認証を成立させない。
-
-| 観点 | 期待結果 |
-|---|---|
-| 生成・設定 | 明示生成までfactory/保存先を呼ばない。専用キー、保持設定。秘密キー・不正URL拒否 |
-| ログイン・復元 | メール/パスワードを変更せず1回渡す。セッションと検証済みユーザーが一致した場合のみcontext発行 |
-| 異常 | 不正セッション・期限切れ・確認失敗・例外は固定理由で停止、機密情報を返さない |
-| 非同期 | 二重操作拒否、イベントと要求の逆順・破棄後応答無効、購読解除 |
-| ログアウト範囲 | localを必ず明示し、引数省略・global・othersへの変更や失敗後の再送をしない |
-| 再認証 | 同一UUIDの大小文字同値を許可、別ユーザー拒否。失効前contextは再利用不可 |
-| 保護 | 失効・ログアウト開始で即時書込停止。別インスタンスのcontext拒否。画面・ローカル保存・RPC操作0件 |
-
-型チェック・全Vitest・既存メモリE2E・既存ビルドで回帰確認する。実Supabase、実SDK、実セッション永続化、他タブ通知、実認証期限更新、実RLS/HTTPは未検証。C04/C05やQ04へ引き継ぎ、通信なしPASSを製品接続・公開承認にしない。
-
-## 実施結果（2026-11-08）
-
-基準mainは`ff131ae`（PR #49マージ後）。依存追加なし。停止前の型チェック、全Vitest1,341件、既存メモリE2E83件、preview/persistence/format/transition/cloud-offlineの5ビルド、通信なしクラウド10ケースはPASS。local承認反映後に型チェック、全Vitest31ファイル1,342件（既存1,300件＋C03追加42件）、既存メモリE2E83件、preview/cloud-offlineビルド、Authのブラウザ向け単独バンドル、通信なしクラウド10ケースを再実行しPASS。既存メモリE2Eの禁止APIガードを変更していない。
-
-Auth試験は合成の注入APIとメモリ状態だけを使う。新しいSDKを導入した試験や、実セッションを保存・復元した試験ではない。既存永続化・形式更新・公開切替E2Eは今回未実施（既存保存/API・公開資産を変更せず、Authをその入口へ接続していない）。
-
-先生レビューの回帰試験は追加8ケース。同一イベント重複、再確認のgetSession/getUser失敗と明示復帰、トークン・期限・ユーザー・失効の相違を検証する。Auth試験は計50件。修正後の型チェック・全Vitest31ファイル1,350件・preview/cloud-offlineビルド・Auth単独バンドルはPASS。今回はAuthが既存メモリUIへ未接続のためE2Eを再実行せず、前回83件PASSの記録と今回の実行結果を区別する。実SDK接続・本番Auth検証は未実施、C03は進行中を維持する。
-
-Codexレビューのログアウト失敗中イベントの指摘は、エラー応答/例外と明示restore/後続独立通知の組合せ4ケースで修正前の意図しないauthenticated復帰を再現した。失敗時の保留イベントによる自動確認を抑止した後、型チェック・全Vitest31ファイル1,354件（Auth54件）・preview/cloud-offlineビルド・Auth単独バンドルはPASS。成功時のイベント処理・古いcontextの無効化・自動再送禁止は維持する。今回も未接続のE2Eと実SDK・本番Auth試験は未実施。
-
-次のCodexレビューでは、ログイン/復元のgetUser完了直後、保留SIGNED_OUT照合前のmicrotaskで利用可能なcontextが発行されることを修正前に2ケースで再現した。認証済み公開を同期的な最終照合へ移し、同じ間隙での破棄・期限到達も含め4ケースを追加。型チェック・全Vitest31ファイル1,358件（Auth58件）・preview/cloud-offlineビルド・Auth単独バンドルはPASS。過去のcontextは復活させず、E2E再実行・実SDK接続・本番Auth操作は未実施。
+今回の結果：全Vitest59ファイル1,972件、Playwright83件、typecheck、local/cloud buildはPASS。詳細は[UAT正本](HUMAN-UAT-v1.1.0.md)の今回のAI Gate記録を参照。実通信・Human UATは実施していない。SDK標準へ変更したことだけを根拠に実ログイン成功やUAT-05 PASSとはしない。
