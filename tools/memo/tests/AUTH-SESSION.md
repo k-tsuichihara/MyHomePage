@@ -33,7 +33,7 @@ RLS・auth.uid()・RPC内所有者確認・直接DML禁止はDB側の既存契�
 
 - 未ログイン→local、login成功→既存D05/C05を通ってcloud、logout→local。
 - dirty/UNKNOWN/保存中の離脱保護、cancel時のtarget/draft保持、busy時の操作抑止を維持する。
-- dirty localのD05 cancel後に限る「クラウド利用を続ける」を維持する。常設のlocal/cloud選択・手動restoreボタンは復活させない。
+- 通常review2製品UIのloginは一覧限定。新規・保存済み編集ではdirty/cleanを問わず非活性表示し、古いclick/form送信も現在画面から拒否する。認証画面とlogout回復は維持する。自動restore等のcancel後に必要なcloud再開は一覧でのみ表示・実行する。常設のlocal/cloud選択・手動restoreボタンは復活させない。
 - 保存先表示は「現在の保存先：ローカル（未ログイン）」「現在の保存先：クラウド（ログイン中）」「現在の保存先：ローカル（ログイン中）」。
 - Auth失効時は既存C05契約どおりcloud選択とdraftを保持し、cloud操作を停止する。通常の明示logoutとの違いを維持する。
 - local/cloud同期・転送・暗黙fallbackを追加しない。UNKNOWNを成功扱いしない。
