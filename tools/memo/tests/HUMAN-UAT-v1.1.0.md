@@ -4,7 +4,7 @@
 
 作成日：2026-11-19。**Q05実施中。PR #122マージ後、HumanがR01-A/B/Cを実操作し、すべて期待結果を満たし追加指摘なしと報告したため、UAT-01はPASS。** 本書をQ05のケース・進捗・結果記録の正本とする。修正PR・AI GateのPASSをHuman再確認の代用にしない。
 
-**UAT-01〜04は正式PASS。UAT-05はFAILで停止。** 旧方式での実loginはblockedとなり05-2の成功条件へ未到達。取得済み固定コードを原因調査記録に残し、オーナー判断で追加診断を停止、SDK標準Authへの簡素化を採用した。新方式はoffline AI Gateまでで、実Auth/RPCとHuman UAT再開はまだ承認していない。既存R05の幅・ラベル・横並び・エラー表示はHuman PASSを維持し、再確認しない。06以降も未開始。Q05全体は継続中。
+**UAT-01〜04は正式PASS。UAT-05はFAIL／停止中。** Humanからdev-sandboxのPauseが判明し、Resume後にSDK標準Authで実ログイン成功と報告された。PR #124のAuth実装を失敗原因としない。旧「編集中login→D05 cancel→local（ログイン中）→編集継続」もHuman確認済みだが、保存先の分かりにくさから下記の一覧限定loginへ仕様変更した。新UXはHuman未確認。R05の既存Human PASSは維持し、06以降も未開始。今回の実装はofflineのみで追加実通信・UAT再開を行わない。
 
 | 項目 | 件数・状態 |
 | --- | --- |
@@ -23,7 +23,7 @@
 | UAT-02 | 探す・タグで整理・ピン留め | PC/local一覧・タグ管理 | PASS |
 | UAT-03 | 編集画面で読み進める・編集・複製 | PC/local編集・離脱確認 | PASS |
 | UAT-04 | ゴミ箱で整理する | PC/local・復元・単件完全削除 | PASS |
-| UAT-05 | ログインして保存先を選ぶ | PC/cloud Auth・D05・切替確認 | FAIL |
+| UAT-05 | 一覧からログインしてcloudを使う | PC/cloud Auth・D05・切替確認 | FAIL |
 | UAT-06 | cloudで書く・保存・再読込・session復元 | PC/cloud実製品経路 | NOT STARTED |
 | UAT-07 | ログアウトしてlocalへ戻る | PC/cloud→local・離脱確認 | NOT STARTED |
 | UAT-08 | バックアップ・復元の代表利用 | PC/local・ファイル・追加復元 | NOT STARTED |
@@ -170,33 +170,37 @@ Human報告IDの「UAT-03-1/03-2」は下表の確認内容を指す。元の操
 
 **最終判定：UAT-04は正式PASS。** 利用者向けの全期待結果は上のHuman4件で満たされ、技術的なread-only等の既存証拠も保持している。未確認項目・未解決問題0。再実施や新規Human確認は不要。次は未開始のUAT-05だが、この記録更新はAuth/RPC等の実操作承認や開始を意味しない。
 
-### UAT-05：ログインして保存先を選ぶ
+### UAT-05：一覧からログインしてcloudを使う
 
-- **目的**：実AuthとD05切替、保存先認識、未保存時の確認を受け入れる。
-- **前提条件**：接続設定開始・Auth・後続RPCを含むcloud実操作の別承認済み。専用合成ユーザーとdev-sandboxを使用。cloud候補を新規profileで起動する（01のprofileとは別）。起動直後は接続設定欄のみで、localメモ操作・認証UIはまだ生成されていない。
+- **目的**：編集を確定または破棄して一覧からログインし、cloud保存先を迷わず認識できることを受け入れる。
+- **前提条件**：承認済みdev-sandboxと合成ユーザー、通常cloud製品候補を使用。追加実Auth／cloud readを行う場合は従来どおり別途承認後のみ。接続設定開始の準備はHuman確認済みで、技術的な再起動が必要な場合を除きやり直さない。
 - **操作手順**：
-  1. 接続設定欄に承認済みdev-sandboxのpublishable keyを入力し、「承認済みクラウド接続を開始」を1回押す。local操作・認証UIが現れ、未ログイン／保存先localであることを確認する。開始失敗や想定外の認証状態ならここで停止する。
-  2. local側で「UAT-cloud起動用local」を作成して明示保存する。そのメモを編集して未保存の追記をする。
-  3. 保存先欄からログイン画面を開き、合成ユーザーでログインする。cloud切替の離脱確認は一度キャンセルする。接続設定開始を繰り返さない。
-  4. local選択と入力内容が維持されていることを見て保存する。
-  5. 認証済みlocalの「ログイン / 保存先」画面に、このcancel後だけ現れる「クラウド利用を続ける」を押し、cloud一覧の読取結果を確認する。まだdirtyなら既存確認を経由する。常設の保存先選択やsession復元ボタンは使わない。
-- **期待結果**：通常は未ログインlocal、login成功でD05経由のcloud、logoutでlocal。dirtyの切替確認をcancelすると認証済みlocalとdraftを維持し、その後だけ状態限定の再開入口を使える。再開時も必要な確認を迂回せず、cloudと分かり、localメモが自動転送されたように表示されない。
-- **Humanが見るポイント**：ログイン状態と保存先の区別、確認cancel後の安心感、cloud読取の文言。
+  1. localの新規作成または保存済みメモ編集画面を開く。
+  2. 「ログイン / 保存先」から認証画面を開き、「ログイン」が表示されたまま非活性で、一覧へ戻る案内が分かることを見る。dirty／cleanの全組合せをHumanで反復しない（AI Gateへ委譲）。
+  3. 認証画面を閉じ、必要なら既存の未保存離脱確認を通って一覧へ戻る。自動保存・自動転送はしない。
+  4. 一覧から認証画面を開き、ログイン可能になっていることを見る。
+  5. 必要な実通信が承認された後に、既知の合成ユーザーでログインする。Resume後の実ログイン成功は既存Human証拠として再利用する。この操作は新UXでの一覧からcloudへの接続確認のために限り、Auth成功そのものの再試験を追加しない。
+  6. login成功後、既存D05/C05を経てcloud利用へ進むことを見る。
+  7. 「現在の保存先：クラウド（ログイン中）」を確認する。
+  8. cloud移行時の既存snapshot読取結果を見る。成功／UNKNOWN等を推測しない。UNKNOWN・エラーなら停止し、再送しない。
+- **期待結果**：通常は未ログインlocal。新規・保存済み編集ではdirty／cleanにかかわらずlogin不可、一覧では可能。成功後は既存保護を通ってcloudへ進み、保存先を認識できる。localのメモやdraftをcloudへ自動転送しない。旧編集中login・D05 cancel・cloud再開は新仕様の必須受入条件にしない。
+- **Humanが見るポイント**：非活性理由、一覧へ戻る導線、保存先表示、cloud読取の案内。
 - **結果**：FAIL
-- **備考**：05-1の準備後、Humanが05-2の実loginを試行したがblockedで未完了。D05 cancel以降の成功条件は未判定。既存R05はHuman PASSを維持する。追加診断を停止し、下記SDK標準Authへの簡素化とoffline AI Gateまで完了した。UATは再開しない。レビューと別途承認後の再開対象は既存手順2〜5であり、05-1の準備やR05を理由なく繰り返さない。起動/ログイン/読取成功を推測で記録しない。実施日時・ブラウザ・buildは未報告。今回のAI作業は実通信の承認ではない。
+- **備考**：Resume後の実ログイン成功と旧D05 cancel／認証済みlocalでのdraft保持はHuman確認済み。旧挙動は履歴として保持し、新UXのPASS証拠へ読み替えない。上記の新UXとcloud移行／snapshotの未報告部分のみHuman確認待ち。実施日時・ブラウザ等は未報告。UAT-06以降は開始しない。
 
 #### UAT-05のHuman UX指摘・対応（U05）
 
 | ID | Human観測・要望 | 調査・修正内容／既存契約への影響 | AI Gate | Human再確認・判断 |
 | --- | --- | --- | --- | --- |
 | U05-01 | cloud previewの幅が変更できない。local preview同様に変更したい | cloudだけviewport:nullがなかった。既存共通optionsで両previewへ適用。専用profile・固定配信・cloud接続開始条件・localのdead proxy等は維持。新基盤なし | G05 | PASS：Humanが幅追従を受入。再実施不要 |
-| U05-02 | 「ローカルを選択」「クラウドを選択」を削除したい | 正式決定で通常製品DOMから削除。dirty localのD05確認cancel由来の移行意図がある同一userのlocal選択中だけ「クラウド利用を続ける」を表示。内部C05と既存departureを維持。cloud明示再読取は既存loadへ分離 | G05-決定反映後 | 仕様決定済み。新しい状態限定入口のHuman結果はPENDING、既存05手順2〜5内で確認 |
+| U05-02 | 「ローカルを選択」「クラウドを選択」を削除したい | 正式決定で通常製品DOMから削除。dirty localのD05確認cancel由来の移行意図がある同一userのlocal選択中だけ「クラウド利用を続ける」を表示。内部C05と既存departureを維持。cloud明示再読取は既存loadへ分離 | G05-決定反映後 | 旧D05 cancelと認証済みlocalでの編集継続はHuman確認済み。今回の一覧限定login決定で必須フローから除外。新UXのHuman結果はPENDING |
 | U05-03 | 入力欄を「メールアドレス」「パスワード」と表示 | 表示ラベルのみ変更。資格情報の扱い/検証/送信は変更なし | G05 | PASS：Humanがラベルを受入。再実施不要 |
 | U05-04 | 「セッションを復元」が通常利用に必要か確認 | 正式決定で通常製品DOMから削除。自動restore/内部API/SDK/購読は維持。利用者の回復は既存の再ログイン。ボタン表示を内部APIの必須条件としない | G05-決定反映後 | 仕様決定済み。旧restore操作のHuman試験は追加しない。ボタン不在は05操作中に確認可能 |
 | U05-05 | ログイン/ログアウトを横並びにする | 同じauth-actions行へ既存ボタンを移動。handler・disabled・departure判定は維持 | G05 | PASS：Humanが横並びを受入。再実施不要 |
 | U05-06 | 認証等のエラー文字を赤色にする。文言/処理は維持 | 既存Auth phaseと操作/読取結果から表示用data-noticeを付与。blocked・拒否・UNKNOWN等を赤、読取成功・離脱cancel等のroutineは従来色。文言・結果意味・再送禁止は不変 | G05 | PASS：Humanがエラー表示の扱いを受入。故意の認証失敗を追加しない |
 
-**正式な製品決定**：認証と保存先は内部的に別でも、通常利用者へ独立した保存先選択を露出しない。未ログインlocal→login成功時にD05→cloud、logout→local。cancelで残る認証済みlocalからだけ「クラウド利用を続ける」で再開できる。cancel後のlocal明示保存でdirtyが解消しても移行意図は保持し、再開はその時点の既存C05/離脱判定に従う。Auth未確認/失効中は入口を隠して操作を止め、同一userの有効contextが再確認された場合にだけ再表示。別user/cloud移行/logout/disposeで意図を破棄し、古い確認や遅い完了で別ユーザーへ引き継がない。自動restoreは維持、失敗時は再ログイン。以前の「既存ボタンを残す必要がある」という調査結論は、内部制御とUIを区別した本決定で置換する。
+**正式な製品決定（今回更新）**：通常loginは一覧から行う。新規／保存済み編集ではdirty・cleanを問わずログインボタンを非活性表示し、イベント実行時にも現在画面を再確認する。一覧へ戻る際の既存離脱保護を維持する。常設local/cloud選択・手動restoreは復活させない。自動restore／内部Auth API／SDK通知による認証変化にはD05/C05が引き続き必要である。残存する切替cancel後の再開入口は一覧でだけ使用可能とし、編集中には表示・実行しない。これは旧編集中loginフローを維持するための例外ではない。cloud編集中の認証失効でもlogoutによる既存のdraft保護・local復帰は維持する。
+
 
 #### G05：正式UI決定前のAI Gate履歴（実通信なし）
 
@@ -229,29 +233,22 @@ Humanが以下4項目を再確認しPASSと報告。実施日時・ブラウザ�
 - 明示再読取は既存の成功案内だけを更新し、要求は既存memo_load_snapshotだけ。編集中・busy・不明変更要求保持中は拒否。非製品の独立DOM fixtureは従来C05/API接続の回帰を維持するが、その汎用切替/restore操作UIを製品へ出さない。新しいAuth/RPC/安全判定の状態機械は作らない。
 - 実Supabase/Auth/RPC/DB/SQL通信0。Human UAT再開・実マイク・実スマホ・production・公開/デプロイなし。今回R05のPASSはHuman報告に基づく記録で、AI試験による代用ではない。新しい製品決定のHuman確認は05手順2〜5に統合し、ケース全体はFAILを維持する。
 
-#### SDK標準Authへの簡素化（offline完了後もHuman未受入）
+#### SDK標準Authへの簡素化と実ログインのHuman証拠
 
 - **採用したHuman証拠**：旧Auth方式の1回の診断で `login-start → checking → transport-exception → password-auth-rejected → blocked` を取得した。旧password要求のtransport境界で停止しており、具体的なネットワーク/応答原因は未確定。初期restoreの一時blocked、後続login-limit、診断欄の表示不備もlogin成功の証拠にはしない。
 - **オーナー決定**：追加のtransport細分化を停止し、読書管理と同等のSDK標準Auth＋既存製品用adapterを採用する。SDK 2.119.0・メモ専用storageKey・local scope logoutを維持する。
 - **実装**：Auth safeFetch/Response再構築、追加getUser、通知のtoken/期限厳密照合と再確認連鎖、Storage allowlist/sticky停止を撤去。一時診断の実装・通信予算・専用build/runner/起動scriptも撤去。過去の診断手順は再実行しない。必要な結果だけ[Auth契約](AUTH-SESSION.md#取得済みhuman診断証拠とtransportのoffline切り分け)へ残す。
 - **維持する受入条件**：user/generation/旧draft/snapshot保護、D05/C05、保存先表示、busy/UNKNOWN、C04の要求/競合/自動再送禁止、local/cloud分離、RLS/auth.uid()/RPC所有者確認/直接DML禁止は維持する。
 - **AI Gate**：全Vitest59ファイル・1,972件PASS（単一全回帰、exit0）。先行Auth/SDK/購読/RPC境界77件、製品composition/C04/C05の45件もPASS。旧safeFetch/Storage allowlist/通知token厳密照合と一時診断だけを守る試験を整理し、新仕様の試験へ更新した。Playwright83件PASS・exit0。Windowsのpreview終了待ちは全83 assert完了後に今回所有のlocalhostサーバーだけを停止して終了した。typecheck、local/cloud product buildもPASS。製品UIのD05 cancel/再開、dirty/UNKNOWN/busy、別user・旧generation・遅い応答・dispose、保存先3状態、local-only、秘密非混入、SDK標準復元/refresh/local logoutをfake/offline確認した。実Supabase/Auth/RPC/DB/SQL/cloud write・production・公開は0。文書整合性/diff checkもPASS。今回のAI Gateは実ログイン成功やUAT-05 PASSの証拠にしない。
-- **Human結果**：新方式はPENDING、UAT-05はFAIL/停止中。既存R05とUAT-01〜04のHuman PASSを維持し、06以降は未開始。今回の実Auth/RPC/DB/SQL/cloud writeは未承認。
-- **次の最小操作**：AI Gate後、別途承認されたdev-sandboxの通常cloud製品候補で既存05手順2〜5だけを再開対象とする。未ログインlocal表示→既知の合成userでlogin→dirty localのD05 cancelとdraft保持→状態限定のcloud再開でcloud移行を確認する。cloud移行に伴う既存loadを含む実Auth/RPCの範囲は、再開前に別途明示承認を得る。繰り返しlogin・旧診断・既存R05の再実施・新しいHumanケースは追加しない。
+- **Human結果（更新）**：dev-sandboxがPause中だったとHumanが報告。Resume後の実ログイン成功をHuman確認済み。SDK標準Authの不具合とは扱わない。旧D05 cancelと認証済みlocalでのdraft保持も確認済み。ただし今回決定した一覧限定loginは未確認のため、UAT-05はFAIL／停止中。既存R05・01〜04 PASSを維持し06以降は未開始。
+- **次の最小操作**：本ケースの更新後手順1〜8の未確認部分のみ。既存R05とResume後のAuth成功そのものを反復しない。新しいR05枝番・Humanケースは作らない。
 
-#### 原因解消後にHumanが再開する箇所（現在停止・未実施・PENDING）
+#### 今回のoffline AI GateとHuman残確認
 
-保存先ステータスの追加UX finding：保存先と認証状態を併記する。未ログインlocalは「現在の保存先：ローカル（未ログイン）」、D05 cancel後の認証済みlocalは「現在の保存先：ローカル（ログイン中）」、認証済みcloudは「現在の保存先：クラウド（ログイン中）」。認証確認中・確認不能・終了はその状態を表示し、cloud選択保持を未ログインlocalへ読み替えない。表示のみの変更で、D05/C05/Auth/restore/load契約は変更しない。Human結果はPENDING。下の既存フローで未ログイン時・cancel後・cloud移行後の表示を合わせて見るだけとし、独立ケース・追加login・既存R05再実施は不要。UAT-05はFAIL／停止中を維持する。
-
-この追加表示変更のAI Gate：product-layout/product-session-uiの関連409件のうち408件は回帰実行でPASS。1件は同じ認証確認不能文言が2箇所に表示されるため旧テストの広いlocatorが重複一致し、通知欄を明示するlocatorへ更新後、その1件も再実行PASS。単一実行の409件全PASSとは区別する。1200/390/320pxの表示、D05 cancel後localと移行後cloud、旧3ボタン不在、既存操作ガードを含む。typecheck、local/cloud product build、UAT件数整合、diff checkはPASS。製品処理契約変更・実通信・Human UAT再開なし。
-
-今回の変更だけのために新規ケースや追加Auth操作を増やさない。既存05手順2から再開する。05手順1の準備とR05の4項目は確認済みなので繰り返さない（起動/接続が技術的に必要な場合の個別承認は別）。
-
-1. 合成localメモを保存し、未保存の追記をする。通常の認証画面に旧3ボタンがなく、まだ「クラウド利用を続ける」が出ないことを操作中に見る。
-2. 一度ログインし、D05の未保存確認をcancel。認証済みlocal・draft保持を見てからlocalへ保存する。
-3. 認証画面の状態限定「クラウド利用を続ける」を押す。まだ未保存なら既存確認に従い、cloud選択・読取結果を確認する。cloudへ移行後は再開入口が消える。通常login成功時の自動cloud移行は既存Human GateとAI証拠を再利用し、そのためだけの再ログインを追加しない。
-
-この3点は元の05手順2〜5の統合である。実Auth/cloud追加操作は承認後のみ。UNKNOWN/エラーなら停止し再送しない。05全体はHuman結果が揃うまでFAILを維持し、06以降は未開始。
+- login禁止は通常review2製品UIの画面制約であり、内部login／restore APIや非製品のC05試験用fixtureを禁止しない。local route／cloud editorの既存状態から判定し、dirty状態機械は追加しない。認証画面自体は開けるため、案内・既存logout回復を利用できる。
+- 新規clean／dirty、保存済みclean／dirty、一覧復帰、古いbutton／form送信、cloud editorとlogout回復、list login→cloud/load、既存C05回帰をofflineで検証する。
+- **AI Gate結果**：全Vitest59ファイル・1,970件PASS、既存Playwright E2E83件PASS（exit0）、typecheck、local/cloud product build、文書整合性、diff checkはPASS。1200/390/320pxで一覧login可能、新規/保存済みのclean/dirty編集で非活性、古いclick/form送信の拒否、離脱cancel時draft維持、保存後一覧復帰で有効、list loginから既存cloud/loadへの接続を合成製品試験で確認。cloudの新規/保存済み編集も禁止し、認証失効時のlogout確認/cancelとcloud編集保持を確認。旧編集中loginの製品試験を新UXへ置換し、非製品fixtureのD05/C05・旧user/generation・UNKNOWN等の安全回帰は維持した。WindowsのE2E終了待ちは全83 assert完了後、今回所有のlocalhostサーバーだけを終了しexit0を確認。実Supabase/Auth/RPC/DB/SQL/cloud write・production・Human操作・公開/デプロイ0。
+- **Human残確認結果**：PENDING。新UXの非活性表示と理由、一覧復帰後のlogin可能、新UXからcloudへの移行／保存先表示／既存readの未確認部分を既存05内で確認する。旧D05 cancelは必須再確認しない。追加実Auth/RPC、Human再開、production操作は今回実施しない。
 
 ### UAT-06：cloudで書く・保存・再読込・session復元
 

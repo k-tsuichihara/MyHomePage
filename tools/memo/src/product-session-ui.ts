@@ -75,6 +75,10 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const proceed = button('確認してログアウト'), cancel = button('ログアウトをキャンセル');
   confirmation.append(warning, proceed, cancel);
   const authActions = doc.createElement('div'); authActions.className = 'auth-actions'; authActions.append(login, logout);
+  const loginHint = doc.createElement('p'); loginHint.id = 'product-login-hint'; loginHint.hidden = true;
+  loginHint.textContent = '編集画面ではログインできません。一覧画面に戻ってからログインしてください。';
+  login.setAttribute('aria-describedby', loginHint.id);
+  form.append(loginHint);
   form.append(authActions); if (!productLayout) form.append(restore);
   root.append(state, source, form, confirmation, feedback);
   let authDialog: HTMLDialogElement | undefined;
@@ -123,11 +127,14 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   let observedApp: LocalAppState | undefined, cloudOwner: string | null = null;
   let observedEditor: EditorState | null | undefined, selectionTicket = {};
   const isBusy = () => local.isBusy() || !!cloudEditor?.isBusy() || stateRunning;
+  // 通常製品の画面契約。dirty判定や離脱判断は既存C05/navigationに任せる。
+  const editing = () => productLayout && (cloud?.target.current().target === 'cloud'
+    ? !!cloudEditor?.getState() : local.getState().route.kind === 'edit');
   let loading = false;
   let authOperation: { completed: AuthContext | null } | undefined;
   // 初期local読込中も認証は復元できる。busy終了通知で一度だけ既存離脱経路へ渡す。
   let selectAfterAuth: (() => void) | undefined;
-  // 認証/保存先の判定は既存C03/C05に委譲。ここにはdirty localの切替cancel由来の表示意図だけを保持する。
+  // 自動restore等の切替cancel後の回復用。編集中loginの旧導線は作らず、再開も一覧に限定する。
   let cancelledCloudUser: string | null = null;
   const context = () => {
     const value = session.getContext?.();
@@ -184,7 +191,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       const auth = context(), selectedCloud = cloud?.target.current().target === 'cloud';
       if (['signed-out', 'disposed'].includes(current.phase) || selectedCloud
         || auth && cancelledCloudUser && uuidKey(auth.userId) !== cancelledCloudUser) cancelledCloudUser = null;
-      resumeCloud.hidden = !productLayout || !cloud || !cancelledCloudUser || !auth || selectedCloud;
+      resumeCloud.hidden = !productLayout || !cloud || !cancelledCloudUser || !auth || selectedCloud || editing();
       resumeCloud.disabled = busy || !!pending || isBusy() || loading;
       readAgain.hidden = !productLayout || !selectedCloud;
       readAgain.disabled = busy || !!pending || isBusy() || loading || stateUncertain() || !!cloudEditor?.getState() || !cloudContext();
@@ -196,7 +203,9 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       state.dataset.notice = current.phase === 'blocked' || !Object.hasOwn(phases, current.phase) ? 'error' : 'routine';
       if (current.phase === 'blocked') state.textContent += '。同じユーザーで再認証してください。';
       if (current.phase === 'disposed') { unavailable = true; login.disabled = restore.disabled = logout.disabled = true; return; }
-      login.disabled = restore.disabled = busy || !!pending || current.phase === 'checking';
+      restore.disabled = busy || !!pending || current.phase === 'checking';
+      login.disabled = restore.disabled || editing();
+      loginHint.hidden = !editing();
       logout.disabled = busy || !!pending || isBusy() || current.phase === 'checking' || current.phase === 'signed-out';
       if (!busy && !pending && !isBusy() && (local.isReady?.() ?? true) && selectAfterAuth) {
         const select = selectAfterAuth; selectAfterAuth = undefined; select();
@@ -215,6 +224,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const clearConfirmation = () => { pending = undefined; confirmation.hidden = true; };
   const run = async (operation: 'login' | 'restore' | 'logout') => {
     if (closed || unavailable || busy || pending) return;
+    if (operation === 'login' && editing()) return;
     selectAfterAuth = undefined;
     cancelledCloudUser = null;
     const operationAuth = { completed: null as AuthContext | null };
@@ -381,7 +391,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const onLocal = () => requestDeparture('local'), onCloud = () => requestDeparture('cloud');
   const onResume = () => {
     const auth = context();
-    if (!productLayout || closed || unavailable || busy || pending || isBusy() || loading || !auth
+    if (!productLayout || closed || unavailable || busy || pending || isBusy() || loading || editing() || !auth
       || !cancelledCloudUser || uuidKey(auth.userId) !== cancelledCloudUser || cloud?.target.current().target !== 'local') return;
     requestDeparture('cloud');
   };
