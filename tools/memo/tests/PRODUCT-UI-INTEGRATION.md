@@ -6,13 +6,14 @@
 
 保存先ステータスは「現在の保存先：ローカル／クラウド（未ログイン／ログイン中）」の形で、実際のC05選択と現在の有効Auth contextを併記する。D05 cancel後は「現在の保存先：ローカル（ログイン中）」。認証確認中・確認不能・終了は各状態を示し、保持中のcloud選択をlocalへ読み替えない。操作ボタンやD05/restore/loadの制御はこの表示変更で変更しない。
 
-Human報告でdev-sandboxのPauseが判明し、Resume後のSDK標準Authで実ログイン成功を確認済み。PR #124のAuth実装を原因とはしない。新UXはHuman未確認のためUAT-05はFAIL/停止中。既存R05の幅追従・ラベル・login/logout横並び・エラー表示はHuman PASS。[UAT正本](HUMAN-UAT-v1.1.0.md)のU05/R05と正式決定を受入記録とする。
+Human報告でdev-sandboxのPauseが判明し、Resume後のSDK標準Authで実ログイン成功を確認済み。PR #124のAuth実装を原因とはしない。PR #125後の編集時login非活性・理由・一覧復帰後の有効化と案内消去・一覧から実login成功もHuman確認済み。保管dirtyのD05二重確認でSTOPし、cloud移行/表示/readは未確認のためUAT-05はFAIL/停止中。既存R05の幅追従・ラベル・login/logout横並び・エラー表示はHuman PASS。[UAT正本](HUMAN-UAT-v1.1.0.md)のU05/R05と正式決定を受入記録とする。
 
 - 共通productPreviewOptionsのviewport:nullをcloudにも適用し、localと同じnative windowの幅/高さ追従を使用。cloudの接続開始・固定配信・専用profile・既存route制限は維持し、localだけのdead proxyをcloudの実起動へ追加しない。AI試験はdead proxy/route拒否を併用し、実Auth/RPCへ到達させない。
 - メール/パスワードの表示ラベルを簡素化し、既存login/logoutボタンを同じ操作行へ配置。既存Auth phase/操作結果に対応する表示属性だけでエラーを赤にし、成功・離脱cancel等のroutineは赤くしない。メッセージ文言・結果意味・操作/終了ガードは変更しない。
 - 正式決定：通常製品DOMでは旧3入口を生成しない。未ログインlocal→login成功時に既存D05→cloud、logout→localを利用モデルとする。内部C05・restore API・SDK・起動自動restoreは維持し、利用者の復元失敗時回復は既存loginとする。既存の独立DOM fixture（非製品レイアウト）でのC05/API操作回帰は維持するが、その汎用操作UIを通常entryのreview2製品DOMへ持ち込まない。
 - 自動restore等によるcloud切替確認をcancelした同一ユーザーにだけ、一覧画面で「クラウド利用を続ける」を表示。保存先local・検証済みcontext・同一userが必要。cancel時のユーザー対応を表示意図として持つだけで、要求時は既存requestDeparture→C05/request/confirm・navigationを再評価する。cancel後のlocal保存でも入口を失わず、まだdirtyなら再度確認。Auth未確認/失効中は隠し送信を止め、同一userの検証完了後にだけ復帰可能。別user/cloud移行/logout/disposeで表示意図を破棄。保存中/読取中/確認中は開始しない。
 - 通常製品loginは一覧限定。新規・保存済み編集ではdirty/cleanを問わず非活性表示と実行時ガードを適用し、一覧へ戻る案内を表示する。local route/cloud editorの既存状態を使い、保存/離脱状態機械は変更しない。非製品の独立DOM fixtureは内部API/C05回帰を継続する。認証画面・logoutは編集時も残し、認証失効時の既存回復手段を塞がない。
+- 一覧へ未保存離脱を承認した保管editorの単純dirtyだけで、login後のD05を再確認しない。storageDepartureEditorsをdepartureとC05 dirty算出の両方で使い、local・save=idle/saved・unresolvedなしの保管dirtyだけを評価対象から除く。保管draft/要求は保持する。現在editor、拒否/UNKNOWN/未解決/保存中、全体の失敗は従来評価。logoutの既存確認は維持。新状態機械・自動保存・転送は追加しない。HumanはPR #125の非活性/案内/一覧復帰/login成功を受入済み、二重確認でSTOPし05はFAIL。残確認は既存UAT-05のcloud移行/表示/readの影響部分のみ。
 - cloud再読取は保存先切替と分離。cloud選択中の「クラウドを再読取」から既存C04 loadへ委譲する。editorが開いている間は既存の編集終了/一覧復帰を使い、この独立入口はdisabled。saving/resolve/状態変更busy・UNKNOWN変更要求の保持中・無効Authも拒否する。明示操作以外のload・retry・新RPC・同期/転送/fallbackを追加しない。
 
 以下にある旧手動保存先選択・手動session復元の製品UI説明は当時の履歴。通常UIについては本節とReview8 §1.1の正式決定で置換し、内部APIの安全契約は維持する。過去の「cloud preview設定は変更しない」も当時の範囲であり、今回のviewport追従は通信境界の変更ではない。実Auth/cloud追加操作・Human再確認・公開の承認ではない。

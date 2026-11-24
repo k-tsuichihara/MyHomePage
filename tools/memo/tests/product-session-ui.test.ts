@@ -148,6 +148,27 @@ it.each(['cancel', 'accept'])('D05 loginとdirtyは既存離脱確認を使い%s
     expect(await probe(page, 'fixture.calls.writes + fixture.calls.fetch')).toBe(0);
   } finally { await page.context().close(); }
 });
+it.each(['rejected', 'unknown'])('D05 一覧へ離脱済みでも保管editorの%sは確認し、cancelで要求を保持する', async failure => {
+  const page = await pageFor('cloud-d05-login');
+  try {
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('失敗したlocal draft');
+    await probe(page, failure === 'rejected' ? 'fixture.failReads(true)' : 'fixture.failWrites()');
+    await page.locator('#save').click();
+    await expect.poll(() => probe(page, 'fixture.state().write.kind')).toBe(failure);
+    await probe(page, 'fixture.failReads(false); fixture.reload()');
+    await page.locator('#back').click(); await page.locator('#confirm-yes').click();
+    expect(await probe(page, 'fixture.state().route.kind')).toBe('list');
+    expect(await probe(page, 'fixture.state().retainedEditors[0].save.kind')).toBe(failure);
+    const before = await probe(page, 'fixture.state()'), stored = await probe(page, 'fixture.stored()');
+    const writes = await probe(page, 'fixture.calls.writes');
+    await login(page); await page.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+    expect(await probe(page, 'fixture.state()')).toEqual(before);
+    expect(await probe(page, 'fixture.target().target')).toBe('local');
+    expect(await probe(page, 'fixture.rpcNames')).toEqual([]);
+    expect(await probe(page, 'fixture.stored()')).toEqual(stored);
+    expect(await probe(page, 'fixture.calls.writes')).toBe(writes);
+  } finally { await page.context().close(); }
+});
 it.each(['rejected', 'unknown'])('D05 editor外の%sも既存departure確認へ渡してcancel保持する', async failure => {
   const page = await pageFor('cloud-d05-login');
   try {

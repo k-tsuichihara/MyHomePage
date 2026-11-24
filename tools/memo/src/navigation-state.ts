@@ -12,6 +12,16 @@ export function appDepartureReason(app: Pick<LocalAppState, 'unresolved' | 'writ
   return app.write.kind === 'rejected' ? 'rejected' : null;
 }
 
+/**
+ * local controllerが離脱許可後に保管した単純なdirtyは、保存先変更で再確認しない。
+ * 保管内容は消さず、拒否・不明・未解決・保存中と現在のeditorは従来どおり評価する。
+ */
+export function storageDepartureEditors(app: Pick<LocalAppState, 'retainedEditors' | 'editor'>, cloudEditor: EditorState | null = null): readonly EditorState[] {
+  const retained = app.retainedEditors.filter(editor => !(editor.source === 'local' && isDirty(editor)
+    && (editor.save.kind === 'idle' || editor.save.kind === 'saved') && editor.unresolved.length === 0));
+  return [...retained, ...(app.editor ? [app.editor] : []), ...(cloudEditor ? [cloudEditor] : [])];
+}
+
 export type NavigationTarget = { readonly kind: 'list' } | { readonly kind: 'detail'; readonly id: string }
   | { readonly kind: 'edit'; readonly id: string }
   | { readonly kind: 'duplicate'; readonly id: string }

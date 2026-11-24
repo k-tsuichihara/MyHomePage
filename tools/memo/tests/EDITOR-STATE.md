@@ -35,6 +35,7 @@ PR #87のP2対応：画面が古くても元要求についてC04がcompleted/�
 - dirty、unresolved、save.kind=rejectedのいずれかがあれば明示確認を要求。ドラフトがcleanでも保存拒否・競合を見落として離脱させない。確認理由は結果不明（unknown）を優先し、次に保存拒否（rejected）、未保存（unsaved）とする。呼出側はreasonと保持されたsaveの拒否理由を利用者へ示してから離脱確認を行う。正常保存済みのcleanには失敗確認を要求しない。
 - 確認は状態オブジェクトそのものに結び付けた不変ticketとし、ドラフト変更（変更して元に戻す場合も）や保存結果反映後には古いticketを拒否する。別の確認表示では呼出側が保持する最新ticketだけを使う。確認のキャンセルや追加編集だけで保存拒否状態を解除しない。
 - キャンセルでは状態を維持。離脱許可も元ドラフトや不明要求を削除せず、返却されたretained状態として残す。呼出側は明示破棄確認済みの離脱でのみ画面セッションを終了できる。再起動後の復元保証はない。
+- 製品保存先変更の評価対象はstorageDepartureEditorsで共通化する。local controllerが離脱許可後に保管した単純dirty（save=idle/saved、unresolvedなし）だけを再確認対象から外し、状態は消さない。現在editor・拒否・UNKNOWN・未解決・保存中は除外しない。requestNavigation/confirmNavigation自体とlogoutの既存確認は変更しない。
 - prepareLocalListはload結果を区別する。明示的emptyだけが正常な空データ。loadedはv2を再検証し、pendingや取得失敗・破損はblockedを返す。以前の一覧／ドラフトの破棄を指示しない。
 - 一覧条件・ID順・不在選択タグ・scrollTopを独立して保持し、前後移動はPR #9のgetMemoNeighborsを利用。スクロール座標は有限の非負数。画面実装はDOMの読取／復元を別途行う。対象が結果外なら勝手に別メモへ置換しない。
 
