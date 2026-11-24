@@ -67,7 +67,7 @@ async function fixture(seed = false, fail = false, hold = false, snapshotBody: u
   };
   const login = async () => {
     if (!await page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await page.locator('#product-auth-open').click();
-    await page.getByLabel('ログイン用メールアドレス').fill(email); await page.getByLabel('ログイン用パスワード').fill(password);
+    await page.getByLabel('メールアドレス').fill(email); await page.getByLabel('パスワード').fill(password);
     await page.getByRole('button', { name: 'ログイン', exact: true }).click();
   };
   const privateOutput = async () => (await page.locator('body').innerHTML()) + page.url() + JSON.stringify(logs);
@@ -121,7 +121,7 @@ it('providerの秘密付き認証拒否は固定表示だけにしRPCを開始�
   const f = await fixture(false, true);
   try {
     await f.configure(); if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor(); await f.login();
-    await f.page.getByText(/認証を確認できません/).waitFor();
+    await f.page.locator('#product-session-state').filter({ hasText: '認証を確認できません' }).waitFor();
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toEqual([]);
     for (const secret of [key, email, password, token]) expect(await f.privateOutput()).not.toContain(secret);
   } finally { await f.context.close(); }

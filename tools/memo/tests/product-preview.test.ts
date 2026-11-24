@@ -13,6 +13,31 @@ beforeAll(() => {
   for (const args of [[], ['--cloud']]) execFileSync(process.execPath, ['scripts/build-product.mjs', ...args], { cwd: fileURLToPath(root) });
 }, 30000);
 
+it('cloud製品previewも既存のnative windowを手動リサイズできる（実接続前・offline）', async () => {
+  const owner = await createProfileOwner(await prepareProfileBase(fileURLToPath(root))), profile = await owner.create();
+  await runOwnedCase(owner, profile, async () => {
+    // cloudの実配信設定はそのまま検証し、試験だけdead proxyとroute拒否を併用する。
+    const context = await chromium.launchPersistentContext(profile, { ...productPreviewOptions(true), proxy: { server: 'http://127.0.0.1:9' } });
+    try {
+      const url = await prepareProductPreview(context, root, true);
+      let external = 0; await context.route(`${MEMO_RPC_ORIGIN}/**`, route => { external++; return route.abort(); });
+      const page = await context.newPage(); await page.goto(url); await page.getByRole('button', { name: '承認済みクラウド接続を開始', exact: true }).waitFor();
+      expect(page.viewportSize()).toBeNull();
+      const cdp = await context.newCDPSession(page), { windowId } = await cdp.send('Browser.getWindowForTarget');
+      await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } });
+      const widths = [];
+      for (const width of [1200, 900, 650]) {
+        await cdp.send('Browser.setWindowBounds', { windowId, bounds: { width, height: 900 } });
+        await expect.poll(() => page.evaluate(() => outerWidth)).toBe(width);
+        widths.push(await page.evaluate(() => innerWidth));
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      }
+      expect(widths[0]).toBeGreaterThan(widths[1]!); expect(widths[1]).toBeGreaterThan(widths[2]!);
+      expect(external).toBe(0); expect(await page.locator('#product-session').count()).toBe(0);
+    } finally { await context.close(); }
+  }, () => {});
+}, 30000);
+
 it('1コマンドがlocal成果物をbuildして固定headed起動する構成', async () => {
   const pkg = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
   expect(pkg.scripts['preview:product']).toBe('npm run build:product && node .product/local/preview.mjs');
@@ -20,7 +45,7 @@ it('1コマンドがlocal成果物をbuildして固定headed起動する構成',
   for (const mode of ['local', 'cloud']) expect(await readFile(new URL(`.product/${mode}/preview.mjs`, root), 'utf8')).toContain('launchPersistentContext');
   expect(productPreviewOptions(false)).toMatchObject({ headless: false, viewport: null, serviceWorkers: 'block', proxy: { server: 'http://127.0.0.1:9' } });
   expect(productPreviewOptions(true)).not.toHaveProperty('proxy');
-  expect(productPreviewOptions(true)).not.toHaveProperty('viewport');
+  expect(productPreviewOptions(true)).toHaveProperty('viewport', null);
   const code = await readFile(new URL('.product/memo-app.js', root), 'utf8');
   expect(code).not.toMatch(/createMemoSdkAuth|sb_publishable_|\/auth\/v1\/|memo_load_snapshot/);
 });

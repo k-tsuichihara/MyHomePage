@@ -65,8 +65,6 @@ export function createMemoAuthSession(
   let serial = 0;
   let busy = false;
   let disposed = false;
-  // トークンは処理中の同一性比較だけに使い、状態・contextへ含めず消費後に参照を外す。
-  let pendingEvent: { name: string; identity: ReturnType<typeof sessionIdentity> | null } | null = null;
   const contexts = new WeakSet<object>();
   const listeners = new Map<object, { listener: AuthStateListener; generation: number }>();
   let notificationQueued = false;
@@ -118,127 +116,81 @@ export function createMemoAuthSession(
       || context.generation !== current.generation || context.userId !== current.userId) return false;
     block('expired'); return true;
   }
-  async function verify(raw: unknown, attempt: number): Promise<AuthOperationResult | { userId: string; expiresAt: number }> {
-    if (disposed || attempt !== serial) return 'stale';
-    if (raw === null) {
-      if (state.reauthenticateUserId) block('expired');
-      else update('signed-out');
-      return state.phase === 'blocked' ? 'blocked' : 'applied';
-    }
-    let identity: ReturnType<typeof sessionIdentity>;
-    try { identity = sessionIdentity(raw); }
-    catch { block('invalid-session'); return 'blocked'; }
-    if (identity.expiresAt * 1000 <= now()) { block('expired'); return 'blocked'; }
+  // SDK通知はSDKが確定したsessionとして扱う。保留中もtokenは保存・比較しない。
+  type Identity = { userId: string; expiresAt: number };
+  type SessionEvent = { identity: Identity | null; invalid: boolean };
+  let pendingEvent: SessionEvent | undefined;
+  let operationSerial = 0;
+  function readEvent(raw: unknown): SessionEvent {
+    if (raw === null) return { identity: null, invalid: false };
     try {
-      const response = await auth.getUser();
-      if (disposed || attempt !== serial) return 'stale';
-      const verifiedId = uuid((response.data.user as { id?: unknown } | null)?.id);
-      if (response.error || uuidKey(verifiedId) !== uuidKey(identity.userId)) { block('invalid-session'); return 'blocked'; }
-      if (state.reauthenticateUserId && uuidKey(verifiedId) !== uuidKey(state.reauthenticateUserId)) {
-        block('different-user'); return 'blocked';
-      }
-      if (identity.expiresAt * 1000 <= now()) { block('expired'); return 'blocked'; }
-      // awaitの呼出元へ戻る間にも外部microtaskが動くため、ここでは認証状態を公開しない。
-      return { userId: verifiedId, expiresAt: identity.expiresAt };
-    } catch {
-      if (disposed || attempt !== serial) return 'stale';
-      block('unavailable'); return 'blocked';
-    }
+      const { userId, expiresAt } = sessionIdentity(raw);
+      return { identity: { userId, expiresAt }, invalid: false };
+    } catch { return { identity: null, invalid: true }; }
   }
-  async function run(kind: 'restore' | 'login' | 'logout', credentials?: { email: string; password: string }, fromEvent = false): Promise<AuthOperationResult> {
+  function accept(event: SessionEvent): AuthOperationResult {
+    if (event.invalid) { block('invalid-session'); return 'blocked'; }
+    const identity = event.identity;
+    if (!identity) {
+      if (state.userId || state.reauthenticateUserId) { block('expired'); return 'blocked'; }
+      lastFailureReason = 'none'; update('signed-out'); return 'applied';
+    }
+    const owner = state.userId ?? state.reauthenticateUserId;
+    if (owner && uuidKey(owner) !== uuidKey(identity.userId)) { block('different-user'); return 'blocked'; }
+    if (identity.expiresAt * 1000 <= now()) { block('expired'); return 'blocked'; }
+    lastFailureReason = 'none';
+    update('authenticated', 'none', identity.userId, identity.expiresAt);
+    state = Object.freeze({ ...state, reauthenticateUserId: null });
+    return 'applied';
+  }
+  function takeEvent() { const event = pendingEvent; pendingEvent = undefined; return event; }
+  async function run(kind: 'restore' | 'login' | 'logout', credentials?: { email: string; password: string }): Promise<AuthOperationResult> {
     if (disposed) return 'stale';
     if (busy) return 'busy';
     if (!subscription && kind !== 'logout') { block('unavailable'); return 'blocked'; }
-    // 処理中は以前のcontextを使わせず、失敗時も元ユーザーのドラフトとの対応を保持する。
-    const previous = getState().userId ?? state.reauthenticateUserId;
+    const owner = getState().userId ?? state.reauthenticateUserId;
     update('checking');
-    state = Object.freeze({ ...state, reauthenticateUserId: previous });
-    const attempt = serial;
+    state = Object.freeze({ ...state, reauthenticateUserId: owner });
+    const attempt = ++operationSerial;
     busy = true;
-    let confirmedSession: ReturnType<typeof sessionIdentity> | null = null;
-    let verifiedSession: { userId: string; expiresAt: number } | null = null;
-    let logoutSucceeded = false;
+    pendingEvent = undefined;
     try {
       if (kind === 'logout') {
         const response = await auth.signOut({ scope: 'local' });
-        if (disposed || attempt !== serial) return 'stale';
+        if (disposed || attempt !== operationSerial) return 'stale';
+        // SDKがlocal sessionを先に消していても、失敗をlogout成功と読み替えない。
         if (response.error) { block('unavailable'); return 'blocked'; }
-        logoutSucceeded = true;
+        lastFailureReason = 'none';
         update('signed-out');
         state = Object.freeze({ ...state, reauthenticateUserId: null });
         return 'applied';
       }
-      const response = kind === 'login'
-        ? await auth.signInWithPassword(credentials!) : await auth.getSession();
-      if (disposed || attempt !== serial) return 'stale';
+      const response = kind === 'login' ? await auth.signInWithPassword(credentials!) : await auth.getSession();
+      if (disposed || attempt !== operationSerial) return 'stale';
       if (response.error) { block(kind === 'login' ? authErrorReason(response.error) : 'unavailable'); return 'blocked'; }
-      if (kind === 'login' && response.data.session === null) { block('invalid-session'); return 'blocked'; }
-      // await中のSDKオブジェクト変更を、検証済みセッションの変更と誤認しない。
-      let candidate: ReturnType<typeof sessionIdentity> | null;
-      try { candidate = response.data.session === null ? null : sessionIdentity(response.data.session); }
-      catch { block('invalid-session'); return 'blocked'; }
-      const result = await verify(response.data.session, attempt);
-      if (typeof result === 'object') {
-        if (disposed || attempt !== serial) return 'stale';
-        confirmedSession = candidate;
-        verifiedSession = result;
-        lastFailureReason = 'none';
-        // 不一致イベントで停止しても、確認できたユーザーとドラフトの対応は保持する。
-        state = Object.freeze({ ...state, reauthenticateUserId: state.reauthenticateUserId ?? result.userId });
-        return 'applied';
+      const result = readEvent(response.data.session), event = takeEvent();
+      if (kind === 'login' && !result.identity) { block('invalid-session'); return 'blocked'; }
+      // SDKの後続通知が別user/署名アウトを示した場合、先行login完了でD05へ進めない。
+      if (event) {
+        const changedUser = event.identity?.userId && result.identity?.userId
+          ? uuidKey(event.identity.userId) !== uuidKey(result.identity.userId) : event.identity !== result.identity;
+        const accepted = accept(event);
+        return changedUser && accepted === 'applied' ? 'stale' : accepted;
       }
-      return result;
+      return accept(result);
     } catch {
-      if (disposed || attempt !== serial) return 'stale';
+      if (disposed || attempt !== operationSerial) return 'stale';
       block('unavailable'); return 'blocked';
-    } finally {
-      busy = false;
-      let canPublish = !pendingEvent;
-      // 失敗したログアウト中の通知は消費だけ行い、意図せず書込許可を復活させない。
-      if (pendingEvent && !disposed && (kind !== 'logout' || logoutSucceeded)) {
-        const event = pendingEvent;
-        pendingEvent = null;
-        const duplicate = confirmedSession && event.identity
-          && ['SIGNED_IN', 'TOKEN_REFRESHED', 'INITIAL_SESSION'].includes(event.name)
-          && uuidKey(confirmedSession.userId) === uuidKey(event.identity.userId)
-          && confirmedSession.expiresAt === event.identity.expiresAt
-          && confirmedSession.accessToken === event.identity.accessToken;
-        canPublish = !!duplicate;
-        // 新しく確認したセッションとの一致だけをまとめ、以前のcontextは復活させない。
-        if (!duplicate) {
-          block('unavailable');
-          const generation = serial;
-          // 異なるイベントの再確認を連鎖させず、上限に達したら書込停止する。
-          if (!fromEvent) queueMicrotask(() => { if (!disposed && generation === serial) void run('restore', undefined, true); });
-        }
-      }
-      pendingEvent = null;
-      // 保留イベント照合と認証済み公開の間にawaitを置かず、一時的なcontext発行を防ぐ。
-      if (verifiedSession && canPublish && !disposed) {
-        if (verifiedSession.expiresAt * 1000 <= now()) block('expired');
-        else {
-          update('authenticated', 'none', verifiedSession.userId, verifiedSession.expiresAt);
-          state = Object.freeze({ ...state, reauthenticateUserId: null });
-        }
-      }
-    }
+    } finally { busy = false; pendingEvent = undefined; }
   }
   let subscription: { unsubscribe(): void } | undefined;
   try {
-    subscription = auth.onAuthStateChange((event, session) => {
+    subscription = auth.onAuthStateChange((_event, raw) => {
       if (disposed) return;
-      if (busy) {
-        let identity: ReturnType<typeof sessionIdentity> | null = null;
-        try { identity = sessionIdentity(session); } catch { /* 不正イベントは重複と認めない。 */ }
-        pendingEvent = { name: event, identity }; return;
-      }
-      // SDK callbackから別のSDK処理をawaitしない。受信内容自体を認証済みと扱わない。
-      block('unavailable');
-      const eventGeneration = serial;
-      queueMicrotask(() => {
-        if (disposed || eventGeneration !== serial || busy) return;
-        void run('restore', undefined, true);
-      });
+      const event = readEvent(raw);
+      if (busy) { pendingEvent = event; return; }
+      // callbackからSDKを再呼出ししない。新しい世代に反映して旧要求を無効化する。
+      accept(event);
     }).data.subscription;
   } catch { block('unavailable'); }
   return Object.freeze({
@@ -310,7 +262,7 @@ export function createMemoAuthSession(
     dispose() {
       if (disposed) return;
       disposed = true; update('disposed');
-      pendingEvent = null;
+      pendingEvent = undefined;
       try { subscription?.unsubscribe(); } catch { /* SDK例外を秘密値ごと外へ渡さない。 */ }
     },
   });

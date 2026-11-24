@@ -15,7 +15,7 @@ function fixture() {
     onAuthStateChange: vi.fn(cb => { callback = cb; return { data: { subscription: { unsubscribe: vi.fn() } } }; }),
   };
   const auth = createMemoAuthSession(api, () => now);
-  return { auth, api, time: (value: number) => { now = value; }, emit: (event = 'TOKEN_REFRESHED') => callback(event, current) };
+  return { auth, api, time: (value: number) => { now = value; }, emit: (event = 'TOKEN_REFRESHED', value: unknown = current) => callback(event, value) };
 }
 function collect(auth: ReturnType<typeof createMemoAuthSession>) {
   const states: MemoAuthState[] = [];
@@ -53,11 +53,12 @@ it('ログイン中の同一SDKイベント重複でauthenticatedを二重通知
   expect(states.map(s => s.phase)).toEqual(['signed-out', 'checking', 'authenticated']);
   expect(f.auth.getContext()).not.toBeNull(); f.auth.dispose();
 });
-it('SDK通知では旧contextを先に無効化し、読取再確認後に新状態を通知する', async () => {
+it('SDK通知は旧contextを無効化し、SDK呼出しを追加せず新状態を通知する', async () => {
   const f = fixture(); await f.auth.restore(); const old = f.auth.getContext()!;
   const { states } = collect(f.auth); await flush(); f.emit();
   expect(f.auth.isCurrent(old)).toBe(false); await flush();
-  expect(states.map(s => s.phase)).toEqual(['authenticated', 'blocked', 'checking', 'authenticated']);
+  expect(states.map(s => s.phase)).toEqual(['authenticated', 'authenticated']);
+  expect(f.api.getSession).toHaveBeenCalledTimes(1); expect(f.api.getUser).not.toHaveBeenCalled();
   expect(new Set(states.map(s => s.generation)).size).toBe(states.length); f.auth.dispose();
 });
 it.each(['getState', 'getContext', 'isCurrent'] as const)('%sで期限到達を検出し、操作許可を止めて一度だけ通知する', async method => {
@@ -149,23 +150,23 @@ it('処理中の購読からの再入はbusyとなり、SDK要求を二重実行
   await f.auth.restore(); await flush(); expect(await Promise.all(reentry)).toEqual(['busy']);
   expect(f.api.getSession).toHaveBeenCalledTimes(1); expect(f.api.signOut).not.toHaveBeenCalled(); f.auth.dispose();
 });
-it('getUser待機後のdisposeと古い応答はauthenticatedを通知しない', async () => {
-  const f = fixture(); let resolve!: (value: Awaited<ReturnType<MemoAuthApi['getUser']>>) => void;
-  vi.mocked(f.api.getUser).mockReturnValueOnce(new Promise(r => { resolve = r; }));
+it('SDK getSession待機後のdisposeと古い応答はauthenticatedを通知しない', async () => {
+  const f = fixture(); let resolve!: (value: Awaited<ReturnType<MemoAuthApi['getSession']>>) => void;
+  vi.mocked(f.api.getSession).mockReturnValueOnce(new Promise(r => { resolve = r; }));
   const { states } = collect(f.auth); const pending = f.auth.restore(); await flush();
-  f.auth.dispose(); await flush(); resolve({ data: { user: { id: A } }, error: null });
+  f.auth.dispose(); await flush(); resolve({ data: { session: raw() }, error: null });
   expect(await pending).toBe('stale'); await flush();
   expect(states.map(s => s.phase)).toEqual(['checking', 'disposed']);
 });
-it('getUser完了付近の不一致SDK通知を照合する前にauthenticatedを通知しない', async () => {
+it('SDK読取中のsession消失で旧authenticatedを通知せず、再確認も追加しない', async () => {
   const f = fixture(), { states } = collect(f.auth);
-  vi.mocked(f.api.getUser).mockImplementationOnce(async () => {
-    queueMicrotask(() => f.emit('SIGNED_OUT'));
-    return { data: { user: { id: A } }, error: null };
-  }).mockResolvedValueOnce({ data: { user: null }, error: new Error('synthetic-private-recheck') });
+  vi.mocked(f.api.getSession).mockImplementationOnce(async () => {
+    f.emit('SIGNED_OUT', null);
+    return { data: { session: raw() }, error: null };
+  });
   await f.auth.restore(); await flush();
   expect(states.some(s => s.phase === 'authenticated')).toBe(false);
-  expect(f.auth.getContext()).toBeNull(); expect(f.api.getSession).toHaveBeenCalledTimes(2); f.auth.dispose();
+  expect(f.auth.getContext()).toBeNull(); expect(f.api.getSession).toHaveBeenCalledTimes(1); f.auth.dispose();
 });
 it('SDK読取失敗は秘密値なしのblockedを通知し、自動再送しない', async () => {
   const f = fixture(); vi.mocked(f.api.getSession).mockRejectedValueOnce(new Error('synthetic-private'));

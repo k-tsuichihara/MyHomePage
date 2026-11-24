@@ -41,8 +41,8 @@ async function pageFor(mode = 'normal') {
 }
 const probe = (page: Page, code: string) => page.evaluate(code);
 async function login(page: Page) {
-  await page.getByLabel('ログイン用メールアドレス').fill('synthetic-email@example.invalid');
-  await page.getByLabel('ログイン用パスワード').fill('synthetic-password');
+  await page.getByLabel('メールアドレス').fill('synthetic-email@example.invalid');
+  await page.getByLabel('パスワード').fill('synthetic-password');
   await page.getByRole('button', { name: 'ログイン', exact: true }).click();
 }
 async function selectCloud(page: Page) {
@@ -961,8 +961,8 @@ it('製品compositionで復元/ログイン/失効表示、古い通知を拒否
     await page.getByText('未ログイン', { exact: true }).waitFor();
     expect(await probe(page, 'fixture.calls.login')).toBe(0);
     await login(page); await page.getByText('ログイン済み', { exact: true }).waitFor();
-    expect(await page.getByLabel('ログイン用パスワード').inputValue()).toBe('');
-    expect(await page.getByLabel('ログイン用メールアドレス').inputValue()).toBe('');
+    expect(await page.getByLabel('パスワード').inputValue()).toBe('');
+    expect(await page.getByLabel('メールアドレス').inputValue()).toBe('');
     await probe(page, 'fixture.stale()');
     expect(await page.locator('#product-session-state').textContent()).toBe('ログイン済み');
     await probe(page, 'fixture.expired()');
@@ -982,7 +982,7 @@ it('復元済みsessionを表示し、clean logoutはscope localで既存session
     await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
     await page.getByText('未ログイン', { exact: true }).waitFor();
     expect(await probe(page, 'fixture.calls.logout')).toBe(1);
-    expect(await page.getByText('保存先：ローカル（クラウド未接続）').count()).toBe(1);
+    expect(await page.getByText('現在の保存先：ローカル（未ログイン）').count()).toBe(1);
   } finally { await page.context().close(); }
 });
 it('dirty logout cancel保持、編集後の古い確認を拒否しproceedだけAuthへ渡す', async () => {
@@ -1041,7 +1041,7 @@ it('生例外をDOM/consoleへ流さず失敗理由だけを表示する', async
   const page = await pageFor('throw'); const logs: string[] = [];
   page.on('console', message => logs.push(message.text())); page.on('pageerror', error => logs.push(error.message));
   try {
-    await login(page); await page.getByText(/認証を確認できません/).waitFor();
+    await login(page); await page.locator('#product-session-state').filter({ hasText: '認証を確認できません' }).waitFor();
     const output = (await page.locator('body').textContent()) + JSON.stringify(logs);
     for (const secret of ['synthetic-email@example.invalid', 'synthetic-password', 'raw-provider-token']) expect(output).not.toContain(secret);
     expect(await probe(page, 'fixture.calls.logout')).toBe(0);

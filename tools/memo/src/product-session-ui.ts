@@ -50,26 +50,33 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const input = doc.createElement('input'); input.type = type; input.autocomplete = 'off';
     label.append(input); form.append(label); return input;
   };
-  const email = field('ログイン用メールアドレス', 'email');
-  const password = field('ログイン用パスワード', 'password');
+  const email = field('メールアドレス', 'email');
+  const password = field('パスワード', 'password');
   const button = (text: string) => {
     const node = doc.createElement('button'); node.type = 'button'; node.textContent = text; return node;
   };
   const login = button('ログイン'), restore = button('セッションを復元'), logout = button('ログアウト');
   const chooseLocal = button('ローカルを選択'), chooseCloud = button('クラウドを選択');
+  const resumeCloud = button('クラウド利用を続ける'), readAgain = button('クラウドを再読取');
+  resumeCloud.hidden = readAgain.hidden = true;
   const newCloud = button('クラウドに新規メモ');
   const newCloudVoice = button('クラウドに新規音声メモ');
   const cloudStatus = doc.createElement('p'); cloudStatus.id = 'product-cloud-state'; cloudStatus.setAttribute('role', 'status');
-  if (cloud) root.append(chooseLocal, chooseCloud, cloudStatus);
+  const cloudNotice = (message: string, error = false) => { cloudStatus.textContent = message; cloudStatus.dataset.notice = error ? 'error' : 'routine'; };
+  if (cloud) root.append(...(productLayout ? [resumeCloud, readAgain] : [chooseLocal, chooseCloud]), cloudStatus);
   const stateStatus = doc.createElement('p'); stateStatus.id = 'product-cloud-trash-state'; stateStatus.setAttribute('role', 'status');
   if (cloud?.controller.changeState || cloud?.controller.deletePermanently || cloud?.controller.emptyTrash || cloud?.controller.saveTag || cloud?.controller.deleteTag) root.append(stateStatus);
-  const feedback = doc.createElement('p'); feedback.setAttribute('role', 'status');
+  const feedback = doc.createElement('p'); feedback.id = 'product-auth-feedback'; feedback.setAttribute('role', 'status');
+  // 処理の判定や文言を変えず、正常なcancel等とエラーの表示色だけを区別する。
+  const authFeedback = (message: string, error = true) => { feedback.textContent = message; feedback.dataset.notice = error ? 'error' : 'routine'; };
   const confirmation = doc.createElement('div'); confirmation.hidden = true;
   confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'ログアウトの離脱確認');
   const warning = doc.createElement('p'); warning.textContent = '未保存・保存拒否・結果不明の編集があります。ログアウトを続けますか？';
   const proceed = button('確認してログアウト'), cancel = button('ログアウトをキャンセル');
   confirmation.append(warning, proceed, cancel);
-  form.append(login, restore, logout); root.append(state, source, form, confirmation, feedback);
+  const authActions = doc.createElement('div'); authActions.className = 'auth-actions'; authActions.append(login, logout);
+  form.append(authActions); if (!productLayout) form.append(restore);
+  root.append(state, source, form, confirmation, feedback);
   let authDialog: HTMLDialogElement | undefined;
   const authEntry = doc.getElementById('product-auth-open') as HTMLButtonElement | null;
   if (productLayout) {
@@ -78,7 +85,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const heading = doc.createElement('h2'); heading.textContent = 'ログイン / 保存先';
     // 閉じるのは表示だけ。処理取消・離脱ではなく、背後の回復操作へ戻れるようにする。
     const close = button('閉じる'); close.onclick = () => authDialog?.close();
-    authDialog.append(heading, state, source, chooseLocal, chooseCloud, form, confirmation, feedback, close); root.append(authDialog);
+    authDialog.append(heading, state, source, resumeCloud, form, confirmation, feedback, close); root.append(authDialog);
     if (authEntry) { authEntry.disabled = false; authEntry.onclick = () => openProductDialog(authDialog!); }
   }
   let cloudEditor: ReturnType<typeof mountProductCloudEditor> | undefined;
@@ -120,6 +127,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   let authOperation: { completed: AuthContext | null } | undefined;
   // 初期local読込中も認証は復元できる。busy終了通知で一度だけ既存離脱経路へ渡す。
   let selectAfterAuth: (() => void) | undefined;
+  // 認証/保存先の判定は既存C03/C05に委譲。ここにはdirty localの切替cancel由来の表示意図だけを保持する。
+  let cancelledCloudUser: string | null = null;
   const context = () => {
     const value = session.getContext?.();
     return value && session.isCurrent?.(value) ? value : null;
@@ -143,7 +152,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     const current = cloud.target.current();
     if (current.target === 'cloud' && value && uuidKey(value.userId) === cloudOwner && value.generation !== current.generation) {
       cloud.target.acceptAuthenticatedGeneration({ authenticated: true, generation: value.generation });
-      cloudStatus.textContent = '認証が更新されました。再読取には保存先を選び直してください。';
+      cloudNotice(productLayout ? '認証が更新されました。現在の内容は明示再読取で確認してください。' : '認証が更新されました。再読取には保存先を選び直してください。');
     }
     const selected = cloud.target.current().target === 'cloud';
     if (productLayout) {
@@ -151,11 +160,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       if (authEntry) authEntry.textContent = selected ? 'ログアウト / 保存先：クラウド' : 'ログイン / 保存先：ローカル';
     }
     local.setCloudSelected?.(selected);
-    source.textContent = selected ? cloudEditor
-      ? `保存先：クラウド（メモの単件作成・編集・保存${cloud.controller.changeState ? '・ピン留め/解除・ゴミ箱移動・復元' : ''}${cloud.controller.deletePermanently ? '・完全削除' : ''}${cloud.controller.emptyTrash ? '・ゴミ箱一括削除' : ''}${cloud.controller.saveTag ? '・タグ作成/改名' : ''}${cloud.controller.deleteTag ? '・タグ削除' : ''}）`
-      : cloud.controller.changeState || cloud.controller.deletePermanently || cloud.controller.emptyTrash || cloud.controller.saveTag || cloud.controller.deleteTag ? '保存先：クラウド（閲覧・注入済み操作）' : '保存先：クラウド（読取のみ・書込未接続）' : '保存先：ローカル';
     if (selected && (!value || uuidKey(value.userId) !== cloudOwner)) {
-      cloudStatus.textContent = '停止：同じユーザーで再認証してください。クラウド選択とドラフトは保持しています。';
+      cloudNotice('停止：同じユーザーで再認証してください。クラウド選択とドラフトは保持しています。', true);
     }
     snapshotView?.refresh();
     cloudEditor?.refresh();
@@ -172,11 +178,22 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       // C03が公開した最初の認証済みcontextを完了に結び付け、後続世代へ読み替えない。
       if (authOperation && !authOperation.completed && current.phase === 'authenticated') authOperation.completed = context();
       syncSource();
+      const authLabel = context() ? 'ログイン中' : current.phase === 'signed-out' ? '未ログイン'
+        : current.phase === 'checking' ? '認証を確認中' : current.phase === 'disposed' ? '認証終了' : '認証を確認できません';
+      source.textContent = `現在の保存先：${cloud?.target.current().target === 'cloud' ? 'クラウド' : 'ローカル'}（${authLabel}）`;
+      const auth = context(), selectedCloud = cloud?.target.current().target === 'cloud';
+      if (['signed-out', 'disposed'].includes(current.phase) || selectedCloud
+        || auth && cancelledCloudUser && uuidKey(auth.userId) !== cancelledCloudUser) cancelledCloudUser = null;
+      resumeCloud.hidden = !productLayout || !cloud || !cancelledCloudUser || !auth || selectedCloud;
+      resumeCloud.disabled = busy || !!pending || isBusy() || loading;
+      readAgain.hidden = !productLayout || !selectedCloud;
+      readAgain.disabled = busy || !!pending || isBusy() || loading || stateUncertain() || !!cloudEditor?.getState() || !cloudContext();
       chooseLocal.disabled = chooseCloud.disabled = busy || !!pending || isBusy();
       newCloud.disabled = !cloudEditor || !!cloudEditor.getState() || stateUncertain() || busy || !!pending || isBusy() || loading
         || !cloudContext();
       newCloudVoice.disabled = newCloud.disabled;
       state.textContent = Object.hasOwn(phases, current.phase) ? phases[current.phase] : phases.blocked;
+      state.dataset.notice = current.phase === 'blocked' || !Object.hasOwn(phases, current.phase) ? 'error' : 'routine';
       if (current.phase === 'blocked') state.textContent += '。同じユーザーで再認証してください。';
       if (current.phase === 'disposed') { unavailable = true; login.disabled = restore.disabled = logout.disabled = true; return; }
       login.disabled = restore.disabled = busy || !!pending || current.phase === 'checking';
@@ -186,9 +203,11 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       }
     } catch {
       unavailable = true;
+      cancelledCloudUser = null; resumeCloud.hidden = true; readAgain.disabled = true;
       snapshotView?.clear();
       cloudEditor?.refresh();
       state.textContent = phases.blocked;
+      state.dataset.notice = 'error';
       login.disabled = restore.disabled = logout.disabled = true;
       newCloud.disabled = newCloudVoice.disabled = true;
     }
@@ -197,11 +216,12 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const run = async (operation: 'login' | 'restore' | 'logout') => {
     if (closed || unavailable || busy || pending) return;
     selectAfterAuth = undefined;
+    cancelledCloudUser = null;
     const operationAuth = { completed: null as AuthContext | null };
     const app = local.getState(), editor = cloudEditor?.getState() ?? null, view = selectionTicket;
     const target = cloud?.target.current().target;
     const route = (state: LocalAppState) => state.route.kind === 'list' ? 'list' : `${state.route.kind}/${state.route.id}`;
-    busy = true; feedback.textContent = '';
+    busy = true; authFeedback('', false);
     // 呼出し以降、このUIは入力値を継続保持しない。JSメモリ完全消去は保証しない。
     let address = email.value, secret = password.value;
     email.value = password.value = '';
@@ -224,7 +244,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
           requestDeparture('cloud');
         };
       }
-    } catch { if (!closed) feedback.textContent = '認証操作を完了できませんでした。'; }
+    } catch { if (!closed) authFeedback('認証操作を完了できませんでした。'); }
     finally { address = secret = ''; authOperation = undefined; busy = false; refresh(); }
   };
   const departure = (intent: 'logout' | StorageTarget) => {
@@ -252,16 +272,17 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (!commitReturn) selectionTicket = {};
     // 明示再読取へ進んだら前の成功案内だけを片付ける。不明要求・失敗通知は残す。
     if (stateRecord?.result?.kind === 'completed' && stateRecord.result.result.kind === 'ok') stateStatus.textContent = '';
-    loading = true; cloudStatus.textContent = 'クラウド読取中です。書込は行いません。';
+    loading = true; cloudNotice('クラウド読取中です。書込は行いません。');
     refresh();
     try {
       const result = await cloud.controller.load(auth);
       if (closed || cloud.target.current() !== selection || !session.isCurrent?.(auth)) {
         if (!closed && cloud.target.current().target === 'cloud' && session.isCurrent?.(auth)) {
-          cloudStatus.textContent = '停止：切替前のクラウド応答を反映しません。';
+          cloudNotice('停止：切替前のクラウド応答を反映しません。', true);
         }
         return false;
       }
+      cloudStatus.dataset.notice = result.kind === 'completed' && result.result.kind === 'ok' ? 'routine' : 'error';
       cloudStatus.textContent = result.kind === 'completed'
         ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ピン留め/解除・ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : cloud.controller.saveTag ? 'タグの単件作成・改名ができます。' : cloud.controller.deleteTag ? 'タグの単件削除ができます。' : '書込未接続です。'}`
           : result.result.kind === 'unknown' || result.result.kind === 'failed' ? 'UNKNOWN：読取結果を確認できません。自動再試行しません。'
@@ -277,15 +298,16 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         return true;
       }
       return false;
-    } catch { if (!closed && cloud.target.current() === selection) cloudStatus.textContent = 'UNKNOWN：読取結果を確認できません。自動再試行しません。'; }
+    } catch { if (!closed && cloud.target.current() === selection) cloudNotice('UNKNOWN：読取結果を確認できません。自動再試行しません。', true); }
     finally { loading = false; if (closed) cloud.controller.dispose(); else refresh(); }
     return false;
   };
   const applyTarget = (result: StorageTargetDecision, intent: 'logout' | StorageTarget,
     from: ReturnType<ProductCloudHost['target']['current']>) => {
     if (!cloud) return;
-    if (result.kind === 'rejected') { feedback.textContent = '保存先を変更できません。現在の認証・編集状態を確認してください。'; refresh(); return; }
+    if (result.kind === 'rejected') { authFeedback('保存先を変更できません。現在の認証・編集状態を確認してください。'); refresh(); return; }
     if (result.kind !== 'changed') return;
+    cancelledCloudUser = null;
     authDialog?.close();
     if (result.state === from && intent !== 'logout') { refresh(); return; }
     snapshotView?.clear();
@@ -293,7 +315,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (result.state.target === 'cloud' && from.target !== 'cloud') {
       const auth = context(); cloudOwner = auth ? uuidKey(auth.userId) : null;
     }
-    if (result.state.target === 'local') { cloudOwner = null; cloudStatus.textContent = ''; }
+    if (result.state.target === 'local') { cloudOwner = null; cloudNotice(''); }
     observedApp = undefined;
     refresh();
     if (intent === 'logout') void run('logout');
@@ -302,11 +324,11 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const requestDeparture = (intent: 'logout' | StorageTarget) => {
     selectAfterAuth = undefined;
     if (closed || busy || pending) return;
-    if (intent === 'cloud' && loading) { feedback.textContent = '前の読取処理の終了を待ってください。'; return; }
+    if (intent === 'cloud' && loading) { authFeedback('前の読取処理の終了を待ってください。'); return; }
     refresh();
     if (unavailable) return;
     const decision = departure(intent);
-    if (!decision) { feedback.textContent = '保存処理中は離脱できません。'; return; }
+    if (!decision) { authFeedback('保存処理中は離脱できません。'); return; }
     if (cloud) {
       const from = cloud.target.current();
       const result = intent === 'logout' ? cloud.target.logout(leaveDecision(decision))
@@ -341,7 +363,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
       && stateRecord === ticket.mutation
       && ticket.tickets.every(value => confirmNavigation(value.state, value, true).kind === 'allowed');
     clearConfirmation();
-    if (!valid) { feedback.textContent = '確認後に状態が変わりました。操作をやり直してください。'; refresh(); return; }
+    if (!valid) { authFeedback('確認後に状態が変わりました。操作をやり直してください。'); refresh(); return; }
     if (cloud && ticket.target) {
       const from = cloud.target.current();
       applyTarget(cloud.target.confirm(ticket.target, true, targetAuth(), { kind: 'allowed' }), ticket.intent, from);
@@ -349,14 +371,29 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     else void run('logout');
   };
   const onCancel = () => { if (closed) return;
-    if (cloud && pending?.target) cloud.target.confirm(pending.target, false, targetAuth(), { kind: 'allowed' });
-    clearConfirmation(); authDialog?.close(); feedback.textContent = '離脱をキャンセルしました。'; refresh(); };
+    const auth = context();
+    const ticket = pending;
+    const result = cloud && ticket?.target ? cloud.target.confirm(ticket.target, false, targetAuth(), { kind: 'allowed' }) : null;
+    if (result?.kind === 'cancelled' && ticket?.intent === 'cloud' && ticket.target?.from === 'local' && auth
+      && generation === ticket.generation && auth.generation === ticket.target.expectedGeneration && local.getState() === ticket.app
+      && [...ticket.app.retainedEditors, ...(ticket.app.editor ? [ticket.app.editor] : [])].some(isDirty)) cancelledCloudUser = uuidKey(auth.userId);
+    clearConfirmation(); authDialog?.close(); authFeedback('離脱をキャンセルしました。', false); refresh(); };
   const onLocal = () => requestDeparture('local'), onCloud = () => requestDeparture('cloud');
+  const onResume = () => {
+    const auth = context();
+    if (!productLayout || closed || unavailable || busy || pending || isBusy() || loading || !auth
+      || !cancelledCloudUser || uuidKey(auth.userId) !== cancelledCloudUser || cloud?.target.current().target !== 'local') return;
+    requestDeparture('cloud');
+  };
+  const onReadAgain = () => {
+    if (closed || unavailable || busy || pending || isBusy() || loading || stateUncertain() || cloudEditor?.getState() || !cloudContext()) return;
+    void readCloud();
+  };
   const onNewCloud = () => {
     if (closed || unavailable || busy || pending || isBusy() || loading || stateUncertain() || !cloudContext()) return;
     if (cloudEditor?.startNew(snapshotView?.tagChoices() ?? null)) {
       snapshotView?.clear();
-      cloudStatus.textContent = '新規メモを編集中です。保存成功前に一覧へ追加しません。';
+      cloudNotice('新規メモを編集中です。保存成功前に一覧へ追加しません。');
     }
   };
   const onNewCloudVoice = async () => {
@@ -364,10 +401,11 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (closed || unavailable || busy || pending || isBusy() || loading || stateUncertain() || !auth) return;
     if (await cloudEditor?.startNewVoice(snapshotView?.tagChoices() ?? null)
       && !closed && selectionTicket === view && !!cloudContext() && session.isCurrent?.(auth)) {
-      snapshotView?.clear(); cloudStatus.textContent = '新規音声メモを編集中です。保存は手動です。';
+      snapshotView?.clear(); cloudNotice('新規音声メモを編集中です。保存は手動です。');
     }
   };
   chooseLocal.addEventListener('click', onLocal); chooseCloud.addEventListener('click', onCloud);
+  resumeCloud.addEventListener('click', onResume); readAgain.addEventListener('click', onReadAgain);
   const onLogin = () => { void run('login'); };
   const onRestore = () => { void run('restore'); };
   const onSubmit = (event: Event) => { event.preventDefault(); onLogin(); };
@@ -389,7 +427,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     actions.append(newCloud, newCloudVoice); root.prepend(actions);
   }
   let unsubscribe = () => {};
-  try { unsubscribe = session.subscribe(refresh); } catch { unavailable = true; feedback.textContent = '認証状態を購読できませんでした。'; }
+  try { unsubscribe = session.subscribe(refresh); } catch { unavailable = true; authFeedback('認証状態を購読できませんでした。'); }
   refresh(); void run('restore');
   function startStateChange(memo: Memo, action: 'pin' | 'unpin' | 'trash' | 'restore' | 'delete-permanently', valid: () => boolean): boolean {
     if (!cloud || !(action === 'delete-permanently' ? cloud.controller.deletePermanently : cloud.controller.changeState)
@@ -483,9 +521,11 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (cloudEditor?.getState()?.unresolved.length) return 'pending' as const;
     if (cloud && !loading) { const result = cloud.controller.dispose(); if (result !== 'applied') return result; }
     closed = true; selectAfterAuth = undefined; clearConfirmation(); email.value = password.value = '';
+    cancelledCloudUser = null;
     snapshotView?.dispose();
     cloudEditor?.dispose();
     chooseLocal.removeEventListener('click', onLocal); chooseCloud.removeEventListener('click', onCloud);
+    resumeCloud.removeEventListener('click', onResume); readAgain.removeEventListener('click', onReadAgain);
     newCloud.removeEventListener('click', onNewCloud);
     newCloudVoice.removeEventListener('click', onNewCloudVoice);
     try { unsubscribe(); } catch { /* 外部例外を表示しない。 */ }

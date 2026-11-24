@@ -296,3 +296,7 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 .memo-product .tag-chip-strip label,.memo-product .cloud-filter-wrap .tag-chips label{max-width:100%;white-space:normal;overflow-wrap:anywhere;flex-shrink:1;min-width:0;box-sizing:border-box}
 .memo-product .tag-chip-strip #filters-all{flex:0 0 auto}
 }
+/* 認証の操作行とエラー表示。正常通知・離脱cancelの文言は赤くしない。 */
+.memo-product .auth-actions{display:flex;gap:12px;flex-wrap:wrap}
+.memo-product .auth-actions>button{flex:0 0 auto;width:auto}
+.memo-product :is(#product-session-state,#product-auth-feedback,#product-cloud-state)[data-notice=error]{color:#b42318}
