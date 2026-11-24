@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { beginSave, createEditor, editDraft, isDirty, settleSave } from '../src/editor-state';
-import { confirmNavigation, listNeighbors, prepareLocalList, requestNavigation } from '../src/navigation-state';
+import { confirmNavigation, listNeighbors, prepareLocalList, requestNavigation, storageDepartureEditors } from '../src/navigation-state';
 import type { NavigationTarget } from '../src/navigation-state';
 import { MEMO, OTHER, TAG, state, token } from './local-save-fixtures';
 import { createPendingMigration } from '../src/migration';
@@ -8,6 +8,27 @@ import { createPendingMigration } from '../src/migration';
 const editor = () => createEditor(MEMO, 's', { memo: state().memos[0]!, tagIds: [TAG] });
 const dirty = () => editDraft(editor(), { title: ' 未保存 ', body: '\u0000', tagIds: [TAG] });
 const targets: NavigationTarget[] = [{ kind: 'list' }, { kind: 'detail', id: OTHER }, { kind: 'edit', id: OTHER }, { kind: 'duplicate', id: OTHER }, { kind: 'switch-source' }, { kind: 'logout' }];
+
+describe('保管editorの保存先離脱判定', () => {
+  it.each(['idle', 'saved'] as const)('離脱済みの単純dirty(%s)は再確認せず、保管値と現在editorを維持', kind => {
+    const retained = { ...dirty(), save: { kind } }, current = dirty(), cloud = { ...dirty(), source: 'cloud' as const };
+    const app = { retainedEditors: Object.freeze([retained]), editor: null };
+    expect(storageDepartureEditors(app)).toEqual([]);
+    expect(app.retainedEditors[0]).toBe(retained); expect(retained.draft.title).toBe(' 未保存 ');
+    expect(storageDepartureEditors({ ...app, editor: current }, cloud)).toEqual([current, cloud]);
+    expect(requestNavigation(current, { kind: 'switch-source' }).kind).toBe('confirmation-required');
+  });
+  it.each(['rejected', 'unknown', 'saving', 'unresolved', 'cloud'] as const)('保管editorでも%sは除外しない', kind => {
+    const attempt = beginSave(editor(), { operationId: 'op', requestId: token(1) });
+    if (attempt.kind !== 'submit') throw new Error('Expected submit');
+    const source = kind === 'saving' ? attempt.state : kind === 'rejected'
+      ? settleSave(attempt.state, attempt.attempt.context, { kind: 'rejected', reason: 'conflict', writeOutcome: 'not-attempted' })
+      : kind === 'unknown' ? { ...dirty(), save: { kind: 'unknown' as const, reason: 'communication' as const, attempt: attempt.attempt } }
+      : kind === 'unresolved' ? { ...dirty(), unresolved: [attempt.attempt] } : { ...dirty(), source: 'cloud' as const };
+    expect(storageDepartureEditors({ retainedEditors: [source], editor: null })).toEqual([source]);
+    expect(requestNavigation(source, { kind: 'switch-source' }).kind).toBe(kind === 'saving' ? 'blocked' : 'confirmation-required');
+  });
+});
 
 describe('ドラフト保護と遷移確認', () => {
   it.each(targets)('保存拒否後のcleanでも失敗確認を要求する: %j', target => {

@@ -1,6 +1,6 @@
 import type { createMemoAuthSession, MemoAuthState } from './auth-session';
 import type { LocalAppState } from './local-app-state';
-import { appDepartureReason, requestNavigation, confirmNavigation } from './navigation-state';
+import { appDepartureReason, requestNavigation, confirmNavigation, storageDepartureEditors } from './navigation-state';
 import type { LeaveConfirmation } from './navigation-state';
 import type { createStorageTargetController, StorageTarget, StorageTargetDecision, StorageLeaveDecision } from './storage-target-controller';
 import type { createCloudController, CloudUncertainOperationResult, CloudStateResult, CloudDeleteResult, CloudEmptyTrashResult, CloudSaveTagResult, CloudDeleteTagResult } from './cloud-controller';
@@ -153,7 +153,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (app !== observedApp || editor !== observedEditor) {
       observedApp = app;
       observedEditor = editor;
-      cloud.target.setDirty([...app.retainedEditors, ...(app.editor ? [app.editor] : []), ...(editor ? [editor] : [])].some(isDirty));
+      cloud.target.setDirty(storageDepartureEditors(app, editor).some(isDirty));
     }
     const value = context();
     const current = cloud.target.current();
@@ -261,7 +261,9 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (isBusy()) return null;
     const app = local.getState();
     const editor = cloudEditor?.getState() ?? null;
-    const editors = [...app.retainedEditors, ...(app.editor ? [app.editor] : []), ...(editor ? [editor] : [])];
+    // logoutの既存確認は維持し、保存先変更だけを共通の限定判定へ渡す。
+    const editors = intent === 'logout' ? [...app.retainedEditors, ...(app.editor ? [app.editor] : []), ...(editor ? [editor] : [])]
+      : storageDepartureEditors(app, editor);
     const decisions = editors.map(editor => requestNavigation(editor, { kind: intent === 'logout' ? 'logout' : 'switch-source' }));
     if (decisions.some(decision => decision.kind === 'blocked')) return null;
     return { app, editor, mutation: stateRecord, generation, intent, tickets: decisions.flatMap(decision =>

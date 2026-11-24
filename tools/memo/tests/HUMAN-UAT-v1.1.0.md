@@ -4,7 +4,7 @@
 
 作成日：2026-11-19。**Q05実施中。PR #122マージ後、HumanがR01-A/B/Cを実操作し、すべて期待結果を満たし追加指摘なしと報告したため、UAT-01はPASS。** 本書をQ05のケース・進捗・結果記録の正本とする。修正PR・AI GateのPASSをHuman再確認の代用にしない。
 
-**UAT-01〜04は正式PASS。UAT-05はFAIL／停止中。** Humanからdev-sandboxのPauseが判明し、Resume後にSDK標準Authで実ログイン成功と報告された。PR #124のAuth実装を失敗原因としない。旧「編集中login→D05 cancel→local（ログイン中）→編集継続」もHuman確認済みだが、保存先の分かりにくさから下記の一覧限定loginへ仕様変更した。新UXはHuman未確認。R05の既存Human PASSは維持し、06以降も未開始。今回の実装はofflineのみで追加実通信・UAT再開を行わない。
+**UAT-01〜04は正式PASS。UAT-05はFAIL／停止中。** PR #125後、編集画面のlogin非活性・理由案内・一覧復帰後のlogin有効化と案内消去はHuman PASS。一覧からの実loginも成功したが、離脱承認後に保持されたretainedEditorsの単純dirtyをD05が再確認し、Humanは承認せずSTOPした。cloud移行・保存先表示・snapshot readは未確認。採用A案で保持は維持し、単純dirtyの二重確認だけを修正する。既存R05・Resume後のAuth成功証拠を再利用し、06以降は未開始。今回のAI作業では追加実通信・Human操作・UAT再開を行わない。
 
 | 項目 | 件数・状態 |
 | --- | --- |
@@ -175,18 +175,18 @@ Human報告IDの「UAT-03-1/03-2」は下表の確認内容を指す。元の操
 - **目的**：編集を確定または破棄して一覧からログインし、cloud保存先を迷わず認識できることを受け入れる。
 - **前提条件**：承認済みdev-sandboxと合成ユーザー、通常cloud製品候補を使用。追加実Auth／cloud readを行う場合は従来どおり別途承認後のみ。接続設定開始の準備はHuman確認済みで、技術的な再起動が必要な場合を除きやり直さない。
 - **操作手順**：
-  1. localの新規作成または保存済みメモ編集画面を開く。
+  1. localの新規作成または保存済みメモ編集画面を開く。（編集時login禁止のHuman確認は完了済み。次回は下の影響部分だけを行う。）
   2. 「ログイン / 保存先」から認証画面を開き、「ログイン」が表示されたまま非活性で、一覧へ戻る案内が分かることを見る。dirty／cleanの全組合せをHumanで反復しない（AI Gateへ委譲）。
   3. 認証画面を閉じ、必要なら既存の未保存離脱確認を通って一覧へ戻る。自動保存・自動転送はしない。
   4. 一覧から認証画面を開き、ログイン可能になっていることを見る。
   5. 必要な実通信が承認された後に、既知の合成ユーザーでログインする。Resume後の実ログイン成功は既存Human証拠として再利用する。この操作は新UXでの一覧からcloudへの接続確認のために限り、Auth成功そのものの再試験を追加しない。
-  6. login成功後、既存D05/C05を経てcloud利用へ進むことを見る。
+  6. 未保存離脱を承認した保管editorの単純dirtyだけではD05を重複表示せず、既存C05経路でcloud利用へ進むことを見る。拒否・UNKNOWN等を無視する条件ではない。
   7. 「現在の保存先：クラウド（ログイン中）」を確認する。
   8. cloud移行時の既存snapshot読取結果を見る。成功／UNKNOWN等を推測しない。UNKNOWN・エラーなら停止し、再送しない。
 - **期待結果**：通常は未ログインlocal。新規・保存済み編集ではdirty／cleanにかかわらずlogin不可、一覧では可能。成功後は既存保護を通ってcloudへ進み、保存先を認識できる。localのメモやdraftをcloudへ自動転送しない。旧編集中login・D05 cancel・cloud再開は新仕様の必須受入条件にしない。
 - **Humanが見るポイント**：非活性理由、一覧へ戻る導線、保存先表示、cloud読取の案内。
 - **結果**：FAIL
-- **備考**：Resume後の実ログイン成功と旧D05 cancel／認証済みlocalでのdraft保持はHuman確認済み。旧挙動は履歴として保持し、新UXのPASS証拠へ読み替えない。上記の新UXとcloud移行／snapshotの未報告部分のみHuman確認待ち。実施日時・ブラウザ等は未報告。UAT-06以降は開始しない。
+- **備考**：Resume後の実login成功、旧D05 cancel、PR #125後の編集時非活性・案内・一覧復帰で有効化/案内消去・一覧から実login成功はHuman確認済みで再実施対象にしない。今回login成功後、retainedEditorsの単純dirtyをD05が再確認したためSTOP。Humanは「確認して保存先を変更」を押しておらずcloud移行/readも行っていない。修正後の残確認は下記の影響部分だけ。日時・ブラウザ等は未報告。UAT-06以降は開始しない。
 
 #### UAT-05のHuman UX指摘・対応（U05）
 
@@ -243,12 +243,23 @@ Humanが以下4項目を再確認しPASSと報告。実施日時・ブラウザ�
 - **Human結果（更新）**：dev-sandboxがPause中だったとHumanが報告。Resume後の実ログイン成功をHuman確認済み。SDK標準Authの不具合とは扱わない。旧D05 cancelと認証済みlocalでのdraft保持も確認済み。ただし今回決定した一覧限定loginは未確認のため、UAT-05はFAIL／停止中。既存R05・01〜04 PASSを維持し06以降は未開始。
 - **次の最小操作**：本ケースの更新後手順1〜8の未確認部分のみ。既存R05とResume後のAuth成功そのものを反復しない。新しいR05枝番・Humanケースは作らない。
 
-#### 今回のoffline AI GateとHuman残確認
+#### PR #125のAI Gate履歴と今回のHuman finding
 
-- login禁止は通常review2製品UIの画面制約であり、内部login／restore APIや非製品のC05試験用fixtureを禁止しない。local route／cloud editorの既存状態から判定し、dirty状態機械は追加しない。認証画面自体は開けるため、案内・既存logout回復を利用できる。
-- 新規clean／dirty、保存済みclean／dirty、一覧復帰、古いbutton／form送信、cloud editorとlogout回復、list login→cloud/load、既存C05回帰をofflineで検証する。
-- **AI Gate結果**：全Vitest59ファイル・1,970件PASS、既存Playwright E2E83件PASS（exit0）、typecheck、local/cloud product build、文書整合性、diff checkはPASS。1200/390/320pxで一覧login可能、新規/保存済みのclean/dirty編集で非活性、古いclick/form送信の拒否、離脱cancel時draft維持、保存後一覧復帰で有効、list loginから既存cloud/loadへの接続を合成製品試験で確認。cloudの新規/保存済み編集も禁止し、認証失効時のlogout確認/cancelとcloud編集保持を確認。旧編集中loginの製品試験を新UXへ置換し、非製品fixtureのD05/C05・旧user/generation・UNKNOWN等の安全回帰は維持した。WindowsのE2E終了待ちは全83 assert完了後、今回所有のlocalhostサーバーだけを終了しexit0を確認。実Supabase/Auth/RPC/DB/SQL/cloud write・production・Human操作・公開/デプロイ0。
-- **Human残確認結果**：PENDING。新UXの非活性表示と理由、一覧復帰後のlogin可能、新UXからcloudへの移行／保存先表示／既存readの未確認部分を既存05内で確認する。旧D05 cancelは必須再確認しない。追加実Auth/RPC、Human再開、production操作は今回実施しない。
+- PR #125のAI Gate：全Vitest59ファイル1,970件、Playwright83件、typecheck、local/cloud build、文書整合性、diff check PASS。保存→一覧→loginは確認していたが、未保存離脱承認→一覧→loginの接続試験が不足していた。
+- Human観測：編集画面login非活性、理由案内、一覧復帰後login有効・案内消去はPASS。一覧からの実loginは成功。直後に認証済みlocalでD05確認が出たためSTOP。承認ボタンは未操作、cloud移行／表示／snapshot readは未確認。
+- 原因：controllerは正常離脱後もdirty editorをretainedEditorsへ保管する。製品UIは保管editorも現在editorと同様にdepartureとC05 dirty算出へ含め、確認済みの単純dirtyを再確認していた。通知文は共通なので、Human表示だけから拒否・UNKNOWNの存在を認定しない。
+- 採用A案の修正：storageDepartureEditorsで保存先変更用の評価対象を共有。離脱許可後に保管されたlocal editorのうちdirty・save=idle/saved・unresolvedなしだけを二重確認対象から除外する。retainedEditors/draft/baseline/要求は削除・変更しない。現在editor、保存拒否、UNKNOWN、未解決要求、保存中、app全体の失敗・未解決は従来どおり保護する。logoutの既存departure評価は維持。内部Auth/D05/C05/C04とuser/generation・stale確認拒否、fallback/自動再送禁止を変更しない。
+- **今回のAI Gate結果**：関連navigation/製品layout182件PASS、保管editorの拒否/UNKNOWN追加2件PASS。最終の全Vitest59ファイル・1,981件PASS、Playwright E2E83件PASS（exit0）、typecheck、local/cloud product build、文書整合性、diff check PASS。新規/保存済みの未保存離脱cancel/approve、保管値維持、一覧loginで重複D05なし・C05 dirty=false・既存load1回、保存→一覧→loginの既存経路をoffline確認。現在editor・拒否・UNKNOWN・未解決・保存中・stale確認・user/generation・logout・C04 conflict/UNKNOWN/no auto resend・local/cloud分離の既存回帰も維持。WindowsのE2E終了待ちは全83 assert完了後、今回所有のlocalhostサーバーだけを終了しexit0を確認。実Supabase/Auth/RPC/cloud read/write/DB/SQL・Human操作・production・公開/デプロイ0。AI GateをHuman PASSへ読み替えない。
+- **Human残確認結果**：PENDING。UAT-05はFAIL／停止中。新規UATケース・R05枝番は追加しない。
+
+**次回Humanが行う影響部分だけの手順（追加実通信の承認後）**
+
+1. 未ログインlocalで合成メモを未保存編集状態にし、一覧へ戻る操作の既存離脱確認を承認する。新規／保存済み両方の総当たりは不要。login非活性・案内・一覧復帰で有効化は既にHuman PASSなので再判定しない。
+2. 一覧から承認済み合成ユーザーでloginする。これは修正後の切替を観測するための前提操作で、実login成功そのものは既存Human証拠を再利用する。
+3. 保管済みの単純dirtyを理由とするD05の重複確認が出ず、そのままcloudへ進むことを見る。危険状態の故意再現はAI Gateへ任せる。
+4. 「現在の保存先：クラウド（ログイン中）」と、移行に伴う既存snapshot読取結果を確認する。UNKNOWN/エラーなら停止し、自動・手動retryで結果を探らない。
+
+既存R05、旧D05 cancel、編集時login禁止・案内・一覧復帰の同じHuman確認は繰り返さない。今回のAI GateをHuman PASSや実通信承認へ読み替えず、UAT-06以降も開始しない。
 
 ### UAT-06：cloudで書く・保存・再読込・session復元
 

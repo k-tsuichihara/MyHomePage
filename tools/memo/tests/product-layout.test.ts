@@ -68,6 +68,43 @@ it.each([1200, 390, 320])('UAT-05：編集画面のlogin禁止と一覧復帰・
   } finally { await context.close(); }
 }, 20000);
 
+it.each(['new', 'saved'])('UAT-05：%s未保存離脱を承認した保管draftは保持し、一覧loginでD05を重複しない', async kind => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-d05-login'); await page.locator('#new').waitFor();
+    await page.locator('#new').click(); await page.locator('#memo-title').fill('保管するlocal draft');
+    if (kind === 'saved') {
+      await page.locator('#save').click(); await waitSavedEditor(page);
+      await page.locator('#memo-body').fill('未保存の追記');
+    }
+    await page.locator('#back').click(); await page.locator('#confirm-no').click();
+    expect(await page.locator('#memo-title').inputValue()).toBe('保管するlocal draft');
+    expect(await page.evaluate('fixture.state().route.kind')).toBe('edit');
+    await page.locator('#back').click(); await page.locator('#confirm-yes').click();
+    expect(await page.evaluate('fixture.state().route.kind')).toBe('list');
+    const retained = await page.evaluate<readonly import('../src/editor-state').EditorState[]>('fixture.state().retainedEditors');
+    expect(retained).toHaveLength(1);
+    expect(retained[0]!.draft.title).toBe('保管するlocal draft');
+    expect(retained[0]!.draft).not.toEqual(retained[0]!.baseline);
+    expect(await page.evaluate('fixture.target().dirty')).toBe(false);
+    const stored = await page.evaluate('fixture.stored()');
+    await page.locator('#product-auth-open').click();
+    const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+    await dialog.getByLabel('メールアドレス', { exact: true }).fill('synthetic-email@example.invalid');
+    await dialog.getByLabel('パスワード', { exact: true }).fill('synthetic-password');
+    await dialog.getByRole('button', { name: 'ログイン', exact: true }).click();
+    await page.locator('#product-cloud-items').waitFor();
+    expect(await page.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(false);
+    expect(await page.evaluate('fixture.target().target')).toBe('cloud');
+    expect(await page.evaluate('fixture.state().retainedEditors')).toEqual(retained);
+    expect(await page.evaluate('fixture.stored()')).toEqual(stored);
+    expect(await page.evaluate('fixture.calls.login')).toBe(1);
+    expect(await page.evaluate('fixture.calls.writes')).toBe(kind === 'saved' ? 1 : 0);
+    expect(await page.evaluate('fixture.calls.fetch')).toBe(0);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await context.close(); }
+}, 20000);
+
 it.each(['saved', 'new'])('UAT-05：cloudの%s編集でもlogin禁止、失効時のlogout回復は維持', async kind => {
   const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
   try {
