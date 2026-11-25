@@ -320,7 +320,7 @@ it.each(['success', 'failure', 'generation', 'user', 'target', 'edit'])('cloud�
       expect(await page.evaluate('fixture.rpcNames.length')).toBe(3);
     } else {
       expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).not.toBe('Pinned A');
-      if (change === 'failure') expect(await editor.textContent()).toContain('移動先を確認できません');
+      if (change === 'failure') expect(await page.locator('.cloud-editor-statuses').textContent()).toContain('移動先を確認できません');
       if (change === 'edit') expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('読込中の追加');
     }
     expect(await page.locator('#product-cloud-snapshot').isVisible()).toBe(false);
@@ -363,7 +363,7 @@ it.each([1200, 390, 320])('P2追補：cloud編集の独立した複製を既存�
     expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('Pinned A');
     expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('needle common');
     expect(await editor.getByRole('checkbox', { name: '赤タグ', exact: true }).isChecked()).toBe(true);
-    expect(await copy.isVisible()).toBe(false);
+    expect(await copy.isVisible()).toBe(true); expect(await copy.isDisabled()).toBe(true);
     expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
     await page.getByLabel('クラウドのタイトル', { exact: true }).fill('編集からの複製');
     await editor.getByRole('checkbox', { name: '青タグ', exact: true }).check();
@@ -393,9 +393,9 @@ it('P2追補：cloud編集の複製はdirtyのcancel/古い承認を拒否し、
     await editor.getByRole('button', { name: '変更を破棄して複製', exact: true }).click();
     expect(await title.inputValue()).toBe('確認後の入力'); expect(await page.evaluate('fixture.generatedIds.length')).toBe(ids);
     await page.evaluate("fixture.snapshotMode('failure')");
-    await editor.getByRole('button', { name: '< 一覧へ', exact: true }).click();
+    await page.locator('.cloud-list-navigation').getByRole('button', { name: '< 一覧へ', exact: true }).click();
     await editor.getByRole('button', { name: '変更を破棄して編集を閉じる', exact: true }).click();
-    await editor.getByRole('status').filter({ hasText: '一覧を確認できません' }).waitFor();
+    await page.locator('.cloud-editor-statuses').getByRole('status').filter({ hasText: '一覧を確認できません' }).waitFor();
     await copy.click(); await editor.getByRole('button', { name: '変更を破棄して複製', exact: true }).click();
     expect(await title.inputValue()).toBe('クラウドの合成メモ');
     expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('<b>読取専用の本文</b>');
@@ -416,14 +416,14 @@ it.each(['unknown', 'pending', 'stale'])('P2追補：cloud編集の複製は%s�
       await editor.getByRole('button', { name: '変更を破棄して複製', exact: true }).click();
     }
     else await editor.getByRole('button', { name: '保存する', exact: true }).click();
-    if (condition === 'unknown') await editor.getByRole('status').filter({ hasText: '保存できたか不明' }).waitFor();
+    if (condition === 'unknown') await page.locator('.cloud-editor-statuses').getByRole('status').filter({ hasText: '保存できたか不明' }).waitFor();
     const ids = Number(await page.evaluate('fixture.generatedIds.length'));
     await copy.dispatchEvent('click'); expect(await copy.isDisabled()).toBe(true);
     expect(await page.evaluate('fixture.generatedIds.length')).toBe(ids);
     expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('元draftを保持');
     if (condition === 'pending') {
       await page.evaluate('fixture.releaseSave()'); await editor.locator('.editor-saved').waitFor();
-      await copy.click(); expect(await copy.isVisible()).toBe(false);
+      await copy.click(); expect(await copy.isVisible()).toBe(true); expect(await copy.isDisabled()).toBe(true);
       expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('元draftを保持');
       expect(await page.evaluate('fixture.generatedIds.length')).toBe(ids + 2);
     }
@@ -444,7 +444,7 @@ it.each(['failure', 'unverified', 'generation', 'edit'])('P2：cloud一覧復帰
     await title.fill('一覧復帰前のdraft'); await body.fill('保持する本文');
     if (change === 'failure' || change === 'unverified') await page.evaluate(change === 'failure' ? "fixture.snapshotMode('failure')" : "fixture.snapshotMode('unverified')");
     else await page.evaluate('fixture.holdNextRead()');
-    await editor.getByRole('button', { name: '< 一覧へ', exact: true }).click();
+    await page.locator('.cloud-list-navigation').getByRole('button', { name: '< 一覧へ', exact: true }).click();
     await editor.getByRole('button', { name: '変更を破棄して編集を閉じる', exact: true }).click();
     await expect.poll(() => page.evaluate('fixture.rpcNames.length')).toBe(2);
     if (change === 'generation' || change === 'edit') {
@@ -455,13 +455,13 @@ it.each(['failure', 'unverified', 'generation', 'edit'])('P2：cloud一覧復帰
       await page.evaluate('fixture.releaseRead()');
     }
     await expect.poll(() => page.evaluate('fixture.calls.readCompleted')).toBe(2);
-    await expect.poll(() => editor.getByRole('button', { name: '< 一覧へ', exact: true }).isEnabled()).toBe(true);
+    await expect.poll(() => page.locator('.cloud-list-navigation').getByRole('button', { name: '< 一覧へ', exact: true }).isEnabled()).toBe(true);
     expect(await editor.isVisible()).toBe(true); expect(await title.inputValue()).toBe('一覧復帰前のdraft');
     expect(await body.inputValue()).toBe(change === 'edit' ? '読取中の追加入力' : '保持する本文');
     expect(await page.locator('#product-cloud-snapshot').isVisible()).toBe(false);
     expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_load_snapshot']);
     await page.evaluate("fixture.snapshotMode('success')");
-    await editor.getByRole('button', { name: '< 一覧へ', exact: true }).click();
+    await page.locator('.cloud-list-navigation').getByRole('button', { name: '< 一覧へ', exact: true }).click();
     await editor.getByRole('button', { name: '変更を破棄して編集を閉じる', exact: true }).click();
     await page.locator('#product-cloud-items').waitFor(); expect(await editor.isVisible()).toBe(false);
     expect(await page.locator('#product-cloud-snapshot').getByLabel('検索', { exact: true }).inputValue()).toBe('common');
@@ -486,7 +486,7 @@ it.each(['new', 'voice'])('P2：ゴミ箱からのcloud %sでも保持した通�
     await editor.getByRole('button', { name: '次のメモ 〉', exact: true }).click();
     await editor.getByRole('button', { name: '変更を破棄して移動', exact: true }).click();
     await expect.poll(() => page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toBe('Delta');
-    await editor.getByRole('button', { name: '< 一覧へ', exact: true }).click(); await page.locator('#product-cloud-items').waitFor();
+    await page.locator('.cloud-list-navigation').getByRole('button', { name: '< 一覧へ', exact: true }).click(); await page.locator('#product-cloud-items').waitFor();
     expect(await page.locator('#product-cloud-snapshot').getByLabel('検索', { exact: true }).inputValue()).toBe('Delta');
     expect(await page.getByRole('checkbox', { name: '絞込タグ：青タグ', exact: true }).isChecked()).toBe(true);
     expect(await page.locator('#product-cloud-snapshot').getByLabel('並び替え', { exact: true }).inputValue()).toBe('created-asc');
@@ -630,7 +630,7 @@ it.each(['conflict', 'rejected', 'unknown'])('UAT-01：cloud %sで保存しま�
     await page.locator('#product-cloud-items button.open-card').first().click();
     const editor = page.locator('#product-cloud-editor'); await page.getByLabel('クラウドの本文', { exact: true }).fill('失わないdraft');
     await editor.getByRole('button', { name: '保存する', exact: true }).click();
-    await editor.getByRole('status').filter({ hasText: outcome === 'unknown' ? '保存できたか不明' : '保存は拒否' }).waitFor();
+    await page.locator('.cloud-editor-statuses').getByRole('status').filter({ hasText: outcome === 'unknown' ? '保存できたか不明' : '保存は拒否' }).waitFor();
     expect(await editor.locator('.editor-saved').isVisible()).toBe(false);
     expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('失わないdraft');
     expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
@@ -920,7 +920,7 @@ it.each([1440, 390, 320])('定型通知を省略してもlocal/cloudのエラー
       const page = await fakeProduct(context, failure === 'cloud' ? 'cloud-failure' : 'cloud-edit-signed-out');
       if (failure !== 'cloud') {
         await page.locator('#new').waitFor();
-        expect(await page.locator('.statuses').isVisible()).toBe(false);
+        expect(await page.locator('#memo-app .statuses').isVisible()).toBe(false);
         await page.evaluate(failure === 'unknown' ? 'fixture.failWrites()' : 'fixture.failReads(true)'); await page.evaluate('fixture.saveTag()');
         await page.locator('#save-status').filter({ hasText: failure === 'unknown' ? '保存結果は不明' : '拒否' }).waitFor();
         await page.locator('#product-auth-open').click();
@@ -1017,7 +1017,7 @@ it.each([1200, 390, 320])('編集通知の抑制後も実fake保存のエラー/
       const notice = page.locator(failure === 'invalid' ? '#error' : '#save-status');
       await notice.filter({ hasText: failure === 'invalid' ? '入力を確認' : failure === 'unknown' ? '保存結果は不明' : '拒否' }).waitFor();
       expect(await notice.isVisible()).toBe(true);
-      expect(await page.locator('.statuses').isVisible()).toBe(true);
+      expect(await page.locator('#memo-app .statuses').isVisible()).toBe(true);
       expect(await page.locator('#memo-body').inputValue()).toBe('残す本文');
       await page.screenshot({ path: fileURLToPath(new URL(`.product/mobile-editor-${failure}-${width}.png`, root)) });
       expect(await page.evaluate('fixture.calls.writes')).toBe(failure === 'unknown' ? 1 : 0);
@@ -1045,7 +1045,7 @@ it.each(['local', 'cloud'])('全幅の編集画面で上部ナビと左右の停
         expect((await rect('#memo-form>label')).top - next.bottom).toBeGreaterThanOrEqual(14);
         expect(await page.getByRole('button', { name: '< 一覧へ', exact: true }).isVisible()).toBe(true);
         expect(await page.locator('#lengths').isVisible()).toBe(false); expect(await editor.locator('.editor-footer>p').isVisible()).toBe(false);
-      } else expect(await editor.getByRole('button', { name: '< 一覧へ', exact: true }).isVisible()).toBe(true);
+      } else expect(await page.locator('.cloud-list-navigation').getByRole('button', { name: '< 一覧へ', exact: true }).isVisible()).toBe(true);
       expect(await editor.locator('.editor-tag-hint').evaluate(node => getComputedStyle(node).fontSize)).toBe('12px');
       const voice = editor.getByRole('button', { name: '音声で本文へ追記', exact: true });
       await page.mouse.move(0, 0); expect(await voice.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgb(189, 40, 59)');
@@ -1070,7 +1070,7 @@ it.each(['local', 'cloud'])('全幅の編集画面で上部ナビと左右の停
       await save.scrollIntoViewIfNeeded(); await page.screenshot({ path: fileURLToPath(new URL(`.product/editor-actions-${mode}-${width}.png`, root)) });
       await save.click();
       if (mode === 'local') { await waitSavedEditor(page); expect(await page.evaluate('fixture.calls.writes')).toBe(1); }
-      else { await editor.getByRole('status').filter({ hasText: '成功' }).waitFor(); expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']); expect(await page.evaluate('fixture.calls.writes')).toBe(0); }
+      else { await editor.locator('.editor-saved').waitFor(); expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']); expect(await page.evaluate('fixture.calls.writes')).toBe(0); }
       expect(await page.evaluate('fixture.calls.fetch')).toBe(0);
     } finally { await context.close(); }
   }
@@ -1180,12 +1180,12 @@ it.each([1200, 390])('cloudゴミ箱詳細と通常メモの複製編集・ス�
     expect(await voice.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgb(189, 40, 59)');
     if (width > 650) {
       expect(await editor.locator('.editor-tag-hint').evaluate(node => getComputedStyle(node).fontSize)).toBe('12px');
-      expect(await editor.locator('.pc-title-field').evaluate(node => getComputedStyle(node).marginTop)).toBe('14px');
+      expect(await editor.locator('.memo-editor-form').evaluate(node => getComputedStyle(node).paddingTop)).toBe('14px');
       const note = await editor.locator('.voice-service-notice').boundingBox();
       const body = await page.getByLabel('クラウドの本文', { exact: true }).boundingBox();
       expect(note!.y + note!.height).toBeLessThanOrEqual(body!.y);
-      await editor.getByRole('button', { name: '< 一覧へ', exact: true }).click();
-    } else await editor.getByRole('button', { name: '< 一覧へ', exact: true }).click();
+      await page.locator('.cloud-list-navigation').getByRole('button', { name: '< 一覧へ', exact: true }).click();
+    } else await page.locator('.cloud-list-navigation').getByRole('button', { name: '< 一覧へ', exact: true }).click();
     await editor.getByRole('button', { name: 'クラウド編集を続ける', exact: true }).click();
     expect(await page.getByLabel('クラウドのタイトル', { exact: true }).inputValue()).toContain('クラウド');
     expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
@@ -1558,7 +1558,7 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
     await expect.poll(() => page.locator('#page-title').textContent()).toBe('メモ一覧');
     expect(await page.locator('#product-auth-open').textContent()).toBe('ログイン / 保存先：ローカル');
     if (width === 1440) {
-      expect(await page.locator('.statuses').isVisible()).toBe(false);
+      expect(await page.locator('#memo-app .statuses').isVisible()).toBe(false);
       const boxes = await page.evaluate(() => {
         const box = (selector: string) => { const r = document.querySelector(selector)!.getBoundingClientRect(); return { width: r.width, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
         const select = getComputedStyle(document.querySelector('#sort')!);
@@ -1652,6 +1652,62 @@ it.each([1440, 390])('正本一覧・編集・モーダル：幅%s', async width
   } finally { await context.close(); }
 }, 15000);
 
+it.each([1200, 992, 900, 800, 650, 390, 320].flatMap(width => ['new', 'saved'].map(kind => ({ width, kind }))))('UAT-06 local/cloud編集画面の構造・縦幅・scrollを統一：$width/$kind', async ({ width, kind }) => {
+  const measures: Record<string, Record<string, { x: number; y: number; width: number; height: number }>> = {};
+  for (const cloud of [false, true]) {
+    const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+    try {
+      const page = await fakeProduct(context, cloud ? 'cloud-list-uat-layout' : 'cloud-list-uat-layout-signed-out');
+      if (kind === 'new') {
+        if (cloud) { await page.locator('#product-cloud-items').waitFor(); await page.locator('.cloud-actions').getByRole('button', { name: '＋ 新規作成', exact: true }).click(); }
+        else { await page.locator('#new').waitFor(); await page.locator('#new').click(); }
+      } else await page.locator(cloud ? '#product-cloud-items .open-card' : '#cards .open-card').first().click();
+      const pane = page.locator(cloud ? '#product-cloud-editor' : '#editor-view'); await pane.waitFor();
+      const form = pane.locator('form'), title = cloud ? pane.getByLabel('クラウドのタイトル', { exact: true }) : page.locator('#memo-title');
+      const body = cloud ? pane.getByLabel('クラウドの本文', { exact: true }) : page.locator('#memo-body');
+      const back = page.locator(cloud ? '.cloud-list-navigation .editor-back' : '#back');
+      expect((await back.textContent())?.replace(/\s+/g, ' ')).toContain('< 一覧へ');
+      const voice = pane.getByRole('button', { name: '音声で本文へ追記', exact: true });
+      await page.mouse.move(0, 0);
+      expect(await voice.evaluate(node => getComputedStyle(node).backgroundColor)).toBe('rgb(189, 40, 59)');
+      expect(await pane.locator('.editor-tag-hint').textContent()).toBe('タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。');
+      expect(await pane.locator('.editor-tag-hint').evaluate(node => getComputedStyle(node).fontSize)).toBe('12px');
+      expect(await body.getAttribute('rows')).toBe('12');
+      const nav = pane.locator(':scope>.detail-actions');
+      const previous = nav.getByRole('button', { name: '〈 前のメモ', exact: true }), copy = nav.getByRole('button', { name: '複製', exact: true }), next = nav.getByRole('button', { name: '次のメモ 〉', exact: true });
+      const a = (await previous.boundingBox())!, b = (await copy.boundingBox())!, c = (await next.boundingBox())!;
+      expect(a.x).toBeLessThan(b.x); expect(b.x + b.width).toBeLessThan(c.x); expect(a.y).toBe(c.y);
+      expect(Math.abs(c.x + c.width - (await nav.boundingBox())!.x - (await nav.boundingBox())!.width)).toBeLessThanOrEqual(1);
+      const footer = pane.locator('.editor-footer'), stop = footer.getByRole('button', { name: '音声入力を停止', exact: true }), save = footer.getByRole('button', { name: '保存する', exact: true });
+      measures[cloud ? 'cloud' : 'local'] = {};
+      for (const [name, node] of Object.entries({ pane, back, nav, title, tags: form.locator(':scope>fieldset'), body, voice, footer, stop, save })) measures[cloud ? 'cloud' : 'local']![name] = (await node.boundingBox())!;
+      const boxes = measures[cloud ? 'cloud' : 'local']!;
+      expect(boxes.stop!.y).toBe(boxes.save!.y);
+      expect(boxes.stop!.x).toBe(boxes.footer!.x); expect(boxes.save!.x + boxes.save!.width).toBe(boxes.footer!.x + boxes.footer!.width);
+      expect(await pane.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await pane.getByRole('button', { name: 'ゴミ箱へ移動', exact: true }).count()).toBe(0);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/cloud-editor-${kind}-${cloud ? 'cloud' : 'local'}-${width}-top.png`, root)) });
+      const scroll = await pane.evaluate(node => { node.scrollTop = node.scrollHeight; return { overflow: node.scrollHeight > node.clientHeight, top: node.scrollTop }; });
+      if (scroll.overflow) expect(scroll.top).toBeGreaterThan(0);
+      for (const node of [stop, save]) expect(await node.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await page.screenshot({ path: fileURLToPath(new URL(`.product/cloud-editor-${kind}-${cloud ? 'cloud' : 'local'}-${width}-bottom.png`, root)) });
+      expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+      expect(await page.evaluate('fixture.rpcNames')).toEqual(cloud ? ['memo_load_snapshot'] : []);
+      if (cloud) {
+        expect(await pane.getByRole('button', { name: '保存結果を照合', exact: true }).isVisible()).toBe(false);
+        const reload = page.locator('.cloud-operation-group .list-reload-button'); expect(await reload.isDisabled()).toBe(true);
+        await reload.dispatchEvent('click'); expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+      }
+    } finally { await context.close(); }
+  }
+  const local = measures.local!, cloud = measures.cloud!;
+  for (const key of ['pane', 'back', 'nav', 'title', 'tags', 'body', 'voice', 'footer', 'stop', 'save']) {
+    for (const dimension of ['width', 'height'] as const) expect(Math.abs(cloud[key]![dimension] - local[key]![dimension]), `${key}.${dimension}`).toBeLessThanOrEqual(2);
+    expect(Math.abs((cloud[key]!.y - cloud.pane!.y) - (local[key]!.y - local.pane!.y)), `${key}.y`).toBeLessThanOrEqual(2);
+  }
+}, 20000);
+
 it.each([1200, 992, 900, 800, 650, 390, 320])('UAT-05 cloud一覧を受入済みlocal配置へ統一：幅%s', async width => {
   const measurements: Record<string, { search: { y: number; width: number }; reload: { x: number; y: number; width: number; height: number }; trash: { width: number; height: number }; cards: { y: number; height: number }; sort: { y: number; width: number } }> = {};
   for (const cloud of [false, true]) {
@@ -1725,7 +1781,7 @@ it.each([1440, 390])('同じ製品HTMLのfake cloud配置：幅%s', async width 
     expect(await page.locator('#product-auth-open').textContent()).toBe('ログアウト / 保存先：クラウド');
     const beforeVoice = await page.evaluate('fixture.rpcNames.slice()');
     await page.getByRole('button', { name: '音声メモ', exact: true }).click();
-    await page.locator('#product-session > [role="status"]').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).waitFor();
+    await page.locator('.cloud-editor-statuses > [role="status"]').filter({ hasText: 'このブラウザは音声入力に対応していません。' }).waitFor();
     expect(await page.locator('#product-cloud-editor').isVisible()).toBe(false);
     expect(await page.locator('#product-cloud-items').isVisible()).toBe(true);
     expect(await page.evaluate('fixture.rpcNames.slice()')).toEqual(beforeVoice);
