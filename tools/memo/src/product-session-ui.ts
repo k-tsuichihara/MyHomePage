@@ -79,7 +79,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'ログアウトの離脱確認');
   const warning = doc.createElement('p'); warning.textContent = '未保存・保存拒否・結果不明の編集があります。ログアウトを続けますか？';
   const proceed = button('確認してログアウト'), cancel = button('ログアウトをキャンセル');
-  confirmation.append(warning, proceed, cancel);
+  const confirmationActions = doc.createElement('div'); confirmationActions.className = 'auth-confirmation-actions';
+  confirmationActions.append(proceed, cancel); confirmation.append(warning, confirmationActions);
   const authActions = doc.createElement('div'); authActions.className = 'auth-actions'; authActions.append(login, logout);
   const loginHint = doc.createElement('p'); loginHint.id = 'product-login-hint'; loginHint.hidden = true;
   loginHint.textContent = '編集画面ではログインできません。一覧画面に戻ってからログインしてください。';
@@ -399,7 +400,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (result?.kind === 'cancelled' && ticket?.intent === 'cloud' && ticket.target?.from === 'local' && auth
       && generation === ticket.generation && auth.generation === ticket.target.expectedGeneration && local.getState() === ticket.app
       && [...ticket.app.retainedEditors, ...(ticket.app.editor ? [ticket.app.editor] : [])].some(isDirty)) cancelledCloudUser = uuidKey(auth.userId);
-    clearConfirmation(); authDialog?.close(); authFeedback('離脱をキャンセルしました。', false); refresh(); };
+    clearConfirmation(); authDialog?.close(); authFeedback('', false); refresh(); };
   const onLocal = () => requestDeparture('local'), onCloud = () => requestDeparture('cloud');
   const onResume = () => {
     const auth = context();
