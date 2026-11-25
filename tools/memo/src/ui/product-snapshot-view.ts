@@ -15,15 +15,21 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   emptyTrash?: (targets: readonly CloudTarget[], valid: () => boolean) => boolean,
   tagEditor?: { canStart: () => boolean; save: (tag: Tag | null, name: string, valid: () => boolean) => boolean; feedback?: HTMLElement },
   deleteTag?: (tag: Tag, valid: () => boolean) => boolean,
-  duplicate?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[], context: ListContext) => boolean) {
+  duplicate?: (memo: Memo, tagIds: string[], valid: () => boolean, tags: readonly Tag[], context: ListContext) => boolean,
+  layout?: { operations: HTMLElement; create: HTMLElement }) {
   const root = doc.createElement('section'); root.id = 'product-cloud-snapshot';
   const productLayout = doc.documentElement.dataset.productLayout === 'review2';
   root.setAttribute('aria-label', 'クラウドメモ（読取専用）'); root.hidden = true;
   parent.append(root);
   let active: { value: MemoData; valid: () => boolean; token: object; view: 'normal' | 'trash'; normal: ListContext; trash: ListContext } | null = null;
   let disposed = false;
+  let toggles: HTMLElement[] = [];
+  const releaseLayout = () => {
+    toggles.forEach(node => node.remove()); toggles = [];
+    if (layout && root.contains(layout.create)) parent.append(layout.create);
+  };
   const releaseTagFeedback = () => { if (tagEditor?.feedback && root.contains(tagEditor.feedback)) parent.append(tagEditor.feedback); };
-  const clear = () => { releaseTagFeedback(); active = null; root.replaceChildren(); root.hidden = true; };
+  const clear = () => { releaseLayout(); releaseTagFeedback(); active = null; root.replaceChildren(); root.hidden = true; };
   const current = (token: object) => {
     if (disposed || active?.token !== token) return null;
     try { if (active.valid()) return active.value; } catch { /* 元例外は表示しない。 */ }
@@ -38,7 +44,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   };
   const confirmView = (...nodes: HTMLElement[]) => {
     // 入力検証でmodal内へ移した共有通知を、確認画面のDOM置換に巻き込まない。
-    releaseTagFeedback();
+    releaseLayout(); releaseTagFeedback();
     if (!productLayout) { root.replaceChildren(...nodes); return; }
     const dialog = doc.createElement('dialog'); dialog.className = 'product-dialog'; dialog.setAttribute('aria-label', 'クラウド操作の確認');
     dialog.append(...nodes); dialog.addEventListener('cancel', event => { event.preventDefault(); nodes[nodes.length - 1]?.click(); });
@@ -55,7 +61,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
     if (edit && memo.deletedAt === null) { editMemo(id, token); return; }
     const tags = value.memoTags.filter(row => uuidKey(row.memoId) === uuidKey(memo.id))
       .map(row => value.tags.find(tag => uuidKey(tag.id) === uuidKey(row.tagId))!.name);
-    releaseTagFeedback(); root.dataset.view = 'detail';
+    releaseLayout(); releaseTagFeedback(); root.dataset.view = 'detail';
     root.replaceChildren(text('h2', 'クラウドメモ詳細（読取専用）'), text('p', memo.title), text('pre', memo.body),
       text('p', memo.deletedAt ? 'ゴミ箱内のメモ（読取専用）' : '通常メモ（読取専用）'),
       text('p', tags.length ? `タグ：${tags.join('、')}` : 'タグなし'),
@@ -161,7 +167,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
   };
   const list = (token: object) => {
     const value = current(token); if (!value) return;
-    releaseTagFeedback();
+    releaseLayout(); releaseTagFeedback();
     const view = active!.view;
     root.dataset.view = 'list'; root.classList.remove('memo-detail-layout');
     root.replaceChildren(text('h2', 'クラウドメモ一覧（読取専用）'));
@@ -172,16 +178,19 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
       if (!current(token)) return;
       rememberScroll(); active!.view = next; list(token);
     };
-    const normal = button('クラウド通常一覧', () => { if (root.contains(normal)) navigate('normal'); });
-    const trash = button('クラウドゴミ箱', () => { if (root.contains(trash)) navigate('trash'); });
+    const liveToggle = (node: HTMLElement) => root.contains(node) || !!layout?.operations.contains(node);
+    const normal = button(productLayout ? '通常一覧' : 'クラウド通常一覧', () => { if (liveToggle(normal)) navigate('normal'); });
+    const trash = button(productLayout ? 'ゴミ箱' : 'クラウドゴミ箱', () => { if (liveToggle(trash)) navigate('trash'); });
     normal.setAttribute('aria-pressed', String(view === 'normal')); trash.setAttribute('aria-pressed', String(view === 'trash'));
     if (productLayout) {
       normal.hidden = view === 'normal'; trash.hidden = view === 'trash';
       normal.className = 'cloud-normal-toggle'; trash.className = 'cloud-trash-toggle';
-      const operations = doc.createElement('div'); operations.className = 'cloud-operation-group'; operations.setAttribute('role', 'group'); operations.setAttribute('aria-label', 'クラウド一覧の切替');
-      operations.append(normal, trash); root.append(operations);
+      const operations = layout?.operations ?? doc.createElement('div');
+      if (!layout) { operations.className = 'list-operation-group cloud-operation-group'; root.append(operations); }
+      operations.prepend(normal, trash); toggles = [normal, trash];
     } else root.append(normal, trash);
-    const count = text('p', ''); count.setAttribute('role', 'status');
+    const count = text(productLayout ? 'h2' : 'p', ''); count.setAttribute('role', 'status');
+    const summary = doc.createElement('div'); if (productLayout) { summary.className = 'list-summary'; summary.append(count); }
     const renderRows = () => {
       if (!current(token)) return;
       const scroll = context().scrollTop;
@@ -216,36 +225,40 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         }
         rows.append(row);
       });
-      count.textContent = `${view === 'normal' ? '通常メモ' : 'ゴミ箱'}：${context().result.resultCount}件`;
+      count.textContent = `${view === 'normal' ? '通常メモ' : 'ゴミ箱'}：${productLayout ? '検索結果 ' : ''}${context().result.resultCount}件`;
       rows.scrollTop = scroll;
     };
     const usage = new Map(countTagUsage(value).map(row => [uuidKey(row.tagId), row.count]));
     let tagHeading: HTMLElement | undefined;
-    if (view === 'normal') {
+    if (view === 'normal' || productLayout) {
       const controls = doc.createElement('div');
       if (productLayout) controls.className = 'cloud-list-controls';
-      const searchLabel = doc.createElement('label'); searchLabel.textContent = 'クラウドの検索';
+      const searchLabel = doc.createElement('label'); searchLabel.textContent = productLayout ? '' : 'クラウドの検索';
       const search = doc.createElement('input'); search.type = 'search'; search.value = context().result.query.text; searchLabel.append(search);
       const sortLabel = doc.createElement('label'); sortLabel.textContent = 'クラウドの並び順';
-      const sort = doc.createElement('select'); sort.setAttribute('aria-label', 'クラウドの並び順');
+      const sort = doc.createElement('select'); sort.setAttribute('aria-label', productLayout ? '並び替え' : 'クラウドの並び順');
       for (const [key, label] of [['updated-desc', '更新が新しい順'], ['updated-asc', '更新が古い順'], ['created-desc', '作成が新しい順'], ['created-asc', '作成が古い順']]) {
-        const option = doc.createElement('option'); option.value = key!; option.textContent = label!; sort.append(option);
+        const option = doc.createElement('option'); option.value = key!;
+        option.textContent = productLayout ? ({ 'updated-desc': '更新日（新しい順）', 'updated-asc': '更新日（古い順）', 'created-desc': '作成日（新しい順）', 'created-asc': '作成日（古い順）' }[key!] ?? label!) : label!;
+        sort.append(option);
       }
       sort.value = context().result.query.sort; sortLabel.append(sort);
       const filters = doc.createElement('fieldset'), legend = doc.createElement('legend'); legend.textContent = 'クラウドのタグ絞込（OR）'; filters.append(legend);
       const chips = productLayout ? doc.createElement('div') : filters;
       if (productLayout) { chips.className = 'tag-chips'; filters.append(chips); }
       const inputs: { id: string; node: HTMLInputElement }[] = [];
+      let allTags: HTMLButtonElement | undefined;
       const query = (ids?: string[]) => {
-        if (!root.contains(controls) || !current(token)) return;
+        if (view !== 'normal' || !root.contains(controls) || !current(token)) return;
         try { active!.normal = { result: queryMemos(value, { view: 'normal', text: search.value, selectedTagIds: ids ?? context().result.query.selectedTagIds, sort: sort.value }), scrollTop: rows.scrollTop }; }
         catch { count.textContent = '一覧条件を確認できません。条件を再選択してください。'; return; }
         inputs.forEach(({ id, node }) => { node.checked = context().result.query.selectedTagIds.some(selected => uuidKey(selected) === uuidKey(id)); });
+        allTags?.setAttribute('aria-pressed', String(!context().result.query.selectedTagIds.length));
         renderRows();
       };
       value.tags.forEach(tag => {
         const label = doc.createElement('label'), node = doc.createElement('input'); node.type = 'checkbox';
-        node.setAttribute('aria-label', `クラウド絞込タグ：${tag.name}`);
+        node.setAttribute('aria-label', `${productLayout ? '絞込タグ' : 'クラウド絞込タグ'}：${tag.name}`);
         node.checked = context().result.query.selectedTagIds.some(id => uuidKey(id) === uuidKey(tag.id));
         node.onchange = () => {
           if (!root.contains(node) || !current(token)) return;
@@ -254,30 +267,34 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         };
         label.append(node, `${tag.name}（${usage.get(uuidKey(tag.id)) ?? 0}件）`); chips.append(label); inputs.push({ id: tag.id, node });
       });
-      const reset = button('クラウドのタグ絞込を解除', () => { if (root.contains(reset)) query([]); });
+      const reset = button(productLayout ? '絞込解除' : 'クラウドのタグ絞込を解除', () => { if (root.contains(reset)) query([]); });
       search.oninput = () => query(); sort.onchange = () => query();
       if (productLayout) {
-        reset.setAttribute('aria-label', 'クラウドのタグ絞込を解除');
-        const desktopReset = doc.createElement('span'); desktopReset.className = 'desktop-reset-label'; desktopReset.textContent = reset.textContent;
-        const mobileReset = doc.createElement('span'); mobileReset.className = 'mobile-reset-label'; mobileReset.textContent = '絞込解除'; reset.replaceChildren(desktopReset, mobileReset);
         controls.className = 'list-controls'; search.placeholder = 'タイトル・本文・タグ名で検索…';
+        search.setAttribute('aria-label', '検索');
         const caption = doc.createElement('span'); caption.className = 'sort-caption pc-sort-caption'; caption.textContent = '並び替え';
         const mobileCaption = doc.createElement('span'); mobileCaption.className = 'mobile-sort-caption'; mobileCaption.textContent = 'クラウドの並び順';
         sortLabel.firstChild?.remove(); sortLabel.prepend(caption, mobileCaption);
-        const toolbar = doc.createElement('div'); toolbar.className = 'list-toolbar'; toolbar.append(searchLabel);
+        const toolbar = doc.createElement('div'); toolbar.className = 'list-toolbar'; toolbar.append(searchLabel); if (layout) toolbar.append(layout.create);
         const options = doc.createElement('div'); options.className = 'list-options';
         const tags = doc.createElement('div'); tags.className = 'tag-controls';
         tagHeading = doc.createElement('div'); tagHeading.className = 'section-heading'; tagHeading.append(text('h2', 'タグで絞り込み'));
-        filters.className = 'cloud-filter-wrap'; legend.className = 'visually-hidden';
-        const tagSearch = doc.createElement('input'); tagSearch.type = 'search'; tagSearch.placeholder = 'タグを検索…'; tagSearch.setAttribute('aria-label', 'クラウドのタグを検索');
+        filters.className = 'cloud-filter-wrap tag-chip-strip'; legend.className = 'visually-hidden';
+        const all = button('すべて', () => { if (root.contains(all)) query([]); }); all.className = 'filters-all';
+        allTags = all;
+        all.setAttribute('aria-pressed', String(!context().result.query.selectedTagIds.length));
+        filters.insertBefore(all, chips);
+        const tagSearch = doc.createElement('input'); tagSearch.type = 'search'; tagSearch.placeholder = 'タグを検索…'; tagSearch.setAttribute('aria-label', 'タグを検索');
         tagSearch.oninput = () => Array.from(filters.querySelectorAll('label')).forEach(label => { label.hidden = !(label.textContent ?? '').toLocaleLowerCase().includes(tagSearch.value.toLocaleLowerCase()); });
         const row = doc.createElement('div'); row.className = 'tag-search-row'; row.append(tagSearch, reset);
         tags.append(tagHeading, row, filters); sortLabel.className = 'sort-control'; searchLabel.className = 'memo-search';
-        options.append(tags, sortLabel); controls.append(toolbar, options);
+        options.append(tags, sortLabel); controls.append(toolbar, options, summary);
+        // ゴミ箱専用の検索機能は増やさず、通常一覧条件を保った表示だけにする。
+        if (view === 'trash') { search.disabled = sort.disabled = tagSearch.disabled = reset.disabled = all.disabled = true; inputs.forEach(({ node }) => { node.disabled = true; }); }
       } else controls.append(searchLabel, sortLabel, filters, reset);
       root.append(controls);
     }
-    root.append(count, rows); root.hidden = false;
+    root.append(...(productLayout ? [rows] : [count, rows])); root.hidden = false;
     renderRows(); rows.onscroll = rememberScroll;
     if (tagEditor || deleteTag) {
       if (!productLayout) {
@@ -350,10 +367,14 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         root.append(dialog);
       }
     }
-    if (emptyTrash) {
+    if (emptyTrash && (!productLayout || view === 'trash')) {
       const targets = Object.freeze(value.memos.filter(memo => memo.deletedAt !== null)
         .map(memo => Object.freeze({ id: memo.id, revision: memo.revision })));
-      if (!targets.length) { root.append(text('p', 'ゴミ箱は空です。')); return; }
+      if (!targets.length) {
+        if (!productLayout) root.append(text('p', 'ゴミ箱は空です。'));
+        else { const empty = button('ゴミ箱を空にする', () => {}); empty.disabled = true; summary.append(empty); }
+        return;
+      }
       const start = button('ゴミ箱を空にする', () => {
         if (!root.contains(start) || !current(token)) return;
         const confirm = button('すべて完全に削除', () => {
@@ -367,7 +388,7 @@ export function mountProductSnapshot(doc: Document, parent: HTMLElement,
         confirmView(text('p', `ゴミ箱内のメモ${targets.length}件を完全に削除します。元に戻せません。`), confirm,
           button('一括削除をキャンセル', () => list(token)));
       });
-      root.append(start);
+      if (productLayout) summary.append(start); else root.append(start);
     }
   };
   return Object.freeze({

@@ -92,10 +92,11 @@ it.each([false, true])('実SDK＋注入HTTPでlogin/restore(seed=%s)→D05→val
     if (!seed) {
       if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor(); expect(f.requests).toEqual([]); await f.login();
     }
-    await f.page.getByText(/クラウド読取成功/).waitFor();
+    await f.page.locator('#product-cloud-snapshot').waitFor();
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toEqual([{ path: '/rest/v1/rpc/memo_load_snapshot', method: 'POST' }]);
     expect(await f.page.locator('#product-session').textContent()).toContain('保存先：クラウド');
     expect(await f.page.getByText(/クラウド読取成功/).count()).toBe(1);
+    expect(await f.page.locator('#product-cloud-state').isVisible()).toBe(false);
     const changes = await f.page.evaluate('productProbe.changes') as string[];
     expect(changes.every(k => k.startsWith('myhomepage.memo.auth.v1'))).toBe(true);
     const output = await f.privateOutput();
@@ -160,7 +161,7 @@ it('BFCache復帰後も同じSDK/Auth UIを使い、再生成せず明示login�
     await f.page.evaluate('window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true })); window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }))');
     expect(await f.page.evaluate('cachedProductSession === document.querySelector("#product-session")')).toBe(true);
     expect(f.requests).toEqual([]);
-    await f.login(); await f.page.getByText(/クラウド読取成功/).waitFor();
+    await f.login(); await f.page.locator('#product-cloud-snapshot').waitFor();
     expect(f.requests.filter(x => x.path.startsWith('/rest/'))).toHaveLength(1);
     await f.page.locator('#product-auth-open').click();
     await f.page.getByRole('button', { name: 'ログアウト', exact: true }).click(); if (!await f.page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true }).isVisible()) await f.page.locator('#product-auth-open').click(); await f.page.getByText('未ログイン', { exact: true }).waitFor();
@@ -170,7 +171,7 @@ it('BFCache復帰後も同じSDK/Auth UIを使い、再生成せず明示login�
 it('BFCache退避/復帰はcloud dirty draftと離脱確認を維持し、Auth/RPC/local writeを追加しない', async () => {
   const f = await fixture(true);
   try {
-    await f.configure(); await f.page.getByText(/クラウド読取成功/).waitFor();
+    await f.configure(); await f.page.locator('#product-cloud-snapshot').waitFor();
     await f.page.getByRole('button', { name: '＋ 新規作成', exact: true }).click();
     await f.page.getByLabel('クラウドのタイトル', { exact: true }).fill('退避前draft');
     await f.page.getByLabel('クラウドの本文', { exact: true }).fill('保持する本文');
