@@ -292,6 +292,8 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 /* 認証の操作行とエラー表示。正常通知・離脱cancelの文言は赤くしない。 */
 .memo-product .auth-actions{display:flex;gap:12px;flex-wrap:wrap}
 .memo-product .auth-actions>button{flex:0 0 auto;width:auto}
+.memo-product .auth-confirmation-actions{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
+.memo-product #product-login-hint{color:#b42318}
 .memo-product :is(#product-session-state,#product-auth-feedback,#product-cloud-state)[data-notice=error]{color:#b42318}
 
 /* cloud一覧もlocalの一覧構造・操作寸法を使う。保存先固有の処理は移さない。 */

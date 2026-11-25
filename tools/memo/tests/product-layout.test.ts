@@ -105,6 +105,33 @@ it.each(['new', 'saved'])('UAT-05：%s未保存離脱を承認した保管draft�
   } finally { await context.close(); }
 }, 20000);
 
+it.each([1200, 390, 320])('UAT-07：logout確認の余白・赤いlogin案内・取消通知なし：幅%s', async width => {
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit'); await page.locator('#product-cloud-items').waitFor();
+    await page.locator('#product-cloud-items .open-card').first().click();
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('UAT-07 保護する追記');
+    await page.locator('#product-auth-open').click();
+    const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+    expect(await page.locator('#product-login-hint').evaluate(node => getComputedStyle(node).color)).toBe('rgb(180, 35, 24)');
+    await dialog.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    const actions = dialog.locator('.auth-confirmation-actions');
+    expect(await actions.evaluate(node => { const s = getComputedStyle(node); return [s.gap, s.marginTop, s.marginBottom, s.flexWrap]; })).toEqual(['10px', '10px', '10px', 'wrap']);
+    const yes = await dialog.getByRole('button', { name: '確認してログアウト', exact: true }).boundingBox();
+    const no = await dialog.getByRole('button', { name: 'ログアウトをキャンセル', exact: true }).boundingBox();
+    expect(yes && no).toBeTruthy();
+    expect(no!.y >= yes!.y + yes!.height + 9 || no!.x >= yes!.x + yes!.width + 9).toBe(true);
+    expect(await dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await dialog.getByRole('button', { name: 'ログアウトをキャンセル', exact: true }).click();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('UAT-07 保護する追記');
+    await page.locator('#product-auth-open').click();
+    expect(await page.locator('#product-auth-feedback').textContent()).toBe('');
+    expect(await page.evaluate('fixture.target().target')).toBe('cloud');
+    expect(await page.evaluate('fixture.calls.logout + fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await context.close(); }
+}, 20000);
+
 it.each(['saved', 'new'])('UAT-05：cloudの%s編集でもlogin禁止、失効時のlogout回復は維持', async kind => {
   const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
   try {
