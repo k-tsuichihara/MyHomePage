@@ -18,7 +18,9 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   returnToList?: (context: ListContext | null, commit: () => boolean) => Promise<boolean>;
   auth: Pick<ReturnType<typeof createMemoAuthSession>, 'getContext' | 'isCurrent'>;
   selected(): boolean; viewKey(): object; createId(): string; changed(): void; now?: (() => Date) | undefined;
+  navigation?: HTMLElement | undefined;
 }) {
+  const productLayout = doc.documentElement.dataset.productLayout === 'review2';
   const root = doc.createElement('section'); root.setAttribute('aria-label', 'クラウド単件編集'); root.id = 'product-cloud-editor'; root.hidden = true;
   const title = doc.createElement('input'); title.setAttribute('aria-label', 'クラウドのタイトル');
   const body = doc.createElement('textarea'); body.setAttribute('aria-label', 'クラウドの本文');
@@ -151,43 +153,50 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
   });
   confirmation.append(proceed, button('クラウド編集を続ける', () => { closeTicket = null; render(); }));
   root.append(previous, copy, next, title, body, tagField, tagNotice, voiceStart, save, resolve, close, confirmation, status); save.before(saved); parent.append(root, voice.section);
-  if (doc.documentElement.dataset.productLayout === 'review2') {
+  if (productLayout) {
+    root.classList.add('memo-detail-layout');
     const nav = doc.createElement('nav'); nav.className = 'detail-actions'; nav.setAttribute('aria-label', 'クラウド編集の前後移動');
     setPcButtonLabel(doc, previous, '〈 前のメモ'); setPcButtonLabel(doc, next, '次のメモ 〉'); nav.append(previous, copy, next); root.prepend(nav);
-    const titleLabel = doc.createElement('label'); titleLabel.textContent = 'タイトル（最大100文字）';
-    title.before(titleLabel); titleLabel.append(title);
+    const form = doc.createElement('form'); form.className = 'memo-editor-form';
+    // フォームのEnterも既存submitだけへ委譲し、保存条件・要求の凍結は変更しない。
+    form.onsubmit = event => { event.preventDefault(); void submit(); };
+    const titleLabel = doc.createElement('label'); titleLabel.textContent = 'タイトル（最大100文字）'; titleLabel.append(title); title.autocomplete = 'off';
     titleLabel.className = 'pc-title-field';
-    const bodyLabel = doc.createElement('label'); bodyLabel.textContent = '本文（最大10,000文字）';
-    body.before(bodyLabel); bodyLabel.append(body);
-    const heading = doc.createElement('h2'); heading.textContent = 'メモの作成・編集'; root.prepend(heading);
     const search = doc.createElement('input'); search.type = 'search'; search.setAttribute('aria-label', 'クラウドの選択タグを検索'); search.placeholder = 'タグを検索…';
     search.oninput = () => tagField.querySelectorAll('label').forEach(label => { label.hidden = !(label.textContent ?? '').toLocaleLowerCase().includes(search.value.toLocaleLowerCase()); });
-    const note = doc.createElement('p'); note.className = 'editor-tag-hint'; note.textContent = '編集中は既存タグを選択できます。タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。';
-    bodyLabel.before(search, note, tagField, tagNotice);
+    const note = doc.createElement('p'); note.className = 'editor-tag-hint'; note.textContent = 'タグの作成・変更・削除は保存して一覧へ戻ってから行ってください。';
+    const tagGroup = doc.createElement('fieldset'), legend = doc.createElement('legend'); legend.textContent = 'タグ';
+    const searchRow = doc.createElement('div'); searchRow.className = 'tag-search-row'; searchRow.append(search);
+    tagField.className = 'tag-chips editor-tag-choices'; tagGroup.append(legend, searchRow, note, tagField, tagNotice);
     const bodyHeading = doc.createElement('div'); bodyHeading.className = 'section-heading';
-    const bodyText = doc.createElement('span'); bodyText.textContent = '本文（最大10,000文字）';
-    voiceStart.textContent = '音声入力';
-    setPcButtonLabel(doc, voiceStart, '音声で本文へ追記'); decoratePcVoiceButton(doc, voiceStart);
+    const bodyText = doc.createElement('label'); bodyText.textContent = '本文（最大10,000文字）';
+    body.id = 'product-cloud-body'; bodyText.htmlFor = body.id; body.rows = 12; body.className = 'editor-body';
+    voiceStart.textContent = '音声で本文へ追記'; decoratePcVoiceButton(doc, voiceStart);
     setPcButtonLabel(doc, close, '< 一覧へ');
-    bodyLabel.firstChild?.remove(); bodyHeading.append(bodyText, voiceStart);
+    close.className = 'editor-back';
+    if (deps.navigation) deps.navigation.prepend(close); else root.prepend(close);
+    const voiceSlot = doc.createElement('div'); voiceSlot.className = 'editor-voice-slot'; voiceSlot.append(voiceStart); bodyHeading.append(bodyText, voiceSlot);
     const stop = voice.section.querySelector('button');
     const footer = doc.createElement('div'); footer.className = 'cloud-editor-footer editor-footer';
     if (stop) footer.append(stop);
-    save.textContent = '保存する'; footer.append(saved, save); root.append(footer);
-    bodyLabel.before(bodyHeading);
-    bodyHeading.classList.add('pc-cloud-body-heading'); bodyLabel.classList.add('pc-cloud-body-field');
-    root.append(voice.section);
+    save.textContent = '保存する'; footer.append(saved, save);
+    form.append(titleLabel, tagGroup, bodyHeading, body, voice.section, footer); nav.after(form);
+    resolve.textContent = '保存結果を照合';
+    const messages = doc.createElement('section'); messages.className = 'statuses cloud-editor-statuses';
+    messages.setAttribute('aria-label', '処理状態'); messages.append(status); parent.insertBefore(messages, deps.navigation ?? root);
+    status.className = 'editor-status';
     // 非対応時は新規editorが作られない。通知だけはcloud一覧からも見える位置に置く。
-    parent.append(voice.status);
+    messages.append(voice.status);
   }
   function render() {
     if (disposed) return;
     root.hidden = !editor || !deps.selected();
+    if (productLayout) { close.hidden = status.hidden = root.hidden; }
     voice.section.hidden = !deps.selected();
     voice.status.hidden = !deps.selected();
     const available = editor && auth();
     previous.disabled = next.disabled = !available || working || !!closeTicket;
-    copy.hidden = editor?.expectedRevision == null; copy.disabled = !canDuplicate();
+    copy.hidden = !productLayout && editor?.expectedRevision == null; copy.disabled = !canDuplicate();
     proceed.textContent = closeTicket?.target.kind === 'duplicate' ? '変更を破棄して複製'
       : closeTicket?.target.kind === 'edit' ? '変更を破棄して移動' : '変更を破棄して編集を閉じる';
     const savedHere = !!available && !working && !notice && editor!.save.kind === 'saved' && !isDirty(editor!);
@@ -208,6 +217,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
       : candidates.length ? '' : 'このsnapshotにはタグがありません。';
     save.disabled = !available || working || !!editor?.unresolved.length || !!closeTicket;
     resolve.disabled = !available || working || !pending || !!closeTicket;
+    resolve.hidden = productLayout && !pending;
     close.disabled = working;
     confirmation.hidden = !closeTicket;
     status.textContent = !available ? '停止：同じユーザーで再認証してください。クラウドの編集はタブ内で保持しています。'
@@ -218,6 +228,13 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
         : editor!.save.kind === 'saved' ? `保存要求の成功を確認しました。現在内容は明示再読取で確認してください。${isDirty(editor!) ? '追加の未保存変更があります。' : ''}`
           : editor!.expectedRevision === null ? 'クラウドの新規メモを編集中です。'
             : 'クラウドの既存メモを編集しています。');
+    if (productLayout) {
+      const routine = !!available && !working && !notice && !editor!.unresolved.length
+        && (editor!.save.kind === 'idle' || editor!.save.kind === 'saved');
+      status.dataset.routine = String(routine && !isDirty(editor!));
+      status.dataset.notice = !routine && !working ? 'error' : 'routine';
+      if (routine && isDirty(editor!)) status.textContent = '未保存の追加編集があります。';
+    }
   }
   function changed() { render(); deps.changed(); }
   const onInput = () => {
@@ -296,7 +313,7 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
       navigation = listContext ?? null;
       candidates = tags === null ? null : Object.freeze([...tags]); candidateContext = context; candidateView = deps.viewKey();
       tagInputs = []; tagField.replaceChildren();
-      const legend = doc.createElement('legend'); legend.textContent = 'クラウドのタグ'; tagField.append(legend);
+      if (!productLayout) { const legend = doc.createElement('legend'); legend.textContent = 'クラウドのタグ'; tagField.append(legend); }
       const sessionId = editor.sessionId;
       candidates?.forEach(tag => {
         const label = doc.createElement('label'), node = doc.createElement('input'), name = doc.createElement('span');
@@ -327,6 +344,6 @@ export function mountProductCloudEditor(doc: Document, parent: HTMLElement, deps
     dispose() { disposed = true; voice.dispose(); voice.status.remove(); voiceContext = null; voiceChoices = null; editor = null; navigation = null; pending = null; owner = null; closeTicket = null; notice = '';
       tagInputs.forEach(({ node }) => { node.onchange = null; }); tagInputs = []; candidates = null; candidateContext = null; candidateView = null;
       tagField.replaceChildren(); tagNotice.textContent = '';
-      title.oninput = body.oninput = null; title.value = body.value = ''; root.remove(); },
+      title.oninput = body.oninput = null; title.value = body.value = ''; if (productLayout) { close.remove(); status.closest('.cloud-editor-statuses')?.remove(); } root.remove(); },
   });
 }

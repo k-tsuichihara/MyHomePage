@@ -66,8 +66,9 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   const cloudOperations = doc.createElement('div'); cloudOperations.className = 'list-operation-group cloud-operation-group';
   cloudOperations.setAttribute('role', 'group'); cloudOperations.setAttribute('aria-label', '一覧の操作');
   cloudNavigation.append(cloudOperations);
+  if (productLayout) root.prepend(cloudNavigation);
   const cloudStatus = doc.createElement('p'); cloudStatus.id = 'product-cloud-state'; cloudStatus.setAttribute('role', 'status');
-  const cloudNotice = (message: string, error = false) => { cloudStatus.textContent = message; cloudStatus.dataset.notice = error ? 'error' : 'routine'; cloudStatus.dataset.readSuccess = 'false'; };
+  const cloudNotice = (message: string, error = false, editorRoutine = false) => { cloudStatus.textContent = message; cloudStatus.dataset.notice = error ? 'error' : 'routine'; cloudStatus.dataset.readSuccess = 'false'; cloudStatus.dataset.editorRoutine = String(editorRoutine); };
   if (cloud) root.append(...(productLayout ? [resumeCloud, readAgain] : [chooseLocal, chooseCloud]), cloudStatus);
   const stateStatus = doc.createElement('p'); stateStatus.id = 'product-cloud-trash-state'; stateStatus.setAttribute('role', 'status');
   if (cloud?.controller.changeState || cloud?.controller.deletePermanently || cloud?.controller.emptyTrash || cloud?.controller.saveTag || cloud?.controller.deleteTag) root.append(stateStatus);
@@ -414,7 +415,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (closed || unavailable || busy || pending || isBusy() || loading || stateUncertain() || !cloudContext()) return;
     if (cloudEditor?.startNew(snapshotView?.tagChoices() ?? null)) {
       snapshotView?.clear();
-      cloudNotice('新規メモを編集中です。保存成功前に一覧へ追加しません。');
+      cloudNotice('新規メモを編集中です。保存成功前に一覧へ追加しません。', false, true);
     }
   };
   const onNewCloudVoice = async () => {
@@ -422,7 +423,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     if (closed || unavailable || busy || pending || isBusy() || loading || stateUncertain() || !auth) return;
     if (await cloudEditor?.startNewVoice(snapshotView?.tagChoices() ?? null)
       && !closed && selectionTicket === view && !!cloudContext() && session.isCurrent?.(auth)) {
-      snapshotView?.clear(); cloudNotice('新規音声メモを編集中です。保存は手動です。');
+      snapshotView?.clear(); cloudNotice('新規音声メモを編集中です。保存は手動です。', false, true);
     }
   };
   chooseLocal.addEventListener('click', onLocal); chooseCloud.addEventListener('click', onCloud);
@@ -436,7 +437,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   if (cloud?.controller.save && cloud.controller.resolve && session.getContext && session.isCurrent && local.createId) {
     cloudEditor = mountProductCloudEditor(doc, root, { writer: { save: cloud.controller.save, resolve: cloud.controller.resolve },
       loader: cloud.controller.load, returnToList: readCloud, auth: { getContext: session.getContext, isCurrent: session.isCurrent }, createId: local.createId,
-      selected: () => !closed && !unavailable && cloud.target.current().target === 'cloud', viewKey: () => selectionTicket, changed: refresh, now: local.now });
+      selected: () => !closed && !unavailable && cloud.target.current().target === 'cloud', viewKey: () => selectionTicket, changed: refresh, now: local.now,
+      navigation: productLayout ? cloudNavigation : undefined });
     newCloud.addEventListener('click', onNewCloud); root.append(newCloud);
     newCloudVoice.addEventListener('click', onNewCloudVoice); root.append(newCloudVoice);
   }
@@ -446,7 +448,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     newCloudVoice.className = 'voice-memo-button'; newCloudVoice.setAttribute('aria-label', '音声メモ'); newCloudVoice.prepend(mic, ' ');
     cloudActions.append(newCloud, newCloudVoice);
     readAgain.textContent = '再読み込み'; readAgain.className = 'list-reload-button';
-    cloudOperations.append(readAgain); root.prepend(cloudNavigation, cloudActions);
+    cloudOperations.append(readAgain); cloudNavigation.after(cloudActions);
   }
   let unsubscribe = () => {};
   try { unsubscribe = session.subscribe(refresh); } catch { unavailable = true; authFeedback('認証状態を購読できませんでした。'); }

@@ -20,34 +20,32 @@
 /* 編集画面のみ、端末幅を問わず上部ナビと停止/保存のフッターを使う。 */
 .memo-product #editor-view{display:flex;flex-direction:column}
 .memo-product :is(#editor-view,#product-cloud-editor)>.detail-actions{flex-wrap:nowrap;gap:8px;margin:0}
-.memo-product #editor-next{margin-left:auto}
-.memo-product #memo-form{display:grid;padding-top:14px;flex:0 0 auto}
-.memo-product #memo-form>label{order:0}.memo-product #memo-form>fieldset{order:1}
-.memo-product #memo-form>.section-heading{order:2}
+.memo-product #editor-next,.memo-product #product-cloud-editor>.detail-actions>button:last-child{margin-left:auto}
+.memo-product :is(#memo-form,.memo-editor-form){display:grid;padding-top:14px;flex:0 0 auto}
+.memo-product :is(#memo-form,.memo-editor-form)>label{order:0}.memo-product :is(#memo-form,.memo-editor-form)>fieldset{order:1}
+.memo-product :is(#memo-form,.memo-editor-form)>.section-heading{order:2}
 .memo-product #editor-voice-controls-slot,.memo-product #editor-voice-controls-slot>[data-voice-controls]{display:contents}
-.memo-product #memo-form .voice-service-notice{order:3}
-.memo-product #memo-body{order:4}
-.memo-product #memo-form>.editor-footer{order:5;justify-content:space-between;flex-wrap:nowrap;gap:12px}
+.memo-product :is(#memo-form,.memo-editor-form) .voice-service-notice{order:3}
+.memo-product :is(#memo-body,.editor-body){order:4}
+.memo-product :is(#memo-form,.memo-editor-form)>.editor-footer{order:5;justify-content:space-between;flex-wrap:nowrap;gap:12px}
 .memo-product #lengths,.memo-product #editor-view .editor-footer>p{display:none}
-.memo-product #editor-view .editor-tag-hint{font-size:12px;color:#68768a}
-.memo-product #editor-view .pc-only,.memo-product #product-cloud-editor .pc-only,.memo-product[data-page=edit] #back .pc-only{display:inline}
-.memo-product #editor-view .mobile-only,.memo-product #product-cloud-editor .mobile-only,.memo-product[data-page=edit] #back .mobile-only{display:none}
+.memo-product :is(#editor-view,#product-cloud-editor) .editor-tag-hint{font-size:12px;color:#68768a}
+.memo-product #editor-view .pc-only,.memo-product #product-cloud-editor .pc-only,.memo-product[data-page=edit] :is(#back,.editor-back) .pc-only{display:inline}
+.memo-product #editor-view .mobile-only,.memo-product #product-cloud-editor .mobile-only,.memo-product[data-page=edit] :is(#back,.editor-back) .mobile-only{display:none}
 .memo-product #editor-view button.pc-voice-button,.memo-product #product-cloud-editor button.pc-voice-button{--voice-background:initial;--voice-color:initial;--voice-border:initial;--voice-hover:initial}
-.memo-product #editor-view .editor-footer button,.memo-product .cloud-editor-footer button{flex:0 0 auto;width:auto;white-space:nowrap}
+.memo-product :is(#editor-view,#product-cloud-editor) .editor-footer button,.memo-product .cloud-editor-footer button{flex:0 0 auto;width:auto;white-space:nowrap}
 .memo-product #product-cloud-editor{display:flex;flex-direction:column}
-.memo-product #product-cloud-editor>.pc-title-field{margin-top:14px}
-.memo-product #product-cloud-editor>.editor-tag-hint{font-size:12px;color:#68768a}
-.memo-product #product-cloud-editor>.pc-cloud-body-heading{order:2}
-.memo-product #product-cloud-editor>.pc-cloud-body-field{order:4}
-.memo-product #product-cloud-editor>[data-voice-controls]{display:contents}
+.memo-product .editor-tag-choices{padding:10px 0;margin:0}
+.memo-product .editor-status[data-notice=error]{color:#b42318}
+.memo-product:has(#product-cloud-editor:not([hidden])) #product-cloud-state[data-editor-routine=true][data-notice=routine]{display:none}
+.memo-product .memo-editor-form>[data-voice-controls]{display:contents}
 .memo-product #product-cloud-editor .voice-service-notice{order:3}
-.memo-product #product-cloud-editor>.cloud-editor-footer{order:5;display:flex;justify-content:space-between;flex-wrap:nowrap;gap:12px;margin-top:16px}
 .memo-product #product-cloud-editor>button,.memo-product #product-cloud-editor>[role=group],.memo-product #product-cloud-editor>[role=status]{order:6}
 @media(max-width:650px){
 .memo-product :is(#editor-view,#product-cloud-editor)>.detail-actions button{font-size:12px;padding:8px 6px;min-width:44px;min-height:44px;white-space:nowrap}
-.memo-product #memo-form>.section-heading,.memo-product #product-cloud-editor>.pc-cloud-body-heading{flex-wrap:wrap;gap:8px}
-.memo-product #memo-form>.section-heading>label,.memo-product #product-cloud-editor>.pc-cloud-body-heading>span{flex-basis:100%}
-.memo-product #editor-voice-slot,.memo-product #product-cloud-editor>.pc-cloud-body-heading>.pc-voice-button{margin-left:auto;white-space:nowrap}
+.memo-product :is(#memo-form,.memo-editor-form)>.section-heading{flex-wrap:wrap;gap:8px}
+.memo-product :is(#memo-form,.memo-editor-form)>.section-heading>label{flex-basis:100%}
+.memo-product #editor-voice-slot,.memo-product .editor-voice-slot{margin-left:auto;white-space:nowrap}
 }
 /* スマホの編集通知はPCと同じ定型分類だけを省略する。詳細/編集は上段2操作・下段戻る。 */
 @media(max-width:650px){
@@ -105,13 +103,13 @@ html[data-product-layout] body:has(.memo-product) .memo-page{max-width:1440px;he
 .memo-product .memo-cards li,.memo-product #product-cloud-items li{position:relative;background:white;border:1px solid #d5deea;border-radius:9px;padding:12px 125px 12px 18px;margin-bottom:10px;min-height:82px;overflow-wrap:anywhere}
 .memo-product .open-card{background:transparent;border:0;text-align:left;padding:0;font-size:17px;font-weight:650;display:block;width:100%}.memo-product .card-preview{color:#62718a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.memo-product .card-meta{font-size:12px;color:#718097}
 .memo-product .memo-cards details,.memo-product #product-cloud-items details{position:absolute;right:35px;top:15px;z-index:2}.memo-product details summary{list-style:none;cursor:pointer;padding:5px}.memo-product details[open]{background:white;box-shadow:0 6px 18px #1b2d4d30;border-radius:8px}.memo-product details[open] button{display:block;width:100%;text-align:left}.memo-product .pin-indicator{position:absolute;right:82px;top:18px}
-.memo-product .detail-navigation{display:flex;gap:10px;margin-bottom:10px}.memo-product:has(#list-view:not([hidden])):not([data-source=cloud]) .detail-navigation #back{display:none}
+.memo-product .detail-navigation{display:flex;gap:10px;margin-bottom:10px}.memo-product:has(#list-view:not([hidden])):not([data-source=cloud]) .detail-navigation :is(#back,.editor-back){display:none}
 .memo-detail-layout{flex:1;min-height:0;overflow:auto;background:white;padding:18px;border-radius:10px}.memo-detail-layout form{display:flex;flex-direction:column;gap:16px}.memo-product fieldset{min-width:0;padding:0;border:0}.memo-product legend{font-size:15px;margin-bottom:8px}.memo-product textarea{min-height:220px;resize:vertical;line-height:1.8}.memo-product pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;min-height:180px;line-height:1.8}.memo-product #lengths{text-align:right;font-size:12px;color:#68768a}
 .product-dialog{border:1px solid #ced8e7;border-radius:14px;padding:24px;width:min(600px,calc(100vw - 28px));max-height:88dvh;overflow:auto;box-shadow:0 20px 80px #152b4d40;color:#273449;background:white}.product-dialog::backdrop{background:#152b4d70}.product-dialog .dialog-heading{margin-bottom:12px}.product-dialog form{display:grid;gap:10px;margin:14px 0}.product-dialog section{border-top:1px solid #dce3ed;padding:16px 0}.product-dialog input[type=file]{margin:10px 0}.product-dialog #tag-manager-rows>div{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #e0e6ed}.product-dialog #tag-manager-rows span:first-child{flex:1}
 .memo-product .visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
 .memo-product #product-session-slot{min-height:0;display:contents}.memo-product #product-session{min-height:0;display:flex;flex-direction:column}.memo-product[data-source=cloud] #product-session{flex:1}.memo-product[data-source=cloud] #memo-app,.memo-product[data-source=cloud] #migration-view{display:none!important}
 .memo-product #product-cloud-snapshot{display:flex;flex-direction:column;min-height:0;flex:1}.memo-product #product-cloud-snapshot[data-view=list]>h2{display:none}.memo-product .cloud-list-controls{flex:0 0 auto;display:flex;gap:12px;flex-wrap:wrap;align-items:end}.memo-product .cloud-list-controls>label:first-child{flex:1;min-width:200px}.memo-product .cloud-list-controls fieldset{flex-basis:100%}
-.memo-product #product-cloud-editor{min-height:0;overflow:auto;padding:16px;background:white;border-radius:10px}.memo-product #product-cloud-editor>input,.memo-product #product-cloud-editor>textarea{width:100%;margin:10px 0}.memo-product [data-voice-controls]{font-size:12px;color:#68768a}
+.memo-product #product-cloud-editor{min-height:0;overflow:auto}.memo-product #product-cloud-editor>input,.memo-product #product-cloud-editor>textarea{width:100%;margin:10px 0}.memo-product [data-voice-controls]{font-size:12px;color:#68768a}
 @media(max-width:650px){
 html[data-product-layout] body:has(.memo-product) .memo-page{padding:12px 14px}.memo-product h1{font-size:24px}.product-heading p{display:none}.product-heading button{font-size:12px;padding:8px}
 .memo-product .list-toolbar{display:grid;grid-template-columns:1fr 1fr auto;gap:7px}.memo-product .memo-search{grid-column:1/-1}.memo-product #new{grid-column:1;grid-row:2}.memo-product #list-voice-slot{grid-column:2;grid-row:2}.memo-product #trash-view{grid-column:3;grid-row:2}.memo-product .list-toolbar button{padding:9px 6px;font-size:13px}
@@ -130,7 +128,7 @@ html[data-product-layout] body:has(.memo-product) .memo-page{padding:12px 14px}.
 .memo-product .tag-controls>.section-heading>button{grid-column:2;grid-row:1}
 .memo-product .tag-controls>.tag-search-row{grid-column:1/-1;grid-row:3}
 .memo-product .tag-controls>.tag-chips{grid-column:1/-1;grid-row:4}
-.memo-product #missing-tags{grid-column:1/-1}.memo-product #editor-voice-controls-slot p{font-size:11px}
+.memo-product #missing-tags{grid-column:1/-1}.memo-product :is(#editor-voice-controls-slot,.memo-editor-form>[data-voice-controls]) p{font-size:11px}
 }
 
 .product-dialog h3{font-size:17px;font-weight:650}.product-dialog .tag-table-heading{display:flex;justify-content:space-between;margin:12px 0;color:#68768a}.product-dialog .cloud-tag-rows{padding:0;list-style:none}.product-dialog .cloud-tag-rows li{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #e0e6ed}.product-dialog .cloud-tag-rows li p:first-child{flex:1}.memo-product #product-cloud-state{font-size:12px;max-height:40px;overflow:auto}
@@ -164,7 +162,7 @@ html[data-product-layout] body:has(.memo-product) .memo-page{padding:12px 14px}.
 .memo-product{position:relative}
 .memo-product .product-heading{align-items:flex-start;min-height:124px}
 .memo-product .detail-navigation{display:contents}
-.memo-product .detail-navigation #back{align-self:flex-start;margin-bottom:10px}
+.memo-product .detail-navigation :is(#back,.editor-back){align-self:flex-start;margin-bottom:10px}
 .memo-product #product-auth-open{min-width:250px}
 html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-state,html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-trash-state{display:none}
 .memo-product .statuses [data-routine=true]{display:none!important}
@@ -203,7 +201,7 @@ html[data-product-layout] body:has(.memo-product)>main{overflow-y:auto}
 .memo-product #list-voice-slot>button{width:100%}
 .memo-product #new,.memo-product #list-voice-slot>button,.memo-product .cloud-actions button,.memo-product #product-auth-open,.memo-product .tag-chips label,.memo-product :is(#filters-all,.filters-all){min-height:44px}
 .memo-product .detail-navigation{flex-direction:column;align-items:stretch}
-.memo-product .detail-navigation #back{align-self:flex-start}
+.memo-product .detail-navigation :is(#back,.editor-back){align-self:flex-start}
 .memo-product .list-operation-group{flex-wrap:wrap;width:100%}
 .memo-product .list-operation-group button{flex:1 1 160px;min-width:min-content;min-height:44px;white-space:nowrap}
 .memo-product .tag-controls>.section-heading{display:flex;grid-column:1/-1;grid-row:1;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
@@ -276,7 +274,6 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 .memo-product .memo-cards summary,.memo-product #product-cloud-items summary{box-sizing:border-box;width:32px;height:34px;text-align:center}
 .memo-product .card-menu-items{position:absolute;right:0;top:100%;min-width:140px;background:white;box-shadow:0 6px 18px #1b2d4d30;border-radius:8px}
 .memo-product .editor-footer:has(.editor-saved){position:relative;margin-top:30px}
-.memo-product #product-cloud-editor>.cloud-editor-footer:has(.editor-saved){margin-top:30px}
 .memo-product .editor-saved{position:absolute;right:0;bottom:100%;margin:0 0 5px;color:#236b3a;font-size:14px}
 @media(max-width:800px){
 .memo-product .memo-cards>li,.memo-product #product-cloud-items>li{padding-right:75px}

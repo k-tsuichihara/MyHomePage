@@ -1,5 +1,16 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 UAT-06：cloud編集を受入済みlocalへ統一
+
+UAT-05はPR #127後のHuman最終受入で正式PASS。UAT-06の新規作成・保存と保存直後の動作もHuman受入済みだが、編集layoutの不統一で06はFAIL。現在の状態・残確認は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照する。
+
+- cloudの通常製品review2だけ、既存入力/buttonをlocalと同じ編集pane・上部nav・form・tag fieldset・body heading/textarea・footerへ組み直す。新規/保存済みとも共通CSSを使用する。重複見出し/本文ラベルをなくし、本文rows=12・タイトル上部14px・音声説明11px・タグ補足12pxを揃える。paneは利用可能領域をflexで使い、収まらない内容はpane内scrollにする。
+- 同じ一覧復帰buttonを上部の既存cloudNavigationへ移す。working/UNKNOWN/leave ticketとreturnToListによる既存load/commit判断は変更しない。読取buttonは編集中disabledのまま、local専用backupや新しいeditor内ゴミ箱操作を追加しない。
+- 保存行は停止を左・保存を右にし、既存成功条件の「保存しました」をその上へ置く。通常の重複通知を既存routine分類で省略し、dirty/working/拒否/UNKNOWN/Auth失効/不整合/候補失効等の必要な通知は保持。cloud専用の照合はpending時だけ表示する。保存・resolve・候補/currentness・入力制限は変更しない。
+- 新規では複製buttonの位置を残すが既存canDuplicate判定でdisabledにする。通常操作の文言/音声装飾/補足文をlocalと統一し、音声の処理や外部サービス説明の意味は変えない。非製品fixtureの従来UI/APIは維持する。
+- 1200/992/900/800/650/390/320px×新規/保存済みで、同じ合成snapshotのlocal/cloudを比較。pane・一覧へ・前後/複製・タイトル・タグ・本文・音声・保存行の位置/寸法差2px以内、横はみ出しなし、pane内scrollを検証する。スクリーンショットはignored .product/cloud-editor-*のみ。
+- 以前のcloud専用root直下配置の説明は履歴とし、通常製品の現在layoutは本節を優先する。Auth/D05/C05/C04/RPC/DB/保存形式/離脱判定を変更しない。
+
 ## Q05 UAT-05追加：cloud一覧を受入済みlocal一覧へ統一
 
 PR #126後、Humanが未保存離脱承認後login・D05重複なし・cloud移行・保存先表示・snapshot read（メモ27/タグ21/通常21）をPASSと報告。以下の表示調整だけがHuman受入待ちで、既存認証/読取の再試験はしない。Q05/UAT-05の状態は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照。
