@@ -86,10 +86,12 @@ const snapshot = () => {
       row(String(400 + index), `Scroll ${String(index).padStart(2, '0')}`, 'scroll body', '10', '10', null));
     if (mode === 'cloud-list-scroll-views') for (let index = 0; index < 30; index++) result.memos.push(
       { ...row(String(600 + index), `Trash ${index}`, 'scroll body', '10', '10', null), deleted_at: at('14') });
-    if (mode === 'cloud-list-many-tags') for (let index = 0; index < 16; index++) {
+    if (mode === 'cloud-list-many-tags' || mode.startsWith('cloud-list-uat-layout')) for (let index = 0; index < (mode.startsWith('cloud-list-uat-layout') ? 17 : 16); index++) {
       const tag = { ...result.tags[0]!, id: `00000000-0000-4000-8000-000000000${800 + index}`, name: `折返し用タグ${index}` };
       result.tags.push(tag); result.memoTags.push({ memo_id: memoId, tag_id: tag.id, user_id: value.user.id });
     }
+    if (mode.startsWith('cloud-list-uat-layout')) for (let index = 0; index < 19; index++) result.memos.push(
+      { ...row(String(500 + index), `UAT layout ${index}`, 'synthetic body', '10', '12', null), deleted_at: index < 5 ? at('14') : null });
   }
   return result;
 };
@@ -215,10 +217,10 @@ const cloudPort = {
   ...(mode.startsWith('cloud-tag-delete') || mode.startsWith('cloud-assign') ? { async deleteTag(...args: Parameters<typeof cloudController.deleteTag>) {
     try { const result = await cloudController.deleteTag(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
-  ...(mode.startsWith('cloud-tag') || mode.startsWith('cloud-assign') || mode.startsWith('cloud-pin') || mode.startsWith('cloud-unpin') ? { async saveTag(...args: Parameters<typeof cloudController.saveTag>) {
+  ...(mode.startsWith('cloud-tag') || mode.startsWith('cloud-assign') || mode.startsWith('cloud-pin') || mode.startsWith('cloud-unpin') || mode.startsWith('cloud-list-uat-layout') ? { async saveTag(...args: Parameters<typeof cloudController.saveTag>) {
     try { const result = await cloudController.saveTag(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
-  ...(mode.startsWith('cloud-empty') ? { async emptyTrash(...args: Parameters<typeof cloudController.emptyTrash>) {
+  ...(mode.startsWith('cloud-empty') || mode.startsWith('cloud-list-uat-layout') ? { async emptyTrash(...args: Parameters<typeof cloudController.emptyTrash>) {
     try { const result = await cloudController.emptyTrash(...args); stateResult = result; return result; } finally { calls.stateCompleted++; }
   } } : {}),
   ...(mode.startsWith('cloud-delete') ? { async deletePermanently(...args: Parameters<typeof cloudController.deletePermanently>) {
@@ -243,6 +245,15 @@ const injected = { ...session,
   dispose() { calls.dispose++; session.dispose(); },
 };
 const values = new Map<string, string>();
+// 同じ合成27メモ/21タグでlocal/cloudの表示だけを比較する。実データは使用しない。
+if (mode === 'cloud-list-uat-layout-signed-out') {
+  const data = snapshot();
+  values.set('myhomepage.memo.data.v2', JSON.stringify({ version: 3, migration: { status: 'not-required' }, deletedMemoIds: [],
+    memos: data.memos.map(row => ({ id: row.id, title: row.title, body: row.body, createdAt: row.created_at, updatedAt: row.updated_at,
+      pinnedAt: row.pinned_at, deletedAt: row.deleted_at, revision: row.revision, lastRequestId: row.last_request_id })),
+    tags: data.tags.map(row => ({ id: row.id, name: row.name, createdAt: row.created_at, revision: row.revision })),
+    memoTags: data.memoTags.map(row => ({ memoId: row.memo_id, tagId: row.tag_id })) }));
+}
 if (mode.includes('-local-confirmation') || mode.includes('-local-cancelled') || mode.includes('-local-pending')) values.set('myhomepage.memo.items.v1', '[]');
 if (mode.includes('-local-stopped')) values.set('myhomepage.memo.items.v1', 'invalid');
 if (mode.startsWith('migration')) values.set('myhomepage.memo.items.v1', '[]');

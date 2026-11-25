@@ -138,7 +138,7 @@ html[data-product-layout] body:has(.memo-product) .memo-page{padding:12px 14px}.
 .memo-product .cloud-actions{flex-wrap:wrap}
 @media(max-width:650px){.memo-product .tag-controls>.cloud-filter-wrap{grid-column:1/-1;grid-row:4}.memo-product .cloud-actions button{flex:1;min-width:0;padding:8px 6px;font-size:13px}}
 
-.memo-product .tag-chip-strip{display:flex;gap:8px;align-items:center;overflow-x:auto;white-space:nowrap}.memo-product .tag-chip-strip #filters{overflow:visible;flex:1}.memo-product #filters-all{border-radius:20px;font-size:13px}.memo-product #filters-all[aria-pressed=true]{background:#e4effc;border-color:#4c7bb4}
+.memo-product .tag-chip-strip{display:flex;gap:8px;align-items:center;overflow-x:auto;white-space:nowrap}.memo-product .tag-chip-strip #filters{overflow:visible;flex:1}.memo-product :is(#filters-all,.filters-all){border-radius:20px;font-size:13px}.memo-product :is(#filters-all,.filters-all)[aria-pressed=true]{background:#e4effc;border-color:#4c7bb4}
 @media(max-width:650px){.memo-product .tag-controls>.tag-chip-strip{grid-column:1/-1;grid-row:4}}
 
 .memo-product:has(#product-cloud-editor:not([hidden])) .cloud-actions{display:none}
@@ -192,10 +192,8 @@ html[data-product-layout] .memo-product:not([data-source=cloud]) #product-cloud-
 .memo-product .mobile-reset-label{display:none}
 @media(min-width:651px){
 .memo-product .list-operation-group{position:absolute;top:76px;right:0;flex-wrap:nowrap}
-.memo-product .detail-navigation [data-open-dialog=backup-dialog],.memo-product .detail-navigation #reload{position:static;width:250px}
-.memo-product #trash-view,.memo-product #normal-view{position:static;width:74px;padding:9px 4px;white-space:nowrap}
-.memo-product .cloud-operation-group{position:absolute;top:76px;right:0;width:192px}
-.memo-product .cloud-trash-toggle,.memo-product .cloud-normal-toggle{position:static;width:192px}
+.memo-product .detail-navigation [data-open-dialog=backup-dialog],.memo-product .detail-navigation #reload,.memo-product .detail-navigation .list-reload-button{position:static;width:250px}
+.memo-product #trash-view,.memo-product #normal-view,.memo-product .cloud-trash-toggle,.memo-product .cloud-normal-toggle{position:static;width:74px;padding:9px 4px;white-space:nowrap}
 }
 @media(max-width:650px){
 /* 操作群で高さを使い切る場合だけmainをスクロールし、一覧の潰れを防ぐ。 */
@@ -203,13 +201,11 @@ html[data-product-layout] body:has(.memo-product)>main{overflow-y:auto}
 .memo-product #cards,.memo-product #product-cloud-items{min-height:min(240px,50dvh)}
 .memo-product .list-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 .memo-product #list-voice-slot>button{width:100%}
-.memo-product #new,.memo-product #list-voice-slot>button,.memo-product .cloud-actions button,.memo-product #product-auth-open,.memo-product .tag-chips label,.memo-product #filters-all{min-height:44px}
+.memo-product #new,.memo-product #list-voice-slot>button,.memo-product .cloud-actions button,.memo-product #product-auth-open,.memo-product .tag-chips label,.memo-product :is(#filters-all,.filters-all){min-height:44px}
 .memo-product .detail-navigation{flex-direction:column;align-items:stretch}
 .memo-product .detail-navigation #back{align-self:flex-start}
 .memo-product .list-operation-group{flex-wrap:wrap;width:100%}
 .memo-product .list-operation-group button{flex:1 1 160px;min-width:min-content;min-height:44px;white-space:nowrap}
-.memo-product .cloud-operation-group{display:flex;gap:8px;margin-bottom:10px}
-.memo-product .cloud-operation-group button{min-height:44px;flex:1}
 .memo-product .tag-controls>.section-heading{display:flex;grid-column:1/-1;grid-row:1;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
 .memo-product .tag-controls>.section-heading>h2{margin:0}
 .memo-product .tag-controls>.section-heading>button{min-height:44px}
@@ -269,7 +265,7 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 .memo-product .card-tag{display:inline-flex;align-items:center;margin-right:8px;gap:2px}
 .memo-product .card-meta .card-tag{white-space:normal;overflow:visible;overflow-wrap:anywhere}
 .memo-product .tag-icon{font-size:14px;line-height:1}
-@media(min-width:651px){.memo-product #filters-all{padding:6px 11px;line-height:normal;min-height:0}.memo-product .tag-chip-strip{align-items:stretch}.memo-product .tag-chip-strip #filters{padding-top:0;padding-bottom:0}.memo-product #filters-all{align-self:stretch}}
+@media(min-width:651px){.memo-product :is(#filters-all,.filters-all){padding:6px 11px;line-height:normal;min-height:0}.memo-product .tag-chip-strip{align-items:stretch}.memo-product .tag-chip-strip #filters{padding-top:0;padding-bottom:0}.memo-product :is(#filters-all,.filters-all){align-self:stretch}}
 .memo-product .card-meta time{font-size:13px}
 .memo-product .open-card:hover{background:transparent}
 .memo-product .open-card:focus:not(:focus-visible){outline:none;box-shadow:none}
@@ -294,9 +290,24 @@ html[data-product-layout] body:has(.memo-product)>footer .footer-tagline{font-si
 .memo-product .tag-chip-strip,.memo-product .cloud-filter-wrap .tag-chips{display:flex;flex-wrap:wrap;align-content:flex-start;gap:8px;max-height:148px;overflow-x:hidden;overflow-y:auto;white-space:normal;padding:0}
 .memo-product .tag-chip-strip #filters{display:contents}
 .memo-product .tag-chip-strip label,.memo-product .cloud-filter-wrap .tag-chips label{max-width:100%;white-space:normal;overflow-wrap:anywhere;flex-shrink:1;min-width:0;box-sizing:border-box}
-.memo-product .tag-chip-strip #filters-all{flex:0 0 auto}
+.memo-product .tag-chip-strip :is(#filters-all,.filters-all){flex:0 0 auto}
 }
 /* 認証の操作行とエラー表示。正常通知・離脱cancelの文言は赤くしない。 */
 .memo-product .auth-actions{display:flex;gap:12px;flex-wrap:wrap}
 .memo-product .auth-actions>button{flex:0 0 auto;width:auto}
 .memo-product :is(#product-session-state,#product-auth-feedback,#product-cloud-state)[data-notice=error]{color:#b42318}
+
+/* cloud一覧もlocalの一覧構造・操作寸法を使う。保存先固有の処理は移さない。 */
+.memo-product .list-toolbar>.cloud-actions{display:contents}
+.memo-product .cloud-filter-wrap>.tag-chips{flex:1;overflow:visible;padding:0}
+.memo-product .cloud-filter-wrap{margin-inline:0}
+.memo-product #product-cloud-state[data-read-success=true][data-notice=routine]{display:none}
+.memo-product:has(#product-cloud-snapshot[data-view=detail]:not([hidden])) .cloud-actions{display:none}
+.memo-product #product-cloud-snapshot>.list-controls>.list-summary{flex:0 0 auto}
+@media(max-width:650px){
+.memo-product .list-toolbar>.cloud-actions>button:first-child{grid-column:1;grid-row:2}
+.memo-product .list-toolbar>.cloud-actions>button:last-child{grid-column:2;grid-row:2}
+.memo-product .list-toolbar>.cloud-actions>button{width:100%}
+.memo-product .cloud-filter-wrap{display:flex;flex-wrap:wrap;align-content:flex-start;gap:8px;max-height:148px;overflow-x:hidden;overflow-y:auto;white-space:normal;padding:0}
+.memo-product .cloud-filter-wrap>.tag-chips{display:contents}
+}

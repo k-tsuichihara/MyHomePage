@@ -61,8 +61,13 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
   resumeCloud.hidden = readAgain.hidden = true;
   const newCloud = button('クラウドに新規メモ');
   const newCloudVoice = button('クラウドに新規音声メモ');
+  const cloudActions = doc.createElement('div'); cloudActions.className = 'cloud-actions';
+  const cloudNavigation = doc.createElement('nav'); cloudNavigation.className = 'detail-navigation cloud-list-navigation';
+  const cloudOperations = doc.createElement('div'); cloudOperations.className = 'list-operation-group cloud-operation-group';
+  cloudOperations.setAttribute('role', 'group'); cloudOperations.setAttribute('aria-label', '一覧の操作');
+  cloudNavigation.append(cloudOperations);
   const cloudStatus = doc.createElement('p'); cloudStatus.id = 'product-cloud-state'; cloudStatus.setAttribute('role', 'status');
-  const cloudNotice = (message: string, error = false) => { cloudStatus.textContent = message; cloudStatus.dataset.notice = error ? 'error' : 'routine'; };
+  const cloudNotice = (message: string, error = false) => { cloudStatus.textContent = message; cloudStatus.dataset.notice = error ? 'error' : 'routine'; cloudStatus.dataset.readSuccess = 'false'; };
   if (cloud) root.append(...(productLayout ? [resumeCloud, readAgain] : [chooseLocal, chooseCloud]), cloudStatus);
   const stateStatus = doc.createElement('p'); stateStatus.id = 'product-cloud-trash-state'; stateStatus.setAttribute('role', 'status');
   if (cloud?.controller.changeState || cloud?.controller.deletePermanently || cloud?.controller.emptyTrash || cloud?.controller.saveTag || cloud?.controller.deleteTag) root.append(stateStatus);
@@ -104,7 +109,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     cloud.controller.deleteTag ? startDeleteTag : undefined,
     cloud.controller.save && cloud.controller.resolve && local.createId ? (memo, tags, valid, choices, context) =>
       !isBusy() && !stateUncertain() && !busy && !pending && !loading && !!cloudContext()
-      && (cloudEditor?.duplicate(memo, tags, valid, choices, context) ?? false) : undefined) : undefined;
+      && (cloudEditor?.duplicate(memo, tags, valid, choices, context) ?? false) : undefined,
+    productLayout ? { operations: cloudOperations, create: cloudActions } : undefined) : undefined;
   const anchor = doc.getElementById('product-status');
   const slot = doc.getElementById('product-session-slot');
   if (slot) slot.append(root); else if (anchor) anchor.after(root); else doc.body.prepend(root);
@@ -189,6 +195,7 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         : current.phase === 'checking' ? '認証を確認中' : current.phase === 'disposed' ? '認証終了' : '認証を確認できません';
       source.textContent = `現在の保存先：${cloud?.target.current().target === 'cloud' ? 'クラウド' : 'ローカル'}（${authLabel}）`;
       const auth = context(), selectedCloud = cloud?.target.current().target === 'cloud';
+      cloudNavigation.hidden = !productLayout || !selectedCloud;
       if (['signed-out', 'disposed'].includes(current.phase) || selectedCloud
         || auth && cancelledCloudUser && uuidKey(auth.userId) !== cancelledCloudUser) cancelledCloudUser = null;
       resumeCloud.hidden = !productLayout || !cloud || !cancelledCloudUser || !auth || selectedCloud || editing();
@@ -295,6 +302,8 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
         return false;
       }
       cloudStatus.dataset.notice = result.kind === 'completed' && result.result.kind === 'ok' ? 'routine' : 'error';
+      // 内容・成功判定は保持し、製品では通常の読取成功だけを定型通知として省略する。
+      cloudStatus.dataset.readSuccess = String(result.kind === 'completed' && result.result.kind === 'ok');
       cloudStatus.textContent = result.kind === 'completed'
         ? result.result.kind === 'ok' ? `クラウド読取成功：メモ${result.result.value.memos.length}件・タグ${result.result.value.tags.length}件。${cloudEditor ? '既存メモの単件編集ができます。' : cloud.controller.changeState ? '単件ピン留め/解除・ゴミ箱移動・復元ができます。' : cloud.controller.deletePermanently ? 'ゴミ箱内メモの単件完全削除ができます。' : cloud.controller.emptyTrash ? 'ゴミ箱の一括完全削除ができます。' : cloud.controller.saveTag ? 'タグの単件作成・改名ができます。' : cloud.controller.deleteTag ? 'タグの単件削除ができます。' : '書込未接続です。'}`
           : result.result.kind === 'unknown' || result.result.kind === 'failed' ? 'UNKNOWN：読取結果を確認できません。自動再試行しません。'
@@ -432,11 +441,12 @@ export function mountProductSession(doc: Document, session: ProductSessionPort,
     newCloudVoice.addEventListener('click', onNewCloudVoice); root.append(newCloudVoice);
   }
   if (productLayout) {
-    const actions = doc.createElement('div'); actions.className = 'cloud-actions';
     newCloud.textContent = '＋ 新規作成'; newCloud.className = 'primary'; newCloudVoice.textContent = '音声メモ';
     const mic = doc.createElement('span'); mic.textContent = '🎙'; mic.setAttribute('aria-hidden', 'true');
     newCloudVoice.className = 'voice-memo-button'; newCloudVoice.setAttribute('aria-label', '音声メモ'); newCloudVoice.prepend(mic, ' ');
-    actions.append(newCloud, newCloudVoice); root.prepend(actions);
+    cloudActions.append(newCloud, newCloudVoice);
+    readAgain.textContent = '再読み込み'; readAgain.className = 'list-reload-button';
+    cloudOperations.append(readAgain); root.prepend(cloudNavigation, cloudActions);
   }
   let unsubscribe = () => {};
   try { unsubscribe = session.subscribe(refresh); } catch { unavailable = true; authFeedback('認証状態を購読できませんでした。'); }

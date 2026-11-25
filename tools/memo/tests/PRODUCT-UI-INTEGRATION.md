@@ -1,12 +1,25 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 UAT-05追加：cloud一覧を受入済みlocal一覧へ統一
+
+PR #126後、Humanが未保存離脱承認後login・D05重複なし・cloud移行・保存先表示・snapshot read（メモ27/タグ21/通常21）をPASSと報告。以下の表示調整だけがHuman受入待ちで、既存認証/読取の再試験はしない。Q05/UAT-05の状態は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照。
+
+- 通常製品review2のみ、既存readボタンを「再読み込み」として共通の右側操作groupへ配置。ゴミ箱/通常一覧も共通の文言/寸法にし、同じ場所で切替。バックアップ/復元はlocal専用のためcloudへ追加しない。スマホの操作groupは利用可能幅で折返す。
+- 新規/音声を検索toolbarへ配置。検索ラベル・placeholder・タグ見出し/検索/すべて/絞込解除・並び替え/option文言・summary・カードscrollの基本構造とCSSを共有する。通常queryMemos/countTagUsageとListContextを再利用し、新しい検索や並び替えの意味は追加しない。ゴミ箱の条件は別に保持し、専用検索を新設しない。
+- ゴミ箱を空にするはtrashのsummary内だけに表示。空の場合はdisabledで送信0。対象固定・既存確認/cancel/適用・snapshot失効とtoken/leaseガードは維持する。切替ボタンが外側groupへ移っても、現tokenと現DOM所有を確認し、clear/detail/confirm時に旧ボタンを外す。
+- root置換前に既存createボタンを同じsession親へ戻し、同一要素・イベント・busyガードを維持する。readボタンはsnapshot置換外に保ち、失敗後も既存の明示再読取経路だけを使う。自動reload/retryは追加しない。
+- 読取成功通知は既存の成功内容を保持し、readSuccess=trueかつroutineの場合だけCSSで非表示。UNKNOWN/failed/permission/stale/Auth失効等は既存メッセージとerror表示を維持。成功判定や診断内容を変更しない。
+- 27メモ/21タグ/通常21件の同じ合成fixtureをlocal/cloudへ使用し、既存1200/992/900/800/650/390/320pxで配置・一覧領域・scroll・異常通知を比較する。実データは使わず、画像はignored .product/のみ。localの保存/Auth/バックアップ・各modal・編集の処理や公開資産は変更しない。
+
+以下の旧cloud固有文言/配置の説明は履歴で、現在の製品表示は本節を優先する。非製品の独立DOM fixtureは既存の操作/安全契約を継続する。
+
 ## Q05 UAT-05：cloud previewと認証UIの表示調整・正式製品決定
 
 オーナー決定によりAuthはSDK標準方式＋既存製品用adapterへ簡素化した。追加getUser・Auth safeFetch/Response再構築・通知の厳密token照合/再確認連鎖・Storage allowlist/sticky停止・一時診断を撤去し、SDK 2.119.0と専用storageKeyを維持する。[Auth契約](AUTH-SESSION.md)を現行とする。user/generation/旧draft/snapshot保護、D05/C05、local scope logout、C04/DB側の既存安全性は維持する。以下の「検証済みcontext」はこの現行adapterの有効contextを指す。
 
 保存先ステータスは「現在の保存先：ローカル／クラウド（未ログイン／ログイン中）」の形で、実際のC05選択と現在の有効Auth contextを併記する。D05 cancel後は「現在の保存先：ローカル（ログイン中）」。認証確認中・確認不能・終了は各状態を示し、保持中のcloud選択をlocalへ読み替えない。操作ボタンやD05/restore/loadの制御はこの表示変更で変更しない。
 
-Human報告でdev-sandboxのPauseが判明し、Resume後のSDK標準Authで実ログイン成功を確認済み。PR #124のAuth実装を原因とはしない。PR #125後の編集時login非活性・理由・一覧復帰後の有効化と案内消去・一覧から実login成功もHuman確認済み。保管dirtyのD05二重確認でSTOPし、cloud移行/表示/readは未確認のためUAT-05はFAIL/停止中。既存R05の幅追従・ラベル・login/logout横並び・エラー表示はHuman PASS。[UAT正本](HUMAN-UAT-v1.1.0.md)のU05/R05と正式決定を受入記録とする。
+Human報告でdev-sandboxのPauseが判明し、Resume後のSDK標準Authで実ログイン成功を確認済み。PR #124のAuth実装を原因とはしない。PR #125後の編集時login非活性・理由・一覧復帰後の有効化と案内消去・一覧から実login成功もHuman確認済み。当時は保管dirtyのD05二重確認でSTOPしたが、PR #126後にcloud移行/表示/readまでHuman PASS。現在は追加一覧レイアウトの表示受入だけが残りUAT-05はFAIL。既存R05の幅追従・ラベル・login/logout横並び・エラー表示はHuman PASS。[UAT正本](HUMAN-UAT-v1.1.0.md)のU05/R05と正式決定を受入記録とする。
 
 - 共通productPreviewOptionsのviewport:nullをcloudにも適用し、localと同じnative windowの幅/高さ追従を使用。cloudの接続開始・固定配信・専用profile・既存route制限は維持し、localだけのdead proxyをcloudの実起動へ追加しない。AI試験はdead proxy/route拒否を併用し、実Auth/RPCへ到達させない。
 - メール/パスワードの表示ラベルを簡素化し、既存login/logoutボタンを同じ操作行へ配置。既存Auth phase/操作結果に対応する表示属性だけでエラーを赤にし、成功・離脱cancel等のroutineは赤くしない。メッセージ文言・結果意味・操作/終了ガードは変更しない。
