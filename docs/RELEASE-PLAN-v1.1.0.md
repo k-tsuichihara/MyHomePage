@@ -23,7 +23,7 @@ build:product-productionで公開URL/キーをbuild時注入し、本番入口�
 
 ### R04 STEP 2：本番適用前の確認準備（未接続・未実行）
 
-[最小読取専用preflight](../tools/memo/doc/v1.1.0/memo_v1_1_production_preflight.sql)をproduction_applyの事前条件から作成。5結果のうち1〜4は各1行・全判定true、5の対象名衝突は0行を期待する。projectの識別はSQLで代用せず、オーナーがk-life-logのGeneralのProject RefとProject URLのhostを照合。API Keysでは同じprojectのsb_publishable_キーであることを確認し、値をチャット/Gitへ転記しない。anon JWT/secret/service_roleだけしかない場合は設定を変えず報告する。本番設定確定・キー取得/利用は別途承認。
+[最小読取専用preflight](../tools/memo/doc/v1.1.0/memo_v1_1_production_preflight.sql)をproduction_applyの事前条件から作成。単一結果表の5行すべてpassed=true、行5のcollision_count=0（衝突時はdetails.objectsに対象名/種別）を期待する。従来の判定条件は維持。旧版のHuman実行では権限7項目trueだけを確認し、他項目は未確認。単一結果表版は未実行。projectの識別はSQLで代用せず、オーナーがk-life-logのGeneralのProject RefとProject URLのhostを照合。API Keysでは同じprojectのsb_publishable_キーであることを確認し、値をチャット/Gitへ転記しない。anon JWT/secret/service_roleだけしかない場合は設定を変えず報告する。本番設定確定・キー取得/利用は別途承認。
 
 現環境のPATHにpsql/postgres/initdb/dockerは見当たらず、既存Pythonのpglast/pg_queryもなし（起動/接続なしで可用性のみ確認）。既存dev-sandboxはメモ構築済みで、新規適用候補の衝突停止が想定される。それを全体エンジン検証PASSに数えず、ガード解除・既存表DROP・既存dev再構成は行わない。既に所有する空の隔離Supabase互換環境があるかは未確認。あれば対象/実行方法を別途承認し、候補全体/transaction/事後ガードを検証する。なければエンジン検証未実施の残存リスクを先生・オーナー判断へ戻す。新基盤を自動追加しない。
 
