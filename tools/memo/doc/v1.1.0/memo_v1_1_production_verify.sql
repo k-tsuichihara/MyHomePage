@@ -22,7 +22,9 @@ crypto_check AS (
 ),
 expected_tables(name) AS (SELECT unnest(ARRAY['memos','memo_id_registry','memo_requests','tags','memo_tags'])),
 table_checks AS (
-SELECT e.name, c.oid IS NOT NULL AS present, c.relrowsecurity AS rls_enabled,
+SELECT e.name, c.oid IS NOT NULL AS present, c.relkind, c.relowner,
+       c.relowner=(SELECT oid FROM pg_catalog.pg_roles WHERE rolname=current_user) AS owned_by_execution_role,
+       c.relrowsecurity AS rls_enabled,
        pg_catalog.has_table_privilege('authenticated',c.oid,'SELECT') AS authenticated_select,
        pg_catalog.has_table_privilege('anon',c.oid,'SELECT') AS anon_select,
        pg_catalog.has_table_privilege('authenticated',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') AS authenticated_direct_mutation,
@@ -87,7 +89,7 @@ checks AS (
         coalesce(c.pgcrypto_in_expected_schema AND c.digest_exists,false),pg_catalog.to_jsonb(c) FROM crypto_check c
  UNION ALL
  SELECT 100+row_number() OVER (ORDER BY t.name),'table','public.'||t.name,
-        coalesce(t.present AND t.rls_enabled
+        coalesce(t.present AND t.relkind='r' AND t.owned_by_execution_role AND t.rls_enabled
           AND t.authenticated_select=(t.name IN ('memos','tags','memo_tags'))
           AND NOT t.anon_select AND NOT t.authenticated_direct_mutation AND NOT t.anon_direct_mutation,false),
         pg_catalog.to_jsonb(t) FROM table_checks t
@@ -118,7 +120,7 @@ COMMIT;
 
 -- 期待値: summary + server + pgcrypto + table5 + rpc8/helper4 + policy3 + policy_count = 24行。
 -- 全passed=true、summary checked_rows=23/failed_rows=0。
--- 表: 5表present/RLS=true。authenticated SELECTはmemos/tags/memo_tagsのみtrue。
+-- 表: 5表present/RLS/owned_by_execution_role=true、relkind='r'。authenticated SELECTはmemos/tags/memo_tagsのみtrue。
 -- 直接mutation/anon SELECTはすべてfalse。
 -- 関数: 12関数present/empty_search_path/owned_by_execution_role=true。
 -- 8 RPCだけDEFINER/authenticated EXECUTE=true。anon/PUBLIC EXECUTEは全てfalse、helperもclient EXECUTE=false。
