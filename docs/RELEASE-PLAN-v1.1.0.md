@@ -19,15 +19,29 @@ Q05 COMPLETE。PR #131マージ後、先生がレビュー結果・Human受入�
 
 build:product-productionで公開URL/キーをbuild時注入し、本番入口ではdevキー入力UIを使わず既存の通常login/session復元へ接続する。本番候補の出力は.product/production、local/dev cloudの成果物・previewは既存のまま。設定不足/不正/dev originはbuild失敗、Auth/RPC/CSPは同一origin固定。SDK/認証・D05/C05・永続化・C04/RPC仕様・SQLは変更なし。
 
-本番Project Refはオーナー確認待ち。今回のbuild/試験は合成URL/公開キーのみで、k-life-logへの接続先確定やキー真正性の確認ではない。実設定使用・公開は別途承認。詳細は[製品UI統合契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)のR04節。関連回帰9ファイル/443件＋SDK標準Auth/通知/RPC境界3ファイル/29件、計472件PASS（終了コード0）。typecheck・local/dev cloud/合成本番候補build・dev/本番SDK成果物検査・diff check PASS。本番入口2件と不正設定拒否15件を追加し、devの既存14件もPASS。全Vitest/Playwright CLI・Human UATの再実施は今回行わない。前節の実装案/未承認記述は提案時の履歴であり、今回承認範囲はこの実装とoffline検証まで。Q05 COMPLETE/実スマホ・実音声の延期/CLI既知課題は維持。
+本番Project RefとURLの一致・Publishable keyの存在は、その後のHuman確認で報告済み（値は記録しない）。実build/試験は合成URL/公開キーのみで、実設定のbuild注入・接続は未実施。実設定使用・公開は別途承認。詳細は[製品UI統合契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)のR04節。関連回帰9ファイル/443件＋SDK標準Auth/通知/RPC境界3ファイル/29件、計472件PASS（終了コード0）。typecheck・local/dev cloud/合成本番候補build・dev/本番SDK成果物検査・diff check PASS。本番入口2件と不正設定拒否15件を追加し、devの既存14件もPASS。全Vitest/Playwright CLI・Human UATの再実施は今回行わない。前節の実装案/未承認記述は提案時の履歴であり、今回承認範囲はこの実装とoffline検証まで。Q05 COMPLETE/実スマホ・実音声の延期/CLI既知課題は維持。
 
 ### R04 STEP 2：本番適用前の確認準備（未接続・未実行）
 
-[最小読取専用preflight](../tools/memo/doc/v1.1.0/memo_v1_1_production_preflight.sql)をproduction_applyの事前条件から作成。単一結果表の5行すべてpassed=true、行5のcollision_count=0（衝突時はdetails.objectsに対象名/種別）を期待する。従来の判定条件は維持。旧版のHuman実行では権限7項目trueだけを確認し、他項目は未確認。単一結果表版は未実行。projectの識別はSQLで代用せず、オーナーがk-life-logのGeneralのProject RefとProject URLのhostを照合。API Keysでは同じprojectのsb_publishable_キーであることを確認し、値をチャット/Gitへ転記しない。anon JWT/secret/service_roleだけしかない場合は設定を変えず報告する。本番設定確定・キー取得/利用は別途承認。
+[最小読取専用preflight](../tools/memo/doc/v1.1.0/memo_v1_1_production_preflight.sql)をproduction_applyの事前条件から作成。単一結果表の5行すべてpassed=true、行5のcollision_count=0（衝突時はdetails.objectsに対象名/種別）を期待する。従来の判定条件は維持。旧版では権限7項目だけをHuman確認した。その後、PR #135の単一結果表版をHumanが本番で実行し、先生は全5項目PASSと判定。詳細は次節。projectの識別はSQLで代用せず、オーナーがk-life-logのGeneralのProject RefとProject URLのhostを照合。API Keysでは同じprojectのsb_publishable_キーであることを確認し、値をチャット/Gitへ転記しない。anon JWT/secret/service_roleだけしかない場合は設定を変えず報告する。本番設定確定・キー取得/利用は別途承認。
 
 現環境のPATHにpsql/postgres/initdb/dockerは見当たらず、既存Pythonのpglast/pg_queryもなし（起動/接続なしで可用性のみ確認）。既存dev-sandboxはメモ構築済みで、新規適用候補の衝突停止が想定される。それを全体エンジン検証PASSに数えず、ガード解除・既存表DROP・既存dev再構成は行わない。既に所有する空の隔離Supabase互換環境があるかは未確認。あれば対象/実行方法を別途承認し、候補全体/transaction/事後ガードを検証する。なければエンジン検証未実施の残存リスクを先生・オーナー判断へ戻す。新基盤を自動追加しない。
 
 停止条件：project/キー種別が不明、不一致/非publishable、PostgreSQL17/UTF8以外、pgcrypto配置/所属不一致、必要権限不足、対象オブジェクトあり、結果欠落/NULL/エラー、同時DDL/権限変更、本番適用の個別承認なし。自動補完/GRANT/再試行なし。今回の成果物は確認準備だけで、読取SQL実行も承認していない。
+
+### R04 STEP 2：本番preflight Human PASS・適用手順案（適用未承認）
+
+オーナー報告を根拠に先生が全5項目PASSと判定：k-life-log、PostgreSQL17.11/UTF8/read_only=true、execution_role=postgres、Supabase前提すべてtrue、pgcryptoすべてtrue、権限7項目すべてtrue、衝突0件/objects=[]。Project RefとURLの一致・Publishable keyの存在もHuman確認済み。値・未報告日時は記録しない。AIによる接続/SQL実行ではない。これは本番適用や実Auth/RPC成功の証拠ではなく、production_apply全体のSQLエンジン検証は依然未実施の残存リスク。
+
+**別途先生・オーナーの実行承認を得た場合の最小手順：**
+1. Supabase SQL Editorでk-life-log/確認済みProject Refと実行role postgresを照合。同時DDL/権限変更がない時間枠で、レビュー対象commitのapply/verifyを固定する。preflight後に環境変更や対象名出現があれば停止して再判断する。
+2. [production_apply](../tools/memo/doc/v1.1.0/memo_v1_1_production_apply.sql)全体を新規queryに貼り、選択範囲実行ではなくBEGINからCOMMITまで1回だけ実行する。schema→競合patch→S04を別々に実行しない。成功表示・エラーなし・COMMITまでの正常完了を確認してから次へ進む。成功表示だけで最終PASSにしない。
+3. 同じproject/roleで[production_verify](../tools/memo/doc/v1.1.0/memo_v1_1_production_verify.sql)全体を別queryとして1回実行する。5表RLS有効、12関数/owner/search_path、8 RPCのauthenticated EXECUTE、直接DML/anon/PUBLIC/helper権限、3読取policyの所有者条件をファイル末尾の期待値と照合する。全結果を取得できなければ未確認として停止（SQL Editorが最後の結果だけを表示する可能性あり）。本番実Auth/RPC/writeは含めない。
+4. apply正常完了かつverify全結果一致の場合のみ「DB構造/権限適用と読取確認PASS」。URL/キーの実build注入、公開切替、実Auth/RPC受入は別の操作・承認とする。
+
+**エラー/結果不明時：** 最初のエラーで停止し、再apply・部分再実行・自動GRANT・DROPを行わない。未COMMITの同一transaction/セッションを保持できている場合はROLLBACKで取消す（実行承認範囲に含めておく）。SQL Editorの別Runが同一セッションとは仮定しない。接続切断や応答欠落でCOMMIT成否が不明なら、別セッションのROLLBACKで取消済みと扱わず、適用済み/未適用を断定しない。記録を残し、別途承認した読取確認で現在状態を確認してから判断する。COMMIT後のverify不一致はROLLBACKでは戻らないため停止し、対象限定の修正方針を再レビューする。既存読書データ・Auth・メモ表を推測で削除/復旧しない。
+
+今回行うのは結果記録と手順整理だけ。適用SQL/verifyは未変更、SQLエンジン検証や新環境構築を追加しない。DB接続/SQL実行/実設定注入/公開/commit/pushは行わない。Q05 COMPLETEと既知CLI課題・延期事項は維持する。
 
 ### UAT-07表示修正：Playwright終了処理の未解決課題
 
