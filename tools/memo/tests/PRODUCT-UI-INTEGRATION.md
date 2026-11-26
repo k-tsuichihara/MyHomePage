@@ -1,5 +1,15 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 UAT-07：logout離脱承認済みcloud draftの重複確認省略
+
+Humanの固定コード記録ではlogoutはapplied/signed-out、元pendingも解除済み。再表示後の明示login完了→自動cloud選択が新しいpendingを作った。logout所有権の修正案は見送り、以下の限定修正とする。UAT-01〜06 PASS、07は修正後Human受入待ちのFAILを維持する。以降の旧進捗記述より[UAT正本](HUMAN-UAT-v1.1.0.md)を優先する。
+
+- UI内だけで、不変EditorState参照・cloud owner・確定前/確定済みを1件保持する。logout確認の現在性とC05変更が成功した場合だけ候補を渡し、Auth logoutのapplied・実signed-out・同じeditor・idle/savedのdirty・unresolvedなしを満たす時だけ確定する。候補の所有者はAuth userと現在cloud ownerの一致が必要。
+- local選択中・有効な同一user・同じ参照・現在も単純dirty・cloud保存中でない場合だけcloud editorを保存先変更評価から外す。共通判定をdepartureとC05 dirty算出の両方に使用し、評価対象の変化もcache再評価条件に含める。local保管editorのPR #126契約は変更しない。
+- cloud切替changed時に承認記録を消費する。追加編集がなくてもcloudで現在のeditorとなった時点で通常の離脱確認へ戻る。editor参照/保存状態/要求の変更、別user確定、disposeで失効。新しいlogout要求やlogout未開始/busy/失敗/確認不能に過去の記録を使わない。
+- 記録の消費・失効はdraft/baseline/revision/元要求を変更しない。現在editor、拒否、UNKNOWN、未解決、保存中、stale確認、アプリ全体の異常は従来どおり保護する。ログアウトのbusy/所有権/SDK順序、C03/C04/C05純粋controller、RPC/DB/保存形式は変更しない。
+- 診断機構は先生承認により撤去済み。診断専用1ファイル/12件を除いた全Vitest 59ファイル/2,036件PASS・終了コード0、typecheck/通常local・cloud build PASS。製品回帰・不変性試験は維持する。Playwright CLI終了処理の既存課題は未確認・対象外。AI試験や記録解析だけでHuman受入をPASSにしない。
+
 ## Q05 UAT-06：cloud編集を受入済みlocalへ統一
 
 UAT-05はPR #127後のHuman最終受入で正式PASS。UAT-06の新規作成・保存と保存直後の動作もHuman受入済みだが、編集layoutの不統一で06はFAIL。現在の状態・残確認は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照する。

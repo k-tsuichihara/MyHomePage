@@ -9,6 +9,19 @@ import type { VoiceRecognition } from '../src/voice-input';
 
 // 既存製品compositionへ合成session/Storageだけを注入。SDK/実fetchは使わない。
 const mode = (window as unknown as { fixtureMode: string }).fixtureMode;
+// 合成イベントの順序だけを保持。session/token/user IDや元例外は記録しない。
+const authTrace: { step: number; event: string; phase?: string; generation?: number; target?: string; result?: string }[] = [];
+const recordAuth = (event: string, detail: Omit<(typeof authTrace)[number], 'step' | 'event'> = {}) => authTrace.push({ step: authTrace.length + 1, event, ...detail });
+const authHolds = new Set<string>();
+if (mode === 'cloud-edit-auth-events-restore-held') authHolds.add('restore');
+const authReleases = new Map<string, () => void>();
+let nextLogoutFailure: 'error' | 'exception' | null = null;
+async function sdkBoundary(operation: string) {
+  const method = operation === 'restore' ? 'get-session' : operation;
+  recordAuth(`sdk.${method}.start`);
+  if (authHolds.delete(operation)) await new Promise<void>(resolve => authReleases.set(operation, resolve));
+  recordAuth(`sdk.${method}.ready`);
+}
 const operationMode = mode.replace(/^cloud-create/, 'cloud-edit').replace(/^cloud-assign-(edit|create)/, 'cloud-edit').replace(/^cloud-list/, 'cloud-edit').replace(/^cloud-voice-/, 'cloud-edit-');
 const id = mode === 'cloud-casing' ? '00000000-0000-4000-8000-00000000abcd' : '00000000-0000-4000-8000-000000000002';
 let clock = 100_000;
@@ -17,6 +30,7 @@ let current: unknown = mode === 'restore' || mode.startsWith('migration') || mod
   || (mode.startsWith('cloud') && !mode.endsWith('-signed-out') && (!mode.startsWith('cloud-d05') || mode.includes('-restore'))) ? value : null;
 let emit!: (event: string, session: unknown) => void;
 const calls = { login: 0, logout: 0, restore: 0, unsubscribe: 0, listenerUnsubscribe: 0, dispose: 0, writes: 0, fetch: 0,
+  authSubscribe: 0, uiSubscribe: 0, authStateReads: 0, authContextReads: 0, authCurrentChecks: 0,
   readCompleted: 0, saveCompleted: 0, resolveCompleted: 0, stateCompleted: 0, cloudDispose: 0 };
 const rpcNames: string[] = [];
 const generatedIds: string[] = [];
@@ -97,6 +111,7 @@ const snapshot = () => {
 };
 const api: MemoAuthApi = {
   getSession: async () => { calls.restore++;
+    if (mode.startsWith('cloud-edit-auth-events')) await sdkBoundary('restore');
     if (mode.includes('-restore-local-cancelled') && calls.restore === 1) await new Promise<void>(resolve => { releaseAuthCompletion = resolve; });
     if (mode === 'cloud-d05-restore-failed') throw new Error('raw-provider-token');
     if (mode === 'cloud-d05-restore-blocked') return { data: { session: null }, error: { message: 'raw-provider-token' } };
@@ -105,14 +120,21 @@ const api: MemoAuthApi = {
   getUser: async () => ({ data: { user: { id: value.user.id } }, error: null }),
   async signInWithPassword() {
     calls.login++;
+    if (mode.startsWith('cloud-edit-auth-events')) await sdkBoundary('login');
     if (mode === 'pending' || mode.startsWith('cloud-d05-login-pending')) await new Promise<void>(resolve => { releaseLogin = resolve; });
     if (mode === 'throw') throw new Error('synthetic-email@example.invalid synthetic-password raw-provider-token');
     current = value; return { data: { session: current }, error: null };
   },
   async signOut(options) { if (options.scope !== 'local') throw new Error(); calls.logout++;
+    if (mode.startsWith('cloud-edit-auth-events')) await sdkBoundary('logout');
+    const failure = nextLogoutFailure; nextLogoutFailure = null;
+    if (failure === 'error') return { error: { message: 'synthetic-private-provider-error' } };
+    if (failure === 'exception') throw new Error('synthetic-private-provider-exception');
+    if (mode === 'cloud-edit-auth-events-error') return { error: { message: 'synthetic-private-provider-error' } };
+    if (mode === 'cloud-edit-auth-events-exception') throw new Error('synthetic-private-provider-exception');
     if (mode === 'logout-throw') throw new Error('private-logout-error');
     current = null; return { error: null }; },
-  onAuthStateChange(callback) { emit = callback; return { data: { subscription: { unsubscribe: () => { calls.unsubscribe++; } } } }; },
+  onAuthStateChange(callback) { calls.authSubscribe++; emit = callback; return { data: { subscription: { unsubscribe: () => { calls.unsubscribe++; } } } }; },
 };
 const stateMode = mode.replace('cloud-restore', 'cloud-trash').replace('cloud-delete', 'cloud-trash').replace('cloud-empty', 'cloud-trash').replace('cloud-tag', 'cloud-trash').replace('cloud-unpin', 'cloud-trash').replace('cloud-pin', 'cloud-trash').replace('cloud-list', 'cloud-trash');
 const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
@@ -202,7 +224,12 @@ const sender: AuthenticatedRpcSender = async (_bearer, rpc, args) => {
       : mode.startsWith('cloud-snapshot') || stateMode.startsWith('cloud-trash') || operationMode.startsWith('cloud-edit') ? snapshot() : { memos: [], tags: [], memoTags: [] } };
 };
 const session = createMemoAuthSession(api, () => clock, sender);
-const targets = createStorageTargetController();
+const realTargets = createStorageTargetController();
+const targets = { ...realTargets,
+  request(...args: Parameters<typeof realTargets.request>) { const result = realTargets.request(...args); recordAuth(`target.request.${args[0]}`, { result: result.kind, target: realTargets.current().target }); return result; },
+  logout(...args: Parameters<typeof realTargets.logout>) { const result = realTargets.logout(...args); recordAuth('target.logout', { result: result.kind, target: realTargets.current().target }); return result; },
+  confirm(...args: Parameters<typeof realTargets.confirm>) { const result = realTargets.confirm(...args); recordAuth('target.confirm', { result: result.kind, target: realTargets.current().target }); return result; },
+};
 const cloudController = createCloudController(session);
 const cloudPort = {
   async load(context: Parameters<typeof cloudController.load>[0]) {
@@ -232,14 +259,24 @@ const cloudPort = {
 };
 let notify: ((state: MemoAuthState) => void) | undefined;
 const injected = { ...session,
+  getState() { calls.authStateReads++; return session.getState(); },
+  getContext() { calls.authContextReads++; return session.getContext(); },
+  isCurrent(context: Parameters<typeof session.isCurrent>[0]) { calls.authCurrentChecks++; return session.isCurrent(context); },
   async login(email: string, password: string) {
+    recordAuth('ui.login.start');
     const result = await session.login(email, password);
     if (mode === 'cloud-d05-completion-pending') await new Promise<void>(resolve => { releaseAuthCompletion = resolve; });
+    recordAuth('ui.login.return', { result });
     return result;
   },
+  ...(mode.startsWith('cloud-edit-auth-events') ? {
+    async restore() { recordAuth('ui.restore.start'); const result = await session.restore(); recordAuth('ui.restore.return', { result }); return result; },
+    async logout() { recordAuth('ui.logout.start'); const result = await session.logout(); recordAuth('ui.logout.return', { result }); return result; },
+  } : {}),
   subscribe(listener: (state: MemoAuthState) => void) {
+    calls.uiSubscribe++;
     if (mode === 'subscription-throw') throw new Error('private-subscription-error');
-    notify = listener; const unsubscribe = session.subscribe(listener);
+    notify = listener; const unsubscribe = session.subscribe(state => { recordAuth('ui.auth-notification', { phase: state.phase, generation: state.generation }); listener(state); });
     return () => { calls.listenerUnsubscribe++; unsubscribe(); };
   },
   dispose() { calls.dispose++; session.dispose(); },
@@ -275,12 +312,21 @@ const app = createProductLocalApp(document, {
   mode.startsWith('cloud') && mode !== 'cloud-no-host' ? { target: targets, controller: cloudPort } : undefined);
 Object.assign(window, { fixture: {
   calls, state: () => app.controller.getState(), auth: () => session.getState(),
+  authTrace,
+  holdAuth: (operation: string) => authHolds.add(operation),
+  releaseAuth: (operation: string) => { const release = authReleases.get(operation); authReleases.delete(operation); release?.(); },
+  captureAuthEvent: (kind: 'in' | 'out') => {
+    const payload = kind === 'in' ? Object.freeze({ ...value, user: Object.freeze({ ...value.user }) }) : null;
+    return () => { current = payload; recordAuth(`sdk.event.${kind}`); emit(kind === 'in' ? 'SIGNED_IN' : 'SIGNED_OUT', payload); };
+  },
   rpcNames, target: targets.current, releaseRead: () => releaseRead?.(),
   holdNextRead: () => { holdNextRead = true; },
   generatedIds, changePin: (kind: 'state' | 'revision') => { changedPin = kind; }, changeTag: (kind: 'both' | 'name' | 'revision' = 'both') => { changedTag = kind; }, changeTrashSet: () => { changedTrashSet = true; },
   stateArgs: () => stateArgs, stateResult: () => stateResult, releaseState: () => releaseState?.(),
   invalidateSnapshot: () => targets.setDirty(false),
   differentUser: () => { value.user.id = '00000000-0000-4000-8000-000000000999'; },
+  originalUser: () => { value.user.id = id; },
+  failNextLogout: (kind: 'error' | 'exception') => { nextLogoutFailure = kind; },
   externalLogout: () => session.logout(),
   savedArgs: () => savedArgs, resolvedArgs: () => resolvedArgs, releaseSave: () => releaseSave?.(),
   releaseResolve: () => releaseResolve?.(),

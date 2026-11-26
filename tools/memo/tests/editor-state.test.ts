@@ -29,6 +29,18 @@ it('cloud editorはlocal結果を受けず、旧session/別保存先のcloud結�
   expect(settleCloudSave(local.state, local.attempt.context, stopped)).toBe(local.state);
 });
 
+it('離脱承認の参照比較に使うcloud EditorStateは深く不変で、同内容へ戻しても別参照になる', () => {
+  const source = createEditor(MEMO, 'cloud-approval', { memo: state().memos[0]!, tagIds: [TAG] }, 'cloud');
+  const dirty = editDraft(source, { ...source.draft, body: '未保存追記' });
+  const changed = editDraft(dirty, { ...dirty.draft, body: 'さらに変更' });
+  const restored = editDraft(changed, dirty.draft);
+  for (const value of [dirty, dirty.draft, dirty.draft.tagIds, dirty.baseline, dirty.save, dirty.unresolved]) expect(Object.isFrozen(value)).toBe(true);
+  expect(() => { (dirty as { source: string }).source = 'local'; }).toThrow();
+  expect(() => { (dirty.draft.tagIds as string[]).push(TAG2); }).toThrow();
+  expect(restored.draft).toEqual(dirty.draft); expect(restored).not.toBe(dirty);
+  expect(source.draft.body).not.toBe('未保存追記');
+});
+
 describe('整形前ドラフトと保存済み基準', () => {
   it('既存・新規編集の初期状態はcleanで副作用なし', () => {
     expect(isDirty(editor())).toBe(false);
