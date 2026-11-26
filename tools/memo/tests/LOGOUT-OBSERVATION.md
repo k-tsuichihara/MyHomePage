@@ -18,4 +18,4 @@ cloud切替成功時に承認記録を消費し、現在editorの通常保護を
 
 実装・offline検証とHuman受入は区別する。UAT集計はPASS6/FAIL1/NOT STARTED1/SKIP2を維持し、Human残確認は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照する。Playwright CLI終了処理課題は未解決・今回対象外。
 
-今回の撤去作業では実通信・Human操作・DB操作・commit/push/PR作成・公開を行わない。
+撤去・最終offline検証の実施時点では、実通信・Human操作・DB操作・commit/push/PR作成・公開は行っていない。その後、別途承認に基づきcommit/pushし、Draft PR #130を作成した。これは作業段階ごとの履歴であり、実通信・Human操作・DB操作・公開は引き続き実施していない。

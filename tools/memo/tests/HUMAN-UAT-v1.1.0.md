@@ -350,7 +350,7 @@ Human実操作の報告を根拠とする。AI Gateや推測でPASSにしたも�
 - **修正内容**：有効なlogout承認とC05変更を通した、Auth user/cloud ownerが一致する単純dirty cloud editorだけを候補にする。logout applied・実signed-out・同じ不変参照を確認して確定。localから同一userで戻る時だけdepartureとC05 dirtyで同じ対象を省略し、cloud切替成功で記録を消費する。editor/保存状態/要求の変更・別user・disposeで失効。未開始/busy/失敗/確認不能logoutへ古い承認を流用しない。draft/baseline/revision/元要求は消さず、拒否/UNKNOWN/保存中/現在editor/アプリ全体の異常は保護する。
 - **回帰**：新規/既存、idle/savedの単純dirty、復帰後に追加編集なしの再離脱、read失敗でも承認消費、失敗/例外/未開始、別user確定/元user復帰、保存拒否/conflict/UNKNOWN、stale、local UNKNOWN、dispose、不変性をoffline検証。logout所有権・C03/C04/C05純粋controller・保存形式は変更しない。
 - **AI Gate結果（診断撤去後・最終）**：全Vitest 59ファイル／2,036件PASS（終了コード0）。承認再利用17件、既存Auth通知12件、EditorState不変性を含む55件を維持。撤去前60ファイル／2,048件から診断専用1ファイル／12件だけ削減。typecheck・通常local/cloud product build・文書整合性・git diff --check PASS。通常ソース/scriptsと配信JS/runnerの診断専用コード・起動経路の残存なし、旧観測成果物も削除。Playwright CLI終了処理課題は未解決・対象外で再実行なし。実Auth/RPC/cloud read/write/DB/SQL/production/Human操作0件。
-- **Human再確認結果**：PENDING。AI GateでPASSにしない。具体的な残確認は上記Human残確認を正本とする。診断機構は修正結果レビュー後に撤去予定。
+- **Human再確認結果**：PENDING。AI GateでPASSにしない。具体的な残確認は上記Human残確認を正本とする。診断機構は先生承認により撤去済み。
 
 ### UAT-08：バックアップ・復元の代表利用
 
