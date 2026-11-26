@@ -1,12 +1,42 @@
 # メモツール v1.1.0 リリース進捗管理
 
-Q05最新状況：UAT-01〜08正式PASS（機能受入）、09/10 SKIP。PASS8/FAIL0/NOT STARTED0/SKIP2。オーナーから08の元メモ保持・上書き防止を含むHuman確認結果を受領し、先生は正式PASSと判定済み。以前の保留記録を訂正する。今回の表示修正もオーナー最終確認OKに基づき先生がHumanレイアウト受入PASSと判定。機能・表示ともHuman再試験不要。Q05全体の明示的な完了判断は別途。Playwright CLI終了処理課題は未解決のまま。今回のlocal preview download許可・モーダル表示修正・既存試験更新と受入記録をDraft PRへまとめる。[UAT正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)参照。
+Q05 COMPLETE。PR #131マージ後、先生がレビュー結果・Human受入結果に基づき完了を承認。最新origin/mainの34282d7でPR #131反映を確認。UAT-01〜08と最終レイアウトはHuman PASS、PASS8/FAIL0/NOT STARTED0/SKIP2。実スマホ・実音声は未確認の承認済みSKIPとして本番配置後へ引き継ぐ。Playwright CLI終了処理課題は未解決、今回の限定例外マージ/完了判断を恒久的Gate緩和とはしない。次はR04準備、公開・本番操作は未承認。[UAT正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)参照。
+
+### R04 STEP 1：公開環境のHuman確認結果
+
+オーナー報告：GitHub PagesはDeploy from a branch / main / /(root)、独自ドメインなし、HTTPS有効。本番Supabaseはk-life-log、Healthy、Email認証有効。メモ用テーブルは存在しない。RPC/RLS/GRANTは未確認。これはHumanの実設定確認結果であり、AIによる外部接続・SQL実行の結果ではない。公開URLの実表示・配信内容、本番メモDB適用は今回未確認/未実施。
+
+次はSTEP 2の本番接続・DB準備の範囲/適用順序をレビューする。既存の開発schema→review8競合patch→S04 helper権限制限を根拠に、対象名衝突・pgcrypto配置・必要権限を本番適用前に確認する。本番実行の承認はまだない。既存読書管理/Auth/データへの変更は対象外。dev-sandbox候補の入口・固定origin/CSPを、本番の同一固定接続設定へ最小限整合する必要がある。既存Q04/Q05の再実施は要求しない。
+
+### R04 STEP 2：本番適用候補と接続設定案（未実行・実装前）
+
+- SQL候補：[新規導入・単一transaction](../tools/memo/doc/v1.1.0/memo_v1_1_production_apply.sql)、[適用後の読取専用確認](../tools/memo/doc/v1.1.0/memo_v1_1_production_verify.sql)。原本3ファイルのSHA256を記載し、schema本文→競合6関数patch本文→S04 DOを再利用。原本は変更しない。pgcrypto作成/移設は除き、既存extensions/digestの所属・権限が正しい場合だけ進む。PostgreSQL17/UTF8、対象名不存在、実行主体権限を事前確認し、対象表RLS/権限・RPC等をCOMMIT前確認。seed/読書管理/Authユーザー/既存データの変更なし。SQL自身はprojectを証明しないので実行前にオーナーがk-life-log/Project Refを照合。ファイルはREVIEW ONLYでDB実行・構文実行検証はしていない。
+- 接続設定の実装案（今回は実装しない）：新しい本番buildモードだけでMEMO_PRODUCTION_SUPABASE_URL / MEMO_PRODUCTION_SUPABASE_PUBLISHABLE_KEYをbuildプロセスから取得し、未設定/不正なら失敗。本番Project Refのオーナー確認後に固定originを確定し、dev originを拒否する。同じ検証済みoriginをAuth/RPC/CSPへ注入。キーはsb_publishable_のみを受け、secret/service_roleを拒否。公開キーは配信JSから読める公開設定であり秘密と扱わない。値をログ・Gitへ保存しない。
+- 予定変更箇所：build-product.mjs（本番モード/公開設定検証/CSP）、cloud-rpc-sender.ts（本番build時だけ固定originを注入、dev defaultを維持）、product-cloud-app.ts（本番のみdev入力画面なしで既存composition生成）、product-entry.ts（本番分岐）、package.json（本番buildコマンド）、既存build/entry/sender回帰。Auth SDK・C03/C04/C05・SQL/RLS/保存契約は変更不要。設定欠落はdevへfallbackさせずbuild失敗。preview:product-cloudは既存dev挙動を維持する。
+- 今回はSQLファイル作成・静的照合と案の記録だけ。本番実行、本番設定実装、実通信、追加テスト基盤、commit/push/公開は未承認。適用後確認は5表/12関数/RLS/最小権限のカタログだけで、ユーザー行やRPCを実行しない。devの既存監査/Q04/Q05は再利用し、本番への適用結果とは区別する。
 
 ### UAT-07表示修正：Playwright終了処理の未解決課題
 
 今回のoffline Playwrightは初回・許可された1回の再実行とも83件のテストがPASS。初回のコマンド終了コード1の原因は未確定。再実行もテスト後にpreviewサーバーが残り、手動停止後のネイティブ終了コード取得値が空だったため、コマンド正常終了は未確認。後片付け後の該当Playwright/previewプロセス・4173番待受の残存はなし。終了コード取得・previewサーバー終了処理を未解決の技術的課題として残す。製品不具合と確定したわけではなく、製品への影響が完全に否定されたとも扱わない。
 
-オーナー承認の先生判断により、今回の表示修正に限って上記制約を明示したDraft PR化を許可する。全AI Gate PASSとは扱わず、恒久的なAI Gate基準の緩和でもない。追加再実行・原因調査・終了処理修正は今回行わない。当時のUAT-07残確認はダイアログ表示受入・logout承認・local復帰・データ分離だった。現在はPR #130後のHuman確認で再login finding・データ分離もPASS、07正式PASS。PASS8/FAIL0/NOT STARTED0/SKIP2、Q05継続中。終了処理課題は未解決のまま。
+オーナー承認の先生判断により、今回の表示修正に限って上記制約を明示したDraft PR化を許可する。全AI Gate PASSとは扱わず、恒久的なAI Gate基準の緩和でもない。追加再実行・原因調査・終了処理修正は今回行わない。当時のUAT-07残確認はダイアログ表示受入・logout承認・local復帰・データ分離だった。現在はPR #130後のHuman確認で再login finding・データ分離もPASS、07正式PASS。PASS8/FAIL0/NOT STARTED0/SKIP2。現在はPR #131後の先生完了承認によりQ05 COMPLETE。終了処理課題は未解決のまま。
+
+### PR #131マージ・Q05完了時の限定例外判断
+
+先生はPR #131レビュー・Human受入と取得済み試験を根拠に、Playwright CLI終了コード/preview終了処理の未解決を明示したうえで、今回のマージ・Q05 COMPLETEを承認した。課題解消・正常終了・製品影響なしを証明したものではない。過去例外の自動適用・恒久的Gate緩和・公開承認にはしない。次の公開判断時もこの未解決事項を提示する。
+
+### Q05完了後の引継ぎ（実行はまだ承認しない）
+
+| 対象 | 残作業 | 必要なオーナー判断 |
+| --- | --- | --- |
+| R04（要確認） | Pages公開元はSTEP 1でmain/(root)のbranch配信とHuman確認済み。残りは公開資産・本番接続設定/権限・最終公開前ゲートの確認。旧「未結線/進行中」文書のSSOT整合を必要範囲で整理 | 公開URL/方式・本番対象と設定・必要な権限対応・今回のCLI未解決課題を含む公開可否。既存dev監査を理由なく再実行しない |
+| R05（未着手） | 承認済み資産切替、公開後のURL/起動/キャッシュ確認、停止保守版・復旧手順の既存実装/設計との照合 | 公開・本番操作の個別承認、停止/復旧へ移る判断。コードrollbackとデータ復旧を混同しない |
+| O02/O03（要確認） | 障害時案内・停止復旧運用、バックアップ平文保管/履歴喪失の利用者案内を既存仕様から整理 | 案内内容と運用担当の受入。新しい機構を機械的に追加しない |
+| O04（要確認） | 監査/ACL原本の保管・廃棄方針とT02完全性判断の残件 | 原本はオーナーのみ確認。実廃棄は別途承認、今回原本へアクセスしない |
+| O05（要確認） | 延期・未確認事項の記録を維持 | 実スマホ/実音声の公開後確認時期、single-rpc/完全provenance未認定延期、CLI課題の今後の扱い |
+| S05（保留） | 将来オブジェクトのdefault権限対応は保留を維持。本番公開前の権限レビューはR04へ | 新規追加の有無と対応要否。今回SQL/RLS/GRANT変更や再監査は承認しない |
+
+R02/R03/Q04の既存COMPLETEは維持する。実利用データ移行はリリース条件外。次の最小作業はR04のrepository内公開候補・資産/設定経路・既存切替設計の静的棚卸し案を提示すること。本番接続・公開・追加試験はこの完了処理では実行しない。
 
 ## Q04：v1.1.0最小応答受入の承認済み変更
 
@@ -138,7 +168,7 @@ Q04 Step 4第6単位：通常cloudメモ1件のゴミ箱移動を既存C04 chang
 | Q02 | 合成メモリUI・ブラウザE2E | 完了 | [ブラウザ契約](../tools/memo/tests/BROWSER-UI.md)、tests/browser/、PR #12以降 | 過去記録83件PASS。実OS日本語IME・実端末受入とは別 |
 | Q03 | 隔離ChromiumのStorage/Web Locks・形式/切替試験 | 完了 | [永続化](../tools/memo/tests/LOCAL-PERSISTENCE.md)、Phase B、[切替設計](../tools/memo/tests/RELEASE-TRANSITION.md)、PR #14・#15・#17・#26 | 過去記録22/16/20件PASS。容量・再起動は記録範囲に限定 |
 | Q04 | 実RPC・SQL/TS一致・Auth/RLS/GRANT・障害/競合検証 | 完了 | PR #102、既存Q04実行記録、オーナー完了判断 | 個人利用v1.1.0の技術ゲートとしてCOMPLETE。既存S04/Q04-READ/Case13/Case6と製品Auth/D05/logout観測を再利用。single-rpc・完全response provenanceは未認定のまま延期。追加Human Gate・実通信は行わない。主要操作/実マイク等はQ05へ |
-| Q05 | 実機・IME・主要操作・ドラフト保護等の最小UAT | 進行中 | [Human UAT計画・進捗正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)、現行layout_review2.drawio、製品UI統合契約、オーナー判断 | PR #122マージ後、HumanがR01-A/B/Cを実操作し全期待結果を満たし追加指摘なしと報告。UAT-01 PASSを維持。統合R02はHuman実操作で全5項目PASS・追加指摘なし、U02問題9件は受入済み。今回L02-1〜5も全Human PASS。R02とL02を本来の手順1〜6へ照合し、未確認項目0・未解決問題0のためUAT-02正式PASS、PASS8/FAIL0/NOT STARTED0/SKIP2。Q05は継続中。UAT-03-1/03-2、R01-Cの既存Human証拠と今回の一覧離脱cancelで入力保持・複製の明示保存/元との分離/元不変のHuman最終PASSを照合し、03の未確認項目0・未解決問題0で正式PASS。今回UAT-04-1〜4のゴミ箱移動/切替・復元/内容確認・完全削除確認cancel/保持・承認後非表示を全Human PASSと報告。既存read-only等の証拠も再利用し04の未確認項目0・未解決問題0で正式PASS。PR #127マージ後、Humanが一覧UI統一/read成功通知非表示/カード縦幅・scroll・操作性を全PASS、追加指摘なしと報告。PR #125/#126の認証/D05/cloud移行/保存先/readの証拠と照合し05の未確認・未解決0で正式PASS。UAT-01〜06正式PASS。PR #128反映後、Humanがcloud編集layout・一覧反映/再open/直接編集/内容・本文更新保存再読取・同一profile再読込/session自動復元/cloud自動選択/復元後内容をすべてPASS。既存新規作成/保存PASSと合わせ06の未確認/未解決0。PASS8/FAIL0/NOT STARTED0/SKIP2、Q05継続中。UAT-07はHumanがdirty cloud logout確認/cancel/認証・cloud・draft保持をPASS。ダイアログ表示3件の修正時点はFAILだった。PR #129後の表示/logout承認/一覧/local復帰はHuman PASS。その後の明示再loginで新規D05確認を診断し、限定承認再利用をoffline検証済み。PR #130後にHumanが修正受入・データ分離を含む5点すべてOKと報告し、先生が07正式PASSと判定。08も元メモ保持・上書き防止を含むHuman結果に基づき先生が正式PASSと判定。表示修正の最終Human受入もPASS。機能再試験なし。cancel/draft保持の独立再試験なし。今回実操作なし。R02/L02の再実施不要。R01-C 8〜10はUAT-03へ再利用し、同操作の再実施・全UATのやり直しなし。実スマホ・実マイクは承認済みSKIPのまま本番配置後へ |
+| Q05 | 実機・IME・主要操作・ドラフト保護等の最小UAT | 完了（COMPLETE） | [UAT正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)、PR #131、先生の明示的な完了承認 | 01〜08・最終レイアウトHuman PASS。PASS8/FAIL0/NOT STARTED0/SKIP2。既存Human証拠を再利用し再試験不要。09/10は未確認のまま本番配置後へ。Playwright CLI終了処理課題を記録した限定判断であり、全Gate PASS・恒久的基準緩和・公開承認ではない。詳細履歴はUAT正本を参照 |
 
 ## 7. 本番移行・公開
 
@@ -147,7 +177,7 @@ Q04 Step 4第6単位：通常cloudメモ1件のゴミ箱移動を既存C04 chang
 | R01 | 全体進捗表の初期作成と人間レビュー | 完了 | 本ファイル、[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)、今回のオーナー合意 | 必要。PR #47マージにより初期作成・レビューの範囲は完了。今回の方針反映はレビュー待ち。以後も運用ルールに従い更新する |
 | R02 | TS製品入口・ビルド配信・既存公開UI統合 | 完了 | [製品UI統合契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)、package.json、PR #69〜#77と今回の初期復元/保守候補 | local製品候補のAI実装・オフライン検証範囲でCOMPLETE、今回差分はレビュー待ち。音声・v3導入・バックアップ/各復元と停止保守候補、資産整合性を接続。公開HTML実切替はR05、実データはR03、公開構成/受入はR04/Q05、Auth/cloud製品接続はC03〜C05へ残す。single-rpc未認定。権限課題R02とは別 |
 | R03 | 既存データ移行の準備・確認 | 完了 | 既存v3/移行/原値退避のAI検証、オーナー完了判断 | 実利用データの形式確認・実データ移行試験はリリース条件から除外。必要な既存データはオーナーが必要に応じ対応。既存保護機構は維持。実データ移行を実施済みと認定したものではない。公開資産切替/配信確認はR04/R05へ |
-| R04 | Pages設定・公開資産・本番DB/権限・公開前ゲート確認 | 要確認 | 切替設計、AGENTS.md§14・15、DB監査記録、今回のオーナー合意 | 必要。AIは検証準備、人間は本番設定確認・公開承認。Pages公開元/配信方式は未確認でmain/(root)と断定しない。開発監査成功は本番適用承認ではない |
+| R04 | Pages設定・公開資産・本番DB/権限・公開前ゲート確認 | 要確認 | 切替設計、AGENTS.md§14・15、DB監査記録、今回のオーナー合意 | 必要。AIは検証準備、人間は本番設定確認・公開承認。STEP 1でPagesはmain/(root)のbranch配信とHuman確認済み。本番k-life-logはHealthy/Email有効、メモ表なし、RPC/RLS/GRANT未確認。開発監査成功は本番適用承認ではない |
 | R05 | 承認済み公開切替・停止保守版・復旧手順の製品化/適用 | 未着手 | 切替設計、v3契約、今回のオーナー合意 | 必要。公開切替・公開後確認を含む。v3対応の書込停止保守版とコードrollback/データ復旧の分離が必要。AIは準備を担当し、公開・移行・権限変更の実行は人間の別承認後に限る |
 
 ## 8. リリース後の運用・改善
@@ -164,7 +194,7 @@ Q04 Step 4第6単位：通常cloudメモ1件のゴミ箱移動を既存C04 chang
 
 - 最新のT00〜T05取得完了とT02完全性未確定は、チャットでのオーナー報告を根拠に本表へ記録した。既存監査文書には準備当時の未実施記録が残る。今回はそれらを編集せず、原本を取得・参照していない。
 - READMEやRELEASE-TRANSITION.md、V3-CONTRACT.md等の当初の未実装記載と、後続PR #16〜#29の実装が異なる箇所は、後続コード・契約・マージ履歴を優先して進捗を整理した。正式仕様そのものの変更ではない。
-- 音声入力は初期整理時に未実装だったが、今回製品候補へ新規音声メモ・本文追記・手動保存を接続しfake/Chromiumで検証する。実マイク・権限UI・認識精度は未検証でQ05へ引き継ぎ、製品受入完了とは扱わない。隔離メモリUIは引き続き対象外。
+- 音声入力は初期整理時に未実装だったが、今回製品候補へ新規音声メモ・本文追記・手動保存を接続しfake/Chromiumで検証する。実マイク・権限UI・認識精度は未検証で、承認済みQ05 SKIPとして本番配置後へ引き継ぐ。Q05 COMPLETEを実音声受入済みとは扱わない。隔離メモリUIは引き続き対象外。
 - 公開サイトの現物、Pages設定、本番DB、実ユーザーデータ、Auth状態、非公開監査原本は確認していない。現在の本番状態をローカルコードや開発監査だけで断定しない。
 - 固定の過去テスト件数は記録時点の結果。最新mainの実行結果や、全環境の保証ではない。テスト定義の存在だけでPASSとしない。
 - 自動同期・自動転送・障害時の自動fallbackは現行正式仕様上の対象外であり、残作業として追加しない。
