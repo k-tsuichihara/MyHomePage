@@ -6,9 +6,13 @@
 -- 全体を1セッションで実行。エラー後は明示ROLLBACKし、結果確認まで再実行しない。
 -- pgcrypto/配置/権限が不足すれば停止。自動作成・移設・権限補完はしない。
 -- 他のDDL/権限変更と同時実行しない。COMMIT後の復旧は別途承認。
--- source: tools/memo/doc/v1.1.0/memo_v1_1_schema_review8.sql SHA256=62e3e1ff82d01cba848603901a3bc136ad474e8da98c8339f401525664d0debd
--- source: tools/memo/doc/v1.1.0/memo_v1_1_conflict_patch_review8.sql SHA256=e83326902218dfcd306e20d0d03b634b58fe9f4d51fd3ec618b4cde6cb007cf9
--- source: tools/memo/tests/db-audit/s04-helper-execute.sql SHA256=dec172695cd42c517f1b81a5102271212f622edfef6c06c1ab0670d5ed68f730
+-- source: tools/memo/doc/v1.1.0/memo_v1_1_schema_review8.sql SHA256=89ccbec4d6afd5af300ad441c8945b638cfa32638f12c572b050d40efeafba55
+-- source: tools/memo/doc/v1.1.0/memo_v1_1_conflict_patch_review8.sql SHA256=2c9a409bfffcd6b1662890b4f89f75958e470d47c0be34b34ef694289642e271
+-- source: tools/memo/tests/db-audit/s04-helper-execute.sql SHA256=d24336856b0392f4c8677e3b28ac026d312456176e3c7c910c7507116cb4e7b4
+
+-- 原本照合規約: Git blobのUTF-8バイト列（LF、原本先頭BOMは保持）でSHA256を計算。
+-- CRLF checkoutではCRLFのみLFへ正規化し、BOMを保持して照合する。基準commit: efcf9dc3b791b52013db1effaed560d001181dd9
+-- 結合時は各原本先頭BOMだけを除去する。上記ハッシュは結合後SQLではなく原本の値。
 
 BEGIN;
 SET LOCAL statement_timeout = '60s';
@@ -397,8 +401,8 @@ grant execute on function public.memo_load_snapshot() to authenticated;
 -- REVIEW5 OPEN: payload_hash is a digest, not encryption; do not claim absolute erasure.
 -- REVIEW5 OPEN: deleted-redacted retry is a receipt, not a replay of full historical data.
 
--- 2. 検証済み6関数patch（外側BEGIN/COMMITのみ除去）
-﻿-- review8: dev-sandbox ONLY. Not executed. Verify project, live definitions and retry backends first.
+-- 2. 検証済み6関数patch（外側BEGIN/COMMIT・先頭BOMのみ除去）
+-- review8: dev-sandbox ONLY. Not executed. Verify project, live definitions and retry backends first.
 -- Six existing functions only; no tables, data, policies or grants recreated.
 create or replace function public.memo_save(
  p_id uuid, p_title text, p_body text, p_tag_ids uuid[],
