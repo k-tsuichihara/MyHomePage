@@ -71,3 +71,24 @@ export function mountProductCloudSetup(doc: Document, env: ProductBrowserEnviron
   doc.defaultView?.addEventListener('pagehide', onPageHide);
   return { dispose };
 }
+
+/** 本番はbuildで検証した公開設定を使い、既存の製品compositionへ接続する。 */
+export function mountProductProductionCloud(doc: Document, env: ProductBrowserEnvironment,
+  publicKey: string, transport: typeof fetch) {
+  createProductBrowserLocalDependencies(env);
+  const storage: AuthStorage = {
+    getItem: name => doc.defaultView!.localStorage.getItem(name),
+    setItem: (name, value) => doc.defaultView!.localStorage.setItem(name, value),
+    removeItem: name => doc.defaultView!.localStorage.removeItem(name),
+  };
+  const app = createProductCloudApp(doc, env, publicKey, storage, transport);
+  const dispose = () => {
+    const result = app.dispose();
+    if (result === 'busy' || result === 'pending') return result;
+    doc.defaultView?.removeEventListener('pagehide', onPageHide);
+    return 'applied' as const;
+  };
+  const onPageHide = (event: PageTransitionEvent) => { if (!event.persisted) dispose(); };
+  doc.defaultView?.addEventListener('pagehide', onPageHide);
+  return { dispose };
+}

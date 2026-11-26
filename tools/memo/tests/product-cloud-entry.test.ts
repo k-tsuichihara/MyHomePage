@@ -2,10 +2,11 @@ import { beforeAll, afterAll, expect, it, vi } from 'vitest';
 import { chromium, type Browser } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { MEMO_RPC_ORIGIN } from '../src/cloud-rpc-sender';
 import { createProductCloudApp } from '../src/product-cloud-app';
 
+const productionOrigin = 'https://abcdefghijklmnopqrst.supabase.co';
 const key = 'sb_publishable_synthetic_product_only', email = 'synthetic-product@example.invalid', password = 'synthetic-product-password';
 const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -13,17 +14,22 @@ const expires = Math.floor(Date.now() / 1000) + 3600;
 const token = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: id, exp: expires, role: 'authenticated' })}.${encode('synthetic-signature')}`;
 const user = { id, aud: 'authenticated', role: 'authenticated', email, app_metadata: { provider: 'email' }, user_metadata: {}, created_at: '2026-01-01T00:00:00Z' };
 const session = { access_token: token, refresh_token: 'synthetic-product-refresh', expires_in: 3600, expires_at: expires, token_type: 'bearer', user };
-let browser: Browser, html: string, files: Map<string, Buffer>;
+let browser: Browser, html: string, files: Map<string, Buffer>, productionHtml: string, productionFiles: Map<string, Buffer>;
 beforeAll(async () => {
   execFileSync(process.execPath, ['scripts/build-product.mjs', '--cloud']);
   const root = new URL('../.product/cloud/site/tools/memo/', import.meta.url);
   html = await readFile(new URL('memo.html', root), 'utf8'); files = new Map();
   for (const match of html.matchAll(/(?:src|href)="((?:js|css)\/[^"]+)"/g)) files.set(`/tools/memo/${match[1]}`, await readFile(new URL(match[1]!, root)));
+  execFileSync(process.execPath, ['scripts/build-product.mjs', '--production'], { env: { ...process.env,
+    MEMO_PRODUCTION_SUPABASE_URL: productionOrigin, MEMO_PRODUCTION_SUPABASE_PUBLISHABLE_KEY: key } });
+  const productionRoot = new URL('../.product/production/site/tools/memo/', import.meta.url);
+  productionHtml = await readFile(new URL('memo.html', productionRoot), 'utf8'); productionFiles = new Map();
+  for (const match of productionHtml.matchAll(/(?:src|href)="((?:js|css)\/[^"]+)"/g)) productionFiles.set(`/tools/memo/${match[1]}`, await readFile(new URL(match[1]!, productionRoot)));
   browser = await chromium.launch({ headless: true });
 }, 30000);
 afterAll(async () => { await browser?.close(); });
 
-async function fixture(seed = false, fail = false, hold = false, snapshotBody: unknown = { memos: [], tags: [], memoTags: [] }) {
+async function fixture(seed = false, fail = false, hold = false, snapshotBody: unknown = { memos: [], tags: [], memoTags: [] }, production = false) {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   await context.addInitScript(({ seed, session }) => {
     const values = new Map<string, string>(seed ? [['myhomepage.memo.auth.v1', JSON.stringify(session)]] : []);
@@ -37,8 +43,9 @@ async function fixture(seed = false, fail = false, hold = false, snapshotBody: u
   let release: (() => void) | undefined;
   await context.route('**/*', async route => {
     const request = route.request(), url = new URL(request.url());
-    if (url.origin === MEMO_RPC_ORIGIN) {
+    if (url.origin === (production ? productionOrigin : MEMO_RPC_ORIGIN)) {
       if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'POST, GET' } });
+      if (production) expect(request.headers()['apikey']).toBe(key);
       requests.push({ path: url.pathname, method: request.method() });
       let body: unknown;
       if (url.pathname === '/auth/v1/token') body = fail ? { error_code: 'invalid_credentials', message: `${email} ${password} ${token}` } : session;
@@ -52,8 +59,8 @@ async function fixture(seed = false, fail = false, hold = false, snapshotBody: u
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify(body) });
     }
     if (url.origin !== 'https://product.test') return route.abort();
-    if (url.pathname === '/tools/memo/memo.html') return route.fulfill({ contentType: 'text/html', body: html });
-    const file = files.get(url.pathname);
+    if (url.pathname === '/tools/memo/memo.html') return route.fulfill({ contentType: 'text/html', body: production ? productionHtml : html });
+    const file = (production ? productionFiles : files).get(url.pathname);
     return file ? route.fulfill({ contentType: url.pathname.endsWith('.js') ? 'text/javascript' : 'text/css', body: file }) : route.abort();
   });
   const page = await context.newPage(); page.setDefaultTimeout(5000);
@@ -207,4 +214,46 @@ it.each([{ secure: false }, { topLevel: false }, { url: 'https://product.test/ot
     getStorage, getLocks: () => undefined, createId: () => id, now: () => '', ...overrides }, key,
   { getItem, setItem: vi.fn(), removeItem: vi.fn() }, fetch)).toThrow();
   expect(getStorage).not.toHaveBeenCalled(); expect(getItem).not.toHaveBeenCalled(); expect(fetch).not.toHaveBeenCalled();
+});
+
+it.each([false, true])('本番候補はdev入力なしで通常login/session復元と同一originのsnapshotへ進む：seed=%s', async seed => {
+  const f = await fixture(seed, false, false, { memos: [], tags: [], memoTags: [] }, true);
+  try {
+    await f.page.locator('#product-session').waitFor({ state: 'attached' });
+    expect(await f.page.getByLabel('開発用publishable key').count()).toBe(0);
+    expect(await f.page.getByRole('button', { name: '承認済みクラウド接続を開始' }).count()).toBe(0);
+    if (!seed) await f.login();
+    await f.page.locator('#product-cloud-snapshot').waitFor();
+    await expect.poll(() => f.requests.some(r => r.path === '/rest/v1/rpc/memo_load_snapshot')).toBe(true);
+    expect(f.requests.filter(r => r.path === '/auth/v1/token').length).toBe(seed ? 0 : 1);
+    expect(f.requests.filter(r => r.path === '/rest/v1/rpc/memo_load_snapshot')).toEqual([
+      { path: '/rest/v1/rpc/memo_load_snapshot', method: 'POST' } ]);
+    expect(productionHtml).toContain(`connect-src ${productionOrigin};`);
+    expect(productionHtml).not.toContain(MEMO_RPC_ORIGIN);
+    const bundle = await readFile(new URL('../.product/production/memo-app.js', import.meta.url), 'utf8');
+    expect(bundle).toContain(productionOrigin);
+    expect(bundle).not.toContain(MEMO_RPC_ORIGIN);
+    expect(await f.privateOutput()).not.toContain(key);
+  } finally { await f.context.close(); }
+});
+it.each([
+  [undefined, undefined], [productionOrigin, undefined], [undefined, key],
+  [MEMO_RPC_ORIGIN, key], ['http://abcdefghijklmnopqrst.supabase.co', key],
+  ['https://abcdefghijklmnopqrst.supabase.co/', key],
+  ['https://abcdefghijklmnopqrst.supabase.co/path', key],
+  ['https://abcdefghijklmnopqrst.supabase.co?query=1', key],
+  ['https://user:pass@abcdefghijklmnopqrst.supabase.co', key],
+  ['https://abcdefghijklmnopqrst.supabase.co:443', key],
+  ['https://outside.invalid', key], [productionOrigin, 'sb_secret_synthetic_not_allowed'],
+  [productionOrigin, 'service_role'], [productionOrigin, 'sb_publishable_'],
+  [productionOrigin, ' sb_publishable_synthetic_not_allowed']
+])('本番buildは不足/不正/dev設定を値の出力なしで拒否する：%#', (url, publicKey) => {
+  const env = { ...process.env };
+  delete env.MEMO_PRODUCTION_SUPABASE_URL; delete env.MEMO_PRODUCTION_SUPABASE_PUBLISHABLE_KEY;
+  if (url !== undefined) env.MEMO_PRODUCTION_SUPABASE_URL = url;
+  if (publicKey !== undefined) env.MEMO_PRODUCTION_SUPABASE_PUBLISHABLE_KEY = publicKey;
+  const result = spawnSync(process.execPath, ['scripts/build-product.mjs', '--production'], { env, encoding: 'utf8' });
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain('Invalid or missing production public configuration');
+  if (publicKey) expect(result.stdout + result.stderr).not.toContain(publicKey);
 });

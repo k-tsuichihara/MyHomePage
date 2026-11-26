@@ -1,8 +1,11 @@
 import type { CloudTransport, RpcName } from './cloud-rpc-types';
 import { array, nullable, record, revision, uuid } from './read-primitives';
 
-/** 現在の承認済み開発origin。製品composition rootへの接続は別承認とする。 */
-export const MEMO_RPC_ORIGIN = 'https://yohoppqflnhhvqypwhfv.supabase.co';
+/** 通常/devは既存固定origin。本番buildだけ検証済みの公開originへ固定する。 */
+declare const __MEMO_PRODUCTION_ORIGIN__: string;
+export const MEMO_DEV_RPC_ORIGIN = 'https://yohoppqflnhhvqypwhfv.supabase.co';
+export const MEMO_RPC_ORIGIN = typeof __MEMO_PRODUCTION_ORIGIN__ === 'undefined'
+  ? MEMO_DEV_RPC_ORIGIN : __MEMO_PRODUCTION_ORIGIN__;
 export const MEMO_RPC_KEYS: Readonly<Record<RpcName, readonly string[]>> = Object.freeze({
   memo_load_snapshot: [], memo_save: ['p_id', 'p_title', 'p_body', 'p_tag_ids', 'p_expected_revision', 'p_request_id'],
   memo_resolve_request: ['p_id', 'p_request_id', 'p_title', 'p_body', 'p_tag_ids', 'p_expected_revision'],

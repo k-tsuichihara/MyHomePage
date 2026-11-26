@@ -4,6 +4,8 @@ import { createProductBrowserLocalDependencies } from './product-browser-local';
 import { showProductMaintenance } from './product-maintenance';
 declare const __MEMO_MAINTENANCE__: boolean;
 declare const __MEMO_PRODUCT_CLOUD__: boolean;
+declare const __MEMO_PRODUCT_PRODUCTION__: boolean;
+declare const __MEMO_PRODUCTION_KEY__: string;
 
 const status = document.getElementById('product-status');
 try {
@@ -23,7 +25,10 @@ try {
     const deps = createProductBrowserLocalDependencies(env);
     void showProductMaintenance(document, deps.storage, deps.locks);
   } else if (__MEMO_PRODUCT_CLOUD__) {
-    void import('./product-cloud-app').then(module => module.mountProductCloudSetup(document, env, window.fetch.bind(window)))
+    void import('./product-cloud-app').then(module => {
+      if (__MEMO_PRODUCT_PRODUCTION__) module.mountProductProductionCloud(document, env, __MEMO_PRODUCTION_KEY__, window.fetch.bind(window));
+      else module.mountProductCloudSetup(document, env, window.fetch.bind(window));
+    })
       .catch(() => { if (status) status.textContent = 'クラウド候補の接続準備を開始できませんでした。'; });
   } else { mountProductBrowserLocalApp(document, env); if (status) status.textContent = ''; }
 } catch {

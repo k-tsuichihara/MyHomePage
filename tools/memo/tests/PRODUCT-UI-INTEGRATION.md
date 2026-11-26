@@ -1,5 +1,17 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## R04：本番候補の公開設定注入（合成設定offline確認）
+
+通常localとdev cloudの入口は維持する。本番候補だけbuild:product-productionを使い、MEMO_PRODUCTION_SUPABASE_URL / MEMO_PRODUCTION_SUPABASE_PUBLISHABLE_KEYをbuildプロセスから取得する。.env自動読取は追加しない。URLはhttps://の標準20文字Project Refのsupabase.co originのみ、path/query/hash/資格情報/port/空白/dev originは拒否。キーはsb_publishable_形式だけで、未設定/不正なら値を出力せずbuild失敗。Auth/RPC/CSPは同じoriginへ固定する。URL/キーの形式一致だけで所有project・キーの対応関係まで証明しない。
+
+本番候補は.product/production/site/tools/memoへハッシュ付き資産を出し、通常cloud SDK成果物と同じ固定SDK/パッチ検証を使用する。本番用のpreview runnerは追加しない。既存公開memo.htmlは変更しない。dev専用入力を生成せず、buildの公開キーで既存製品compositionを起動し、通常loginとSDK session自動復元へ接続。pagehide/BFCache/disposeは既存製品契約と同じ扱い。C03/C04/C05、dirty/UNKNOWN/user/generation、local/cloud保存、RPC引数等は変更しない。
+
+今回のURL/キーは合成値だけ。実Project Refはオーナー未確認で本番接続先として確定していない。実公開には別途対象確認・承認が必要。設定失敗時はbuildを停止し、以前の成果物を新しい成功buildとして採用しない。公開キーは配信JSに含まれる公開設定であり秘密キーではない。SQL実行・本番設定使用・実通信・公開切替は行わない。既存Q05 COMPLETEとPlaywright CLI終了処理課題を維持する。
+
+offline AI Gate：関連9ファイル443件と追加Auth関連3ファイル29件、計472件PASS（終了コード0）。実SDK+合成HTTPで本番のlogin/復元から同じoriginのsnapshotへ進み、Auth/RPCのapikeyとCSP一致、dev origin非混入、dev入力UIなしを確認。15種の不足/不正/dev設定を拒否しキー値をエラーへ出さないことも確認。既存dev入口14件、local/dev preview、保存先/認証/RPCの既存回帰を再利用。typecheck・3種build・dev/本番SDK成果物検査・git diff --check PASS。合成URL/キーのみ、実Auth/RPC/DB/SQL/公開切替0。既存UATや全Vitest/Playwright CLI一式の再実施ではない。
+
+
+
 ## Q05 UAT-08：バックアップモーダルの表示調整
 
 backup-dialog内のbutton/downloadリンクとfile入力・機能section・確認領域へ余白を設け、狭幅で自然に折り返す。追加復元の既存checkboxはタイトル左、比較結果と警告は次行へ表示する。選択イベント・比較/復元処理・保存契約は変更しない。Humanは元メモ保持・上書き防止を含む機能を確認済みで先生が08正式PASSと判定。今回の表示修正もオーナー最終確認OK報告に基づき先生がHuman受入PASSと判定。機能再試験は要求しない。PR #131マージと先生の明示承認によりQ05 COMPLETE。Playwright CLI課題・公開後の実スマホ/実音声確認は残る。正式結果は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照。
