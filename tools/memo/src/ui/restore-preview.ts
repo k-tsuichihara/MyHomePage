@@ -63,9 +63,13 @@ export function mountRestorePreview(doc: Document, controller: ReturnType<typeof
       const label = doc.createElement('label'), check = doc.createElement('input'); check.type = 'checkbox'; check.checked = s.selected.includes(row.index); check.disabled = locked || !row.memo;
       check.onchange = () => { void send({ kind: 'select', indexes: [row.index], selected: check.checked }); };
       const text = doc.createElement('span'), diff = s.current && row.memo ? compareRestoreRow(row, s.backup, s.current) : [];
-      text.textContent = row.memo ? `${row.index + 1}: ${row.memo.title} ${diff === null ? '新規' : diff.length ? `差分あり: ${diff.join('、')}` : '一致'} ${row.warnings.join('、')}`
-        : `${row.index + 1}: 不正なメモ（${row.reason}）`;
-      label.append(check, text); rows.append(label, doc.createElement('br'));
+      label.className = 'restore-selection-row'; text.className = 'restore-selection-text';
+      const title = doc.createElement('span'), detail = doc.createElement('span');
+      title.className = 'restore-selection-title'; detail.className = 'restore-selection-detail';
+      title.textContent = row.memo ? `${row.index + 1}: ${row.memo.title} ` : `${row.index + 1}: 不正なメモ（${row.reason}）`;
+      detail.textContent = row.memo ? `${diff === null ? '新規' : diff.length ? `差分あり: ${diff.join('、')}` : '一致'} ${row.warnings.join('、')}` : '';
+      text.append(title, detail);
+      label.append(check, text); rows.append(label);
     }
     if (s.phase === 'confirmation') {
       const confirmation = doc.createElement('div'); confirmation.setAttribute('role', 'dialog'); confirmation.setAttribute('aria-label', '追加型復元の確認');

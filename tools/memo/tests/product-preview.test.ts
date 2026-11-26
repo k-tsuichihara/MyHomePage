@@ -51,6 +51,7 @@ it('1コマンドがlocal成果物をbuildして固定headed起動する構成',
 });
 
 it.each([false, true])('既存route方針を維持する：cloud=%s', async cloud => {
+  expect(productPreviewOptions(cloud).acceptDownloads).toBe(!cloud);
   let handler!: (route: Route) => unknown;
   const context = { route: vi.fn(async (_pattern, callback) => { handler = callback; }) } as unknown as BrowserContext;
   await prepareProductPreview(context, root, cloud);
@@ -100,6 +101,21 @@ it('local製品previewはウィンドウ6幅の内部領域まで追従する（
       await page.locator('#editor-tags input').first().check();
       await page.locator('#save').click(); await page.locator('#editor-view .editor-saved').waitFor();
       expect(await page.locator('#editor-view').isVisible()).toBe(true); await page.locator('#back').click();
+      await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).click();
+      await page.getByRole('button', { name: 'JSONバックアップを作成', exact: true }).click();
+      const link = page.getByRole('link', { name: '準備済みJSONをダウンロード', exact: true });
+      await link.waitFor({ state: 'visible' });
+      const [download] = await Promise.all([page.waitForEvent('download'), link.click()]);
+      expect(await download.failure()).toBeNull();
+      const backupPath = fileURLToPath(new URL('.product/uat08-preview-backup.json', root));
+      await download.saveAs(backupPath);
+      const backup = await readFile(backupPath, 'utf8');
+      expect(() => JSON.parse(backup)).not.toThrow();
+      expect(backup).toContain('横幅を確認する長いタイトル');
+      await page.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles(backupPath);
+      await expect.poll(() => page.getByRole('button', { name: 'このページを選択', exact: true }).isEnabled()).toBe(true);
+      await page.getByRole('dialog', { name: 'バックアップ・復元', exact: true })
+        .getByRole('button', { name: 'バックアップ・復元を閉じる', exact: true }).click();
       const samples = [];
       for (const width of [1200, 992, 900, 800, 651, 650, 390]) {
         const frame = await page.evaluate(() => outerWidth - innerWidth);
@@ -192,3 +208,54 @@ it('同じ製品配信・専用profileで実localStorage保存と再読込がで
     } finally { await context.close(); }
   }, () => {});
 });
+
+it.each([1200, 390, 320])('追加復元の選択行とモーダル操作の余白を保つ：幅%s', async width => {
+  const browser = await chromium.launch({ headless: true, proxy: { server: 'http://127.0.0.1:9' } });
+  const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const url = await prepareProductPreview(context, root, false), page = await context.newPage();
+    page.setDefaultTimeout(3000);
+    await page.goto(url);
+    await page.locator('#new').click();
+    await page.locator('#memo-title').fill('元メモ');
+    await page.locator('#memo-body').fill('保持する合成本文');
+    await page.locator('#save').click();
+    await page.locator('#editor-view .editor-saved').waitFor();
+    await page.locator('#back').click();
+    const original = await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'));
+    await page.getByRole('button', { name: 'バックアップ・復元', exact: true }).click();
+    const modal = page.getByRole('dialog', { name: 'バックアップ・復元', exact: true });
+    const data = { format: 'myhomepage.memo.local-backup', backupVersion: 1, sourceStorageVersion: 3,
+      exportedAt: '2026-01-01T00:00:00Z', data: { memos: [{
+        id: '00000000-0000-4000-8000-000000000123', title: '復元候補の長いタイトル'.repeat(8), body: '合成本文',
+        createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
+        pinnedAt: null, deletedAt: null, revision: 1, lastRequestId: null
+      }], tags: [], memoTags: [], deletedMemoIds: [] } };
+    await modal.getByLabel('バックアップJSONを選択', { exact: true }).setInputFiles({
+      name: 'synthetic.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(data)) });
+    const row = modal.locator('.restore-selection-row').first(), check = row.getByRole('checkbox');
+    await check.waitFor(); await check.check();
+    await expect.poll(() => check.isChecked()).toBe(true);
+    const box = await row.evaluate(node => {
+      const rect = (selector: string) => { const r = node.querySelector(selector)!.getBoundingClientRect(); return { left:r.left,right:r.right,top:r.top,bottom:r.bottom }; };
+      return { check:rect('input'), title:rect('.restore-selection-title'), detail:rect('.restore-selection-detail') };
+    });
+    expect(box.check.right).toBeLessThan(box.title.left);
+    expect(Math.abs(box.check.top - box.title.top)).toBeLessThanOrEqual(4);
+    expect(box.detail.top - box.title.bottom).toBeGreaterThanOrEqual(6);
+    await modal.getByRole('button', { name: '追加内容を確認', exact: true }).click();
+    const confirmation = modal.getByRole('dialog', { name: '追加型復元の確認', exact: true });
+    await confirmation.waitFor();
+    const buttons = await confirmation.locator('button').evaluateAll(nodes => nodes.map(node => {
+      const r=node.getBoundingClientRect(), css=getComputedStyle(node);
+      return { left:r.left,right:r.right,top:r.top,bottom:r.bottom,margin:parseFloat(css.marginRight),vertical:parseFloat(css.marginTop) };
+    }));
+    expect(buttons.every(b => b.margin >= 10 && b.vertical >= 6)).toBe(true);
+    expect(buttons[1]!.top >= buttons[0]!.bottom || buttons[1]!.left > buttons[0]!.right).toBe(true);
+    expect(await modal.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await confirmation.getByRole('button', { name: '復元をキャンセル', exact: true }).click();
+    await expect.poll(() => check.isChecked()).toBe(true);
+    expect(await page.evaluate(() => localStorage.getItem('myhomepage.memo.data.v2'))).toBe(original);
+  } finally { await context.close(); await browser.close(); }
+}, 15000);

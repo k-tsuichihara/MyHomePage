@@ -4,17 +4,17 @@
 
 作成日：2026-11-19。**Q05実施中。PR #122マージ後、HumanがR01-A/B/Cを実操作し、すべて期待結果を満たし追加指摘なしと報告したため、UAT-01はPASS。** 本書をQ05のケース・進捗・結果記録の正本とする。修正PR・AI GateのPASSをHuman再確認の代用にしない。
 
-**UAT-01〜06正式PASSを維持。UAT-07はFAIL／再login時の重複確認修正のHuman受入・データ分離確認待ち。** PR #129後のダイアログ表示、logout承認後の編集終了/一覧/local復帰はHuman PASS。固定コード記録からlogout成功・元pending解除と、再表示後の明示login成功に伴う新しいcloud切替pendingを確認。logout所有権修正は見送り、同一editorの単純dirty承認再利用を限定実装した。診断は先生承認により撤去済みし、新ケース/枝番を作らない。今回実Auth/RPC/Human操作なし。
+**UAT-01〜08正式PASS（機能受入）。UAT-08の最終レイアウトもオーナーOK報告に基づき先生がHuman受入PASSと判定。残るHuman再確認なし。** PR #130マージ後、オーナーからlogout後の未ログイン/local復帰、既存local保持、cloud未保存追記のlocal非混入、同一user再loginの重複確認なし、cloud編集復帰/未保存追記保持の5点すべてOKと報告され、先生が07正式PASSと判定した。編集復帰は想定以上に使いやすいとの評価も受領。診断は撤去済み。日時・ブラウザ等の未報告情報は推測しない。
 
 | 項目 | 件数・状態 |
 | --- | --- |
 | 総ケース数 | 10 |
-| PASS | 6 |
-| FAIL | 1 |
+| PASS | 8 |
+| FAIL | 0 |
 | SKIP | 2（オーナー判断による今回の対象外。未確認） |
-| NOT STARTED | 1 |
-| 残り実施ケース数 | 1（NOT STARTED）＋FAIL 1件 |
-| Q05状態 | 継続中／UAT-01〜06正式PASS、UAT-07は再login重複確認の修正受入・データ分離待ち |
+| NOT STARTED | 0 |
+| 残り実施ケース数 | 0（機能・今回の表示修正ともHuman受入済み） |
+| Q05状態 | 継続中／UAT-01〜08正式PASS、08表示修正もHuman PASS。Q05全体の完了宣言・リリース判断は別途 |
 | Q05後への引継ぎ | 実スマホ・実音声の2件。SKIPはPASSに含めない |
 
 | ID | ケース | 対象 | 状態 |
@@ -25,8 +25,8 @@
 | UAT-04 | ゴミ箱で整理する | PC/local・復元・単件完全削除 | PASS |
 | UAT-05 | 一覧からログインしてcloudを使う | PC/cloud Auth・D05・切替確認 | PASS |
 | UAT-06 | cloudで書く・保存・再読込・session復元 | PC/cloud実製品経路 | PASS |
-| UAT-07 | ログアウトしてlocalへ戻る | PC/cloud→local・離脱確認 | FAIL |
-| UAT-08 | バックアップ・復元の代表利用 | PC/local・ファイル・追加復元 | NOT STARTED |
+| UAT-07 | ログアウトしてlocalへ戻る | PC/cloud→local・離脱確認 | PASS |
+| UAT-08 | バックアップ・復元の代表利用 | PC/local・ファイル・追加復元 | PASS |
 | UAT-09 | 実スマホでの画面・操作感 | 本番配置後の実機 | SKIP |
 | UAT-10 | 実音声メモ・音声追記 | 本番配置後の実マイク | SKIP |
 
@@ -55,10 +55,10 @@
 | cloud実操作の承認範囲・承認記録 | 未承認／未記入 |
 | バックアップ保存・ファイル選択が可能な環境 | 未確定 |
 
-- local候補は`tools/memo`で`npm run preview:product`。build・専用Chromium起動を含む。起動ごとに新規profileとなり、正常終了時に試験データは削除される。01〜04・08は同じ起動を継続して利用する。ブラウザ終了後のデータ永続性をこの環境で判定しない。
+- local候補は`tools/memo`で`npm run preview:product`。build・専用Chromium起動を含む。起動ごとに新規profileとなり、正常終了時に試験データは削除される。01〜04は同じ起動を継続して利用する。08はオーナー承認により新規local profileと新しい合成メモで実施してよい。既存previewの終了・profile削除は要求しない。ブラウザ終了後のデータ永続性をこの環境で判定しない。
 - cloud候補は別起動の`npm run preview:product-cloud`。local previewのデータとは別profileであり、自動共有しない。**起動・設定・Auth・RPC/writeの実操作は、対象dev-sandbox・専用合成ユーザー・許可する操作範囲を明示承認した後だけ行う。** 本書は包括的な通信承認ではない。本番・実利用データ・DB/SQL操作は対象外。
 - cloud候補ではpublishable keyを既存の接続開始欄へ、資格情報をログイン欄へだけ入力する。値を記録・貼付しない。接続開始時点でsession復元通信が発生し得る。
-- 現行previewは`acceptDownloads: false`。08の実ファイル保存まで可能とは扱わない。08開始前にファイル操作可能な承認済み環境を用意する。なければ08はNOT STARTEDのまま理由を記録し、無断で制限解除・SKIP・PASSにしない。本計画ではrunnerを変更しない。
+- UAT-08用にlocal previewだけacceptDownloadsを有効化する承認を取得。cloud previewはfalseを維持。実ファイル保存・選択のHuman受入は08で確認し、準備やクリックだけを保存完了としない。通常終了時のprofile削除・外部通信遮断等は変更しない。
 - データは「UAT-日付」などの識別しやすい合成メモ・タグだけ。個人情報は入力しない。既存のQ04残置データや他データは編集・削除しない。自動cleanupは行わない。完全削除は04で指定する今回の合成メモだけ。
 - 同じケースをlocal/cloud双方で機械的に繰り返さない。認証失効・競合・timeoutを故意に発生させない。予期しないエラー／UNKNOWNは下記の停止手順へ進み、連打・再送しない。
 - 画面・文言・操作結果を記録し、raw networkログ、token、password、key、user ID、内部UUIDは記録しない。画像が必要なら合成内容のみ・秘密欄を除外し、Gitへの登録や公開は別判断とする。
@@ -301,7 +301,7 @@ Human実操作の報告を根拠とする。AI Gateや推測でPASSにしたも�
 | 手順4〜5：同一profile再読込/session/cloud復元・内容 | 今回Human PASS：同一ブラウザ/profile再読込、session自動復元/cloud自動選択、復元後保存内容 |
 | layout finding | PR #128反映後、Human表示受入PASS |
 
-**最終判定：UAT-06正式PASS。** 元手順と期待結果をすべてHuman証拠で満たし、未確認項目0・未解決問題0。AI Gateだけを根拠に閉じていない。再試験不要。07の現在状態は次節、08はNOT STARTEDを維持。
+**最終判定：UAT-06正式PASS。** 元手順と期待結果をすべてHuman証拠で満たし、未確認項目0・未解決問題0。AI Gateだけを根拠に閉じていない。再試験不要。07/08の現在状態は各節を参照。
 
 #### cloud編集レイアウトのHuman findingと修正（既存UAT-06内）
 
@@ -325,15 +325,15 @@ Human実操作の報告を根拠とする。AI Gateや推測でPASSにしたも�
   4. 未ログイン・local選択を確認し、05のlocalメモを開く。
 - **期待結果**：切替先を見失わず、logout取消でdraftを維持する。承認後はlocalへ戻り、cloudの未保存追記をlocalへコピーしない。
 - **Humanが見るポイント**：確認の分かりやすさ、保存先ボタン表示、データが別であること。
-- **結果**：FAIL
-- **備考**：確認表示/cancel/認証・cloud・draft保持に加え、PR #129後の表示受入・logout承認後の編集終了/一覧/local復帰をHuman PASSと記録。診断では再表示後の明示loginから新しいcloud切替確認が生成された。修正後のHuman受入とデータ分離は未確認。日時等は推測せず、cleanupは含めない。
+- **結果**：PASS
+- **備考**：確認表示/cancel/認証・cloud・draft保持に加え、PR #129後の表示受入・logout承認後の編集終了/一覧/local復帰をHuman PASSと記録。診断では再表示後の明示loginから新しいcloud切替確認が生成された。PR #130後の今回Human報告で修正受入・データ分離もPASS。日時等は推測せず、cleanupは含めない。
 
 #### UAT-07の証拠照合・Human残確認
 
-- **状態**：FAIL／再login重複確認の修正受入・元手順4のデータ分離待ち。Human確認済みのcancel/draft保持を独立再試験へ戻さない。
+- **状態**：正式PASS。元手順とfindingの未確認受入項目0・未解決問題0。Human確認済みのcancel/draft保持を独立再試験へ戻さない。
 - **既存Human証拠**：06のcloud保存/再open/内容/session復元/cloud選択、05の認証/保存先表示、過去Human Gateのlogout後未ログイン/local復帰、01〜04のlocal利用を再利用。login・新規保存・session復元・一覧layoutの再試験不要。過去のclean logoutだけでは今回のdirty cloud logout全体をPASSにしない。
 - **AI証拠**：取得済み全Vitest59ファイル/2,002件・Playwright83件PASS。auth-session.test.tsのlocal scope logout、product-session-ui.test.tsのcloud dirty logout取消/draft・target保持/古い確認拒否・保存中停止等を再利用。generation/UNKNOWN/fallback禁止等の技術分岐のHuman再現は不要。今回の表示修正に対する関連試験の再実行結果は下記AI Gate欄を参照。
-- **Human残確認**：レビュー・別途実操作承認後、同じ合成メモで「未保存追記→logout承認/local復帰→同一userで明示再login→同じdirtyを理由とする重複確認なしでcloud復帰・未保存draft保持」を既存07のfinding確認として受け入れる。元手順4のlocalデータ分離確認も残す。取得済みのcancel/draft保持・表示/余白・logout成功/local復帰を独立再試験へ戻さない。追加編集なしで現在editorの離脱保護が戻ること等の内部条件はAI試験を再利用する。暗黙保存/削除/コピーなし、新ケース/枝番なし。今回はHuman操作を開始しない。
+- **Human残確認**：なし。既存のcancel/認証・cloud・draft保持、PR #129表示受入に今回の5点を照合し、元手順1〜4と再login findingをすべて受入済み。同じ操作を再実施させない。
 - **停止条件**：失敗/UNKNOWNや想定外の状態なら停止・記録し、retryや別writeで調べない。今回の整理では実操作しない。
 
 #### ログイン／保存先ダイアログ表示finding（既存UAT-07内）
@@ -342,7 +342,7 @@ Human実操作の報告を根拠とする。AI Gateや推測でPASSにしたも�
 - **期待結果**：不要な「離脱をキャンセルしました。」は表示しない。編集画面login禁止理由は赤文字。確認ボタン間・上下に8〜12px程度の余白、スマホ折返し時も密着しない。
 - **修正内容**：cancelの表示用feedbackだけ空にする。既存login理由へ赤色を指定し、既存確認ボタンをflex-wrapのグループへ配置、gapと上下marginを10pxとする。イベント・Auth・D05/C05・C04・離脱判定・draft保護は不変。拒否/UNKNOWN/認証失効通知を一括非表示にしない。
 - **AI Gate結果**：関連Vitest（product-layout/product-session-ui）2ファイル435件PASS。追加した1200/390/320pxの3件で赤い案内、確認ボタンのgap/上下margin=10px・折返し・横はみ出しなし、cancel後の通知なし・draft/cloud保持・logout/write/fetch追加0を確認。既存の保存拒否/UNKNOWN/認証失効/離脱等の関連回帰もPASS。typecheck・local/cloud product build・文書整合性・diff check PASS。Playwrightは初回・許可された1回の再実行とも83件PASS。初回の終了コード1の原因は未確定。再実行もpreviewサーバー残存で手動停止し、ネイティブ終了コード取得値は空。コマンド正常終了は未確認で、全AI Gate PASSではない。後片付け後の該当プロセス/待受はなし。終了処理・終了コード取得の未解決課題と今回限りのPR化許可はRelease Planに記録。製品不具合の確定でも影響の完全否定でもなく、恒久的な基準緩和はしない。追加試験/調査なし。実Auth/RPC/DB・Human操作・データ整理・公開/デプロイ0。
-- **Human表示再確認結果**：PASS（PR #129反映後の報告）。logout承認後の編集画面終了・一覧遷移・local復帰もPASS。後述の再login findingとデータ分離は未確認のまま。
+- **Human表示再確認結果**：PASS（PR #129反映後の報告）。logout承認後の編集画面終了・一覧遷移・local復帰もPASS。後述の再login findingとデータ分離も今回Human PASS。
 
 #### 再login後の保存先変更確認finding（同じUAT-07）
 
@@ -350,12 +350,18 @@ Human実操作の報告を根拠とする。AI Gateや推測でPASSにしたも�
 - **修正内容**：有効なlogout承認とC05変更を通した、Auth user/cloud ownerが一致する単純dirty cloud editorだけを候補にする。logout applied・実signed-out・同じ不変参照を確認して確定。localから同一userで戻る時だけdepartureとC05 dirtyで同じ対象を省略し、cloud切替成功で記録を消費する。editor/保存状態/要求の変更・別user・disposeで失効。未開始/busy/失敗/確認不能logoutへ古い承認を流用しない。draft/baseline/revision/元要求は消さず、拒否/UNKNOWN/保存中/現在editor/アプリ全体の異常は保護する。
 - **回帰**：新規/既存、idle/savedの単純dirty、復帰後に追加編集なしの再離脱、read失敗でも承認消費、失敗/例外/未開始、別user確定/元user復帰、保存拒否/conflict/UNKNOWN、stale、local UNKNOWN、dispose、不変性をoffline検証。logout所有権・C03/C04/C05純粋controller・保存形式は変更しない。
 - **AI Gate結果（診断撤去後・最終）**：全Vitest 59ファイル／2,036件PASS（終了コード0）。承認再利用17件、既存Auth通知12件、EditorState不変性を含む55件を維持。撤去前60ファイル／2,048件から診断専用1ファイル／12件だけ削減。typecheck・通常local/cloud product build・文書整合性・git diff --check PASS。通常ソース/scriptsと配信JS/runnerの診断専用コード・起動経路の残存なし、旧観測成果物も削除。Playwright CLI終了処理課題は未解決・対象外で再実行なし。実Auth/RPC/cloud read/write/DB/SQL/production/Human操作0件。
-- **Human再確認結果**：PENDING。AI GateでPASSにしない。具体的な残確認は上記Human残確認を正本とする。診断機構は先生承認により撤去済み。
+- **Human再確認結果**：PASS。オーナー報告と先生の正式判定を根拠とし、AI Gateだけによる昇格ではない。診断機構は撤去済み。
+  - logout承認後、未ログインでlocalへ復帰：PASS
+  - 既存localメモ保持：PASS
+  - cloud未保存追記のlocal非混入：PASS
+  - 同一user再loginで不要な保存先変更確認なし：PASS
+  - cloud編集へ復帰し、未保存追記保持：PASS
+  - 編集復帰は想定以上に使いやすいとのHuman評価。実施日時等は未報告。
 
 ### UAT-08：バックアップ・復元の代表利用
 
 - **目的**：モーダルの説明・操作選択・実ファイル操作・復元結果を利用者として確認する。
-- **前提条件**：01〜04のlocal profileを継続。実ファイル保存・選択ができる承認済み環境であること。現行previewの制限は「開始前の準備」を参照。
+- **前提条件**：新規local preview profileを使用し、識別できる合成メモを明示保存して一覧へ戻っておく。既存profileの引継ぎは必須でない。既存previewは閉じない。実ファイル保存先を用意し、「開始前の準備」を参照。
 - **操作手順**：
   1. 一覧の「バックアップ・復元」を開き、バックアップ作成、初期復元、JSONからの追加、完全削除済みメモの復元の説明・利用条件を読む。状態により利用できない操作があることを確認する。
   2. JSONバックアップを準備し、表示されたリンクからファイルを保存する。ブラウザ／OS上でファイルが存在することを確認する。
@@ -364,8 +370,27 @@ Human実操作の報告を根拠とする。AI Gateや推測でPASSにしたも�
   5. 案内に従って通常画面を明示再読み込みし、元メモを残したまま復元メモのタイトル・本文が読めることを確認する。
 - **期待結果**：必要な操作を選べ、ファイルを扱え、復元前の説明と復元後の内容を理解できる。追加復元が元データの置換ではないと分かる。
 - **Humanが見るポイント**：4機能の区別、平文ファイルの注意、選択・確認・結果への導線。
-- **結果**：NOT STARTED
-- **備考**：代表正常系は追加復元1件。初期復元・単件回復の適用、全分岐・不正JSON・危険系・内部属性はAI Gateを再利用し、独立Humanケースにしない。実施日時／観測／問題番号：未記入。
+- **結果**：PASS（機能受入・今回のHumanレイアウト受入とも完了）
+- **備考**：代表正常系は追加復元1件。初期復元・単件回復の適用、全分岐・不正JSON・危険系・内部属性はAI Gateを再利用し、独立Humanケースにしない。オーナーから元メモ保持・上書き防止を含むHuman確認結果を受領し、先生が正式PASSと判定済み。未報告の日時・ブラウザ等は推測しない。
+
+#### UAT-08途中観測・モーダル表示finding
+
+- **Human観測**：JSONバックアップ生成・読込・復元・再読込後のデータ保持に加え、元メモ保持・上書き防止も確認済みとオーナーから報告され、先生が08正式PASSと判定。以前の元メモ保持判定保留という記録を訂正する。
+- **表示要望**：モーダル内のボタン/周辺要素の上下左右余白、狭幅時の自然な折返し、追加復元のチェックボックスをタイトル左・差分情報を下へ配置。
+- **修正**：backup-dialog内だけの余白/折返しCSSと選択行の表示用span分割。既存input/onchange、選択index、比較内容、復元controller・保存仕様は変更なし。
+- **AI Gate**：最終preview/製品統合17件PASS、既存backupモーダル1200/390/320pxの3件PASS。既存関連回帰は250件PASSの一方で間隔3件が失敗したため、CSSの適用範囲を修正して該当3件を再実行PASS。backup/初期復元/単件回復/統合110件PASS。追加3幅試験でcheckbox左/差分下・折返し・横はみ出しなし・取消時元データ不変を確認。typecheck・通常local/cloud build・diff check PASS。Playwright CLI終了処理の既存課題は対象外・未解決。
+- **Human残確認**：なし。今回変更したボタン/周辺の余白、折返し、checkboxのタイトル左配置、差分の下配置も最終Human確認OK。生成・読込・復元・再読込・元メモ保持・上書き防止の機能再試験は要求しない。今回AIは実データ操作・既存preview終了を行わない。
+- **Human修正受入結果**：PASS。オーナーから最終レイアウト確認OKと報告を受け、先生が正式PASSと判定した。未報告の実施日時・ブラウザ等は推測しない。今回AIによるHuman試験再実施なし。
+
+#### UAT-08機能受入後の表示確認準備（新ケース追加なし）
+
+- **既存証拠の再利用**：UAT-01〜04のlocal保存・通常編集/表示を再試験しない。取得済み最終全Vitest59ファイル/2,036件、backup/restore契約・製品統合回帰を再利用する。初期復元・完全削除済み単件回復の全分岐、不正JSON、競合/UNKNOWN、内部属性・確認token・置換防止等はAI Gateへ任せ、Human独立ケースを追加しない。
+- **Human確認状況**：元の手順1〜5の機能は元メモ保持・上書き防止も含め正式PASS。今回の表示受入もHuman PASS。機能・表示とも再試験不要。
+- **環境AI Gate**：既存product-preview 6件PASS（終了コード0）。localだけdownload許可/cloudは禁止、通常local候補で合成メモ保存→JSONダウンロード/saveAs→同ファイル選択/読取プレビュー到達を確認。既存route/CSP/外部通信拒否・responsive回帰もPASS。typecheck/local build/diff check PASS。当時はHuman未実施だったが、現在はファイル操作を含む機能受入PASS。
+- **実施環境**：既存previewは終了しない。別ターミナルのtools/memoで npm run preview:product を実行し、新しいウィンドウで今回の成果物を表示する。旧previewの再読込だけでは起動時に保持された旧資産が使われるため、新規起動を使う。
+- **受入時の目視手順（履歴・再実施不要）**：新規local previewで表示用の合成メモを1件だけ作成・保存して一覧へ戻る（新規profileの通常復元UIを表示する準備であり機能再受入ではない）。バックアップ・復元を開き余白を目視する。JSONからの追加には既に取得済みの合成バックアップを選択し、checkbox/タイトル/差分の配置を見る。必要なら幅を縮め折返しを見る。復元の実行、削除、ダウンロード再試験は不要。
+- **次に行うこと**：Human再確認は不要。今回の差分をDraft PRでレビューし、Q05全体の明示的な完了判断・後続リリース工程は別途扱う。以下の起動/目視手順は受入時の履歴であり再実施要求ではない。
+
 
 ### UAT-09：実スマホでの画面・操作感
 
