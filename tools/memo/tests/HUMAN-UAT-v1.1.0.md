@@ -4,7 +4,7 @@
 
 作成日：2026-11-19。**Q05実施中。PR #122マージ後、HumanがR01-A/B/Cを実操作し、すべて期待結果を満たし追加指摘なしと報告したため、UAT-01はPASS。** 本書をQ05のケース・進捗・結果記録の正本とする。修正PR・AI GateのPASSをHuman再確認の代用にしない。
 
-**UAT-01〜06正式PASSを維持。** UAT-07はHumanが未保存cloud編集中のlogout確認表示・cancel・認証/cloud選択/入力保持をPASSと報告。ダイアログ表示3件のfindingでFAIL／表示再確認と元のlogout承認/local復帰待ち。今回の修正は表示のみ、実操作なし。
+**UAT-01〜06正式PASSを維持。UAT-07はFAIL／再login時の重複確認修正のHuman受入・データ分離確認待ち。** PR #129後のダイアログ表示、logout承認後の編集終了/一覧/local復帰はHuman PASS。固定コード記録からlogout成功・元pending解除と、再表示後の明示login成功に伴う新しいcloud切替pendingを確認。logout所有権修正は見送り、同一editorの単純dirty承認再利用を限定実装した。診断は先生承認により撤去済みし、新ケース/枝番を作らない。今回実Auth/RPC/Human操作なし。
 
 | 項目 | 件数・状態 |
 | --- | --- |
@@ -14,7 +14,7 @@
 | SKIP | 2（オーナー判断による今回の対象外。未確認） |
 | NOT STARTED | 1 |
 | 残り実施ケース数 | 1（NOT STARTED）＋FAIL 1件 |
-| Q05状態 | 継続中／UAT-01〜06正式PASS、UAT-07は表示再確認・残手順待ち |
+| Q05状態 | 継続中／UAT-01〜06正式PASS、UAT-07は再login重複確認の修正受入・データ分離待ち |
 | Q05後への引継ぎ | 実スマホ・実音声の2件。SKIPはPASSに含めない |
 
 | ID | ケース | 対象 | 状態 |
@@ -326,14 +326,14 @@ Human実操作の報告を根拠とする。AI Gateや推測でPASSにしたも�
 - **期待結果**：切替先を見失わず、logout取消でdraftを維持する。承認後はlocalへ戻り、cloudの未保存追記をlocalへコピーしない。
 - **Humanが見るポイント**：確認の分かりやすさ、保存先ボタン表示、データが別であること。
 - **結果**：FAIL
-- **備考**：Humanが元手順1〜2と3前半の確認表示・cancel・ログイン/cloud選択/入力維持をPASSと報告。表示finding3件は下記。logout承認とlocal復帰は未確認。実施日時等は未報告のため推測しない。cleanupは含めない。
+- **備考**：確認表示/cancel/認証・cloud・draft保持に加え、PR #129後の表示受入・logout承認後の編集終了/一覧/local復帰をHuman PASSと記録。診断では再表示後の明示loginから新しいcloud切替確認が生成された。修正後のHuman受入とデータ分離は未確認。日時等は推測せず、cleanupは含めない。
 
 #### UAT-07の証拠照合・Human残確認
 
-- **状態**：FAIL／表示再確認・元手順3後半〜4待ち。Human確認済みのcancel/draft保持を独立再試験へ戻さない。
+- **状態**：FAIL／再login重複確認の修正受入・元手順4のデータ分離待ち。Human確認済みのcancel/draft保持を独立再試験へ戻さない。
 - **既存Human証拠**：06のcloud保存/再open/内容/session復元/cloud選択、05の認証/保存先表示、過去Human Gateのlogout後未ログイン/local復帰、01〜04のlocal利用を再利用。login・新規保存・session復元・一覧layoutの再試験不要。過去のclean logoutだけでは今回のdirty cloud logout全体をPASSにしない。
 - **AI証拠**：取得済み全Vitest59ファイル/2,002件・Playwright83件PASS。auth-session.test.tsのlocal scope logout、product-session-ui.test.tsのcloud dirty logout取消/draft・target保持/古い確認拒否・保存中停止等を再利用。generation/UNKNOWN/fallback禁止等の技術分岐のHuman再現は不要。今回の表示修正に対する関連試験の再実行結果は下記AI Gate欄を参照。
-- **Human残確認**：既存07内で、禁止案内の赤文字とlogout確認ボタンの余白、cancel後の定型通知非表示を確認する。cancel時のdraft保持は取得済みPASSを再利用し独立再試験不要。続いて06の同じ合成メモを使い、元手順3後半の保存しないlogout承認→手順4の未ログイン/local表示・既存localメモ・cloud追記がlocalへ混入しないことを確認する。再login・新規保存・cleanup・新ケース/枝番なし。
+- **Human残確認**：レビュー・別途実操作承認後、同じ合成メモで「未保存追記→logout承認/local復帰→同一userで明示再login→同じdirtyを理由とする重複確認なしでcloud復帰・未保存draft保持」を既存07のfinding確認として受け入れる。元手順4のlocalデータ分離確認も残す。取得済みのcancel/draft保持・表示/余白・logout成功/local復帰を独立再試験へ戻さない。追加編集なしで現在editorの離脱保護が戻ること等の内部条件はAI試験を再利用する。暗黙保存/削除/コピーなし、新ケース/枝番なし。今回はHuman操作を開始しない。
 - **停止条件**：失敗/UNKNOWNや想定外の状態なら停止・記録し、retryや別writeで調べない。今回の整理では実操作しない。
 
 #### ログイン／保存先ダイアログ表示finding（既存UAT-07内）
@@ -342,7 +342,15 @@ Human実操作の報告を根拠とする。AI Gateや推測でPASSにしたも�
 - **期待結果**：不要な「離脱をキャンセルしました。」は表示しない。編集画面login禁止理由は赤文字。確認ボタン間・上下に8〜12px程度の余白、スマホ折返し時も密着しない。
 - **修正内容**：cancelの表示用feedbackだけ空にする。既存login理由へ赤色を指定し、既存確認ボタンをflex-wrapのグループへ配置、gapと上下marginを10pxとする。イベント・Auth・D05/C05・C04・離脱判定・draft保護は不変。拒否/UNKNOWN/認証失効通知を一括非表示にしない。
 - **AI Gate結果**：関連Vitest（product-layout/product-session-ui）2ファイル435件PASS。追加した1200/390/320pxの3件で赤い案内、確認ボタンのgap/上下margin=10px・折返し・横はみ出しなし、cancel後の通知なし・draft/cloud保持・logout/write/fetch追加0を確認。既存の保存拒否/UNKNOWN/認証失効/離脱等の関連回帰もPASS。typecheck・local/cloud product build・文書整合性・diff check PASS。Playwrightは初回・許可された1回の再実行とも83件PASS。初回の終了コード1の原因は未確定。再実行もpreviewサーバー残存で手動停止し、ネイティブ終了コード取得値は空。コマンド正常終了は未確認で、全AI Gate PASSではない。後片付け後の該当プロセス/待受はなし。終了処理・終了コード取得の未解決課題と今回限りのPR化許可はRelease Planに記録。製品不具合の確定でも影響の完全否定でもなく、恒久的な基準緩和はしない。追加試験/調査なし。実Auth/RPC/DB・Human操作・データ整理・公開/デプロイ0。
-- **Human表示再確認結果**：PENDING。Human PASS済みのconfirm/cancel/draft保持と区別する。元のlogout承認/local復帰も未確認のまま。
+- **Human表示再確認結果**：PASS（PR #129反映後の報告）。logout承認後の編集画面終了・一覧遷移・local復帰もPASS。後述の再login findingとデータ分離は未確認のまま。
+
+#### 再login後の保存先変更確認finding（同じUAT-07）
+
+- **Human観測・原因確定**：固定コード記録では63でlogout承認有効、65で元pending解除、66でC05 local、78でsigned-out、80でUI logout applied。83の再表示だけでは確認生成なし。84〜94の明示login成功→95〜100の自動cloud要求→102〜104の新しいconfirmation-required/pending/ボタン非活性を確認。logout未実行や古い確認の残存ではない。以前の「再表示だけ」という見立てをこの記録で訂正する。
+- **修正内容**：有効なlogout承認とC05変更を通した、Auth user/cloud ownerが一致する単純dirty cloud editorだけを候補にする。logout applied・実signed-out・同じ不変参照を確認して確定。localから同一userで戻る時だけdepartureとC05 dirtyで同じ対象を省略し、cloud切替成功で記録を消費する。editor/保存状態/要求の変更・別user・disposeで失効。未開始/busy/失敗/確認不能logoutへ古い承認を流用しない。draft/baseline/revision/元要求は消さず、拒否/UNKNOWN/保存中/現在editor/アプリ全体の異常は保護する。
+- **回帰**：新規/既存、idle/savedの単純dirty、復帰後に追加編集なしの再離脱、read失敗でも承認消費、失敗/例外/未開始、別user確定/元user復帰、保存拒否/conflict/UNKNOWN、stale、local UNKNOWN、dispose、不変性をoffline検証。logout所有権・C03/C04/C05純粋controller・保存形式は変更しない。
+- **AI Gate結果（診断撤去後・最終）**：全Vitest 59ファイル／2,036件PASS（終了コード0）。承認再利用17件、既存Auth通知12件、EditorState不変性を含む55件を維持。撤去前60ファイル／2,048件から診断専用1ファイル／12件だけ削減。typecheck・通常local/cloud product build・文書整合性・git diff --check PASS。通常ソース/scriptsと配信JS/runnerの診断専用コード・起動経路の残存なし、旧観測成果物も削除。Playwright CLI終了処理課題は未解決・対象外で再実行なし。実Auth/RPC/cloud read/write/DB/SQL/production/Human操作0件。
+- **Human再確認結果**：PENDING。AI GateでPASSにしない。具体的な残確認は上記Human残確認を正本とする。診断機構は修正結果レビュー後に撤去予定。
 
 ### UAT-08：バックアップ・復元の代表利用
 

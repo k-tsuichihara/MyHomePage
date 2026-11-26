@@ -36,6 +36,7 @@ PR #87のP2対応：画面が古くても元要求についてC04がcompleted/�
 - 確認は状態オブジェクトそのものに結び付けた不変ticketとし、ドラフト変更（変更して元に戻す場合も）や保存結果反映後には古いticketを拒否する。別の確認表示では呼出側が保持する最新ticketだけを使う。確認のキャンセルや追加編集だけで保存拒否状態を解除しない。
 - キャンセルでは状態を維持。離脱許可も元ドラフトや不明要求を削除せず、返却されたretained状態として残す。呼出側は明示破棄確認済みの離脱でのみ画面セッションを終了できる。再起動後の復元保証はない。
 - 製品保存先変更の評価対象はstorageDepartureEditorsで共通化する。local controllerが離脱許可後に保管した単純dirty（save=idle/saved、unresolvedなし）だけを再確認対象から外し、状態は消さない。現在editor・拒否・UNKNOWN・未解決・保存中は除外しない。requestNavigation/confirmNavigation自体とlogoutの既存確認は変更しない。
+- UAT-07のcloud再loginではUIの限定承認記録を使用する。cloud ownerが一致する有効なlogout離脱承認＋logout成功後、同一user/local選択中の同じ不変EditorStateの単純dirtyだけを上記helperへ渡さない。departureとC05 dirtyは同じ対象を使う。cloud切替成功で記録を消費し、追加編集なしでも現在cloud editorは再び保護する。editor/保存状態/要求の変化・別user・disposeで失効し、失敗/UNKNOWN/未開始logoutへ流用しない。EditorState型・immutable・save/要求の意味は変更しない。詳細は[製品UI契約](PRODUCT-UI-INTEGRATION.md)冒頭を参照。
 - prepareLocalListはload結果を区別する。明示的emptyだけが正常な空データ。loadedはv2を再検証し、pendingや取得失敗・破損はblockedを返す。以前の一覧／ドラフトの破棄を指示しない。
 - 一覧条件・ID順・不在選択タグ・scrollTopを独立して保持し、前後移動はPR #9のgetMemoNeighborsを利用。スクロール座標は有限の非負数。画面実装はDOMの読取／復元を別途行う。対象が結果外なら勝手に別メモへ置換しない。
 

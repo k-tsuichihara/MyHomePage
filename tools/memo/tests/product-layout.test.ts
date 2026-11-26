@@ -105,6 +105,325 @@ it.each(['new', 'saved'])('UAT-05：%s未保存離脱を承認した保管draft�
   } finally { await context.close(); }
 }, 20000);
 
+async function cloudApprovalFixture(mode = 'cloud-edit-auth-events') {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  const page = await fakeProduct(context, mode); await page.locator('#product-cloud-items').waitFor();
+  await page.locator('#product-cloud-items .open-card').first().click();
+  await page.getByLabel('クラウドの本文', { exact: true }).fill('保持するcloud追記');
+  const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+  const open = async () => { if (!await dialog.isVisible()) await page.locator('#product-auth-open').click(); };
+  return { page, context, dialog, open,
+    logout: async () => { await open(); await dialog.getByRole('button', { name: 'ログアウト', exact: true }).click(); await dialog.getByRole('button', { name: '確認してログアウト', exact: true }).click(); },
+    login: async () => { await open(); await dialog.getByLabel('メールアドレス', { exact: true }).fill('synthetic@example.invalid'); await dialog.getByLabel('パスワード', { exact: true }).fill('synthetic-password'); await dialog.getByRole('button', { name: 'ログイン', exact: true }).click(); },
+  };
+}
+
+it.each(['error', 'exception'])('UAT-07承認再利用：後続logoutの%sで古い承認を復活させない', async failure => {
+  const f = await cloudApprovalFixture();
+  try {
+    await f.page.evaluate("window.approvedAuth = fixture.captureAuthEvent('in')");
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'");
+    await f.page.evaluate('approvedAuth()');
+    expect(await f.page.evaluate('fixture.target().dirty')).toBe(false);
+    await f.page.evaluate(`fixture.failNextLogout('${failure}')`); await f.logout();
+    await f.page.waitForFunction("fixture.auth().phase === 'blocked'");
+    await f.login();
+    expect(await f.dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(true);
+    expect(await f.page.evaluate('fixture.target().dirty')).toBe(true);
+    expect(await f.page.evaluate('fixture.calls.logout')).toBe(2);
+    expect(await f.page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it.each(['error', 'exception'])('UAT-07承認再利用：cloud logoutの%sで未確定候補を有効化しない', async failure => {
+  const f = await cloudApprovalFixture(`cloud-edit-auth-events-${failure}`);
+  try {
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'blocked'"); await f.login();
+    expect(await f.dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(true);
+    expect(await f.page.evaluate('fixture.target().target')).toBe('local');
+    expect(await f.page.evaluate('fixture.calls.logout')).toBe(1);
+    expect(await f.page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it('UAT-07承認再利用：stale logout確認は実行せずdraftを保持する', async () => {
+  const f = await cloudApprovalFixture();
+  try {
+    await f.open(); await f.dialog.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await f.page.evaluate('fixture.refreshAuth()');
+    await f.dialog.getByRole('button', { name: '確認してログアウト', exact: true }).click();
+    expect(await f.page.evaluate('fixture.calls.logout')).toBe(0);
+    expect(await f.page.evaluate('fixture.target().target')).toBe('cloud');
+    expect(await f.page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('保持するcloud追記');
+    await f.page.locator('#product-auth-feedback').getByText(/確認後に状態が変わりました/).waitFor();
+    expect(await f.page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it('UAT-07承認再利用：C03 busyでlogout未開始の場合も過去の承認を無効にする', async () => {
+  const f = await cloudApprovalFixture();
+  try {
+    await f.page.evaluate("window.approvedAuth = fixture.captureAuthEvent('in')");
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'");
+    await f.page.evaluate("approvedAuth(); fixture.holdAuth('logout'); void fixture.externalLogout()");
+    await f.page.waitForFunction("fixture.auth().phase === 'checking'");
+    await f.open();
+    await f.dialog.getByRole('button', { name: 'ログアウト', exact: true }).dispatchEvent('click');
+    await f.dialog.getByRole('button', { name: '確認してログアウト', exact: true }).click();
+    await f.page.waitForFunction("fixture.authTrace.some(row => row.event === 'ui.logout.return' && row.result === 'busy')");
+    expect(await f.page.evaluate('fixture.calls.logout')).toBe(2); // 初回と外部合成操作。UIのbusy要求はSDK未実行。
+    await f.page.evaluate("fixture.releaseAuth('logout')"); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'");
+    await f.login();
+    expect(await f.dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(true);
+    expect(await f.page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it('UAT-07承認再利用：別user確定で失効し、元userへ戻っても承認を流用しない', async () => {
+  const f = await cloudApprovalFixture();
+  try {
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'");
+    await f.page.evaluate('fixture.differentUser()'); await f.login();
+    expect(await f.dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(true);
+    expect(await f.page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('');
+    await f.dialog.getByRole('button', { name: '保存先変更をキャンセル', exact: true }).click();
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'");
+    await f.page.evaluate('fixture.originalUser()'); await f.login();
+    expect(await f.dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(true);
+    expect(await f.page.evaluate('fixture.target().dirty')).toBe(true);
+    expect(await f.page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it('UAT-07承認再利用：cloud editorと異なるAuth userのlogoutで承認を付与しない', async () => {
+  const f = await cloudApprovalFixture();
+  try {
+    await f.page.evaluate('fixture.externalLogout()');
+    await f.page.evaluate("fixture.differentUser(); fixture.captureAuthEvent('in')()");
+    expect(await f.page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('');
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'"); await f.login();
+    expect(await f.dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(true);
+    expect(await f.page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('');
+    expect(await f.page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it.each(['rejected', 'conflict', 'unknown'])('UAT-07承認再利用：保存%s・元要求を保持し再loginでも保護する', async outcome => {
+  const f = await cloudApprovalFixture(`cloud-edit-${outcome}`);
+  try {
+    await f.page.locator('#product-cloud-editor').getByRole('button', { name: '保存する', exact: true }).click();
+    await f.page.waitForFunction('fixture.calls.saveCompleted === 1');
+    await f.page.locator('.cloud-editor-statuses').getByText(/保存できたか不明|拒否/).waitFor();
+    const request = await f.page.evaluate('fixture.savedArgs()');
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'"); await f.login();
+    expect(await f.dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(true);
+    expect(await f.page.evaluate('fixture.savedArgs()')).toEqual(request);
+    expect(await f.page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot', 'memo_save']);
+    await f.dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).click();
+    await f.page.locator('.cloud-editor-statuses').getByText(outcome === 'unknown' ? /保存できたか不明/ : /拒否/).waitFor();
+    expect(await f.page.evaluate('fixture.savedArgs()')).toEqual(request);
+    expect(await f.page.evaluate("fixture.rpcNames.filter(name => name === 'memo_save').length")).toBe(1);
+    expect(await f.page.evaluate("fixture.rpcNames.filter(name => name === 'memo_resolve_request').length")).toBe(0);
+    if (outcome === 'unknown') {
+      expect(await f.page.locator('#product-cloud-editor').getByRole('button', { name: '保存する', exact: true }).isDisabled()).toBe(true);
+      expect(await f.page.locator('#product-cloud-editor').getByRole('button', { name: '保存結果を照合', exact: true }).isVisible()).toBe(true);
+    }
+    expect(await f.page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it('UAT-07承認再利用：保管cloudが承認済みでもlocal UNKNOWNの一覧離脱/loginを保護する', async () => {
+  const f = await cloudApprovalFixture();
+  try {
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'");
+    await f.page.locator('#new').click(); await f.page.locator('#memo-title').fill('localの未解決保存');
+    await f.page.evaluate('fixture.failWrites()'); await f.page.locator('#save').click();
+    await f.page.waitForFunction("fixture.state().write.kind === 'unknown'");
+    expect(await f.page.locator('#back').isDisabled()).toBe(true);
+    await f.open();
+    expect(await f.dialog.getByRole('button', { name: 'ログイン', exact: true }).isDisabled()).toBe(true);
+    await f.dialog.getByRole('button', { name: 'ログイン', exact: true }).dispatchEvent('click');
+    expect(await f.page.evaluate('fixture.calls.login')).toBe(0);
+    expect(await f.page.evaluate('fixture.state().unresolved.length')).toBeGreaterThan(0);
+    expect(await f.page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it('UAT-07承認再利用：dispose後の旧ボタンで承認やAuth操作を再利用しない', async () => {
+  const f = await cloudApprovalFixture();
+  try {
+    await f.logout(); await f.page.waitForFunction("fixture.auth().phase === 'signed-out'"); await f.open();
+    const old = await f.dialog.getByRole('button', { name: 'ログイン', exact: true }).elementHandle();
+    expect(await f.page.evaluate('fixture.dispose()')).toBe('applied');
+    await old!.evaluate(node => node.dispatchEvent(new Event('click')));
+    expect(await f.page.evaluate('fixture.calls.login')).toBe(0);
+    expect(await f.page.evaluate('fixture.target().target')).toBe('local');
+    expect(await f.page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+  } finally { await f.context.close(); }
+}, 15000);
+
+it.each(['saved', 'new', 'saved-status', 'read-failed'])('UAT-07承認再利用：%s単純dirtyはlogout後の同一user再loginで重複確認しない', async kind => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-auth-events'); await page.locator('#product-cloud-items').waitFor();
+    if (kind === 'new') await page.locator('.cloud-actions').getByRole('button', { name: '＋ 新規作成', exact: true }).click();
+    else await page.locator('#product-cloud-items .open-card').first().click();
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('承認後も保持するcloud draft');
+    const expectedBody = kind === 'saved-status' ? '保存後の未保存追記' : '承認後も保持するcloud draft';
+    if (kind === 'saved-status') {
+      await page.locator('#product-cloud-editor').getByRole('button', { name: '保存する', exact: true }).click();
+      await page.locator('#product-cloud-editor .editor-saved').waitFor();
+      await page.getByLabel('クラウドの本文', { exact: true }).fill(expectedBody);
+    }
+    await page.locator('#product-auth-open').click();
+    const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+    await dialog.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await dialog.getByRole('button', { name: '確認してログアウト', exact: true }).click();
+    await page.locator('#product-auth-open').click();
+    await dialog.getByLabel('メールアドレス', { exact: true }).fill('synthetic@example.invalid');
+    await dialog.getByLabel('パスワード', { exact: true }).fill('synthetic-password');
+    if (kind === 'read-failed') await page.evaluate("fixture.snapshotMode('unverified')");
+    await dialog.getByRole('button', { name: 'ログイン', exact: true }).click();
+    await page.waitForFunction("fixture.target().target === 'cloud'", { timeout: 3000 });
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe(expectedBody);
+    expect(await page.evaluate('fixture.target().dirty')).toBe(true);
+    // 追加編集がなくても現在editorは保護し、logoutの確認が再び必要。
+    await page.locator('#product-auth-open').click();
+    await dialog.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    expect(await dialog.getByRole('button', { name: '確認してログアウト', exact: true }).isVisible()).toBe(true);
+    await dialog.getByRole('button', { name: 'ログアウトをキャンセル', exact: true }).click();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe(expectedBody);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await page.evaluate('fixture.calls.logout')).toBe(1);
+    expect(await page.evaluate("fixture.rpcNames.filter(name => name === 'memo_save').length")).toBe(kind === 'saved-status' ? 1 : 0);
+  } finally { await context.close(); }
+}, 15000);
+
+it.each(['login', 'restore'])('Auth再現イベント：遅延%s中のlogoutは通常UIで遮断', async operation => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, operation === 'restore' ? 'cloud-edit-auth-events-restore-held' : 'cloud-edit-auth-events');
+    if (operation === 'login') {
+      await page.locator('#product-cloud-items').waitFor();
+      await page.locator('#product-auth-open').click();
+      await page.getByRole('button', { name: 'ログアウト', exact: true }).click();
+      await page.waitForFunction("fixture.auth().phase === 'signed-out'");
+      await page.evaluate("fixture.holdAuth('login')");
+    }
+    await page.locator('#product-auth-open').click();
+    const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+    if (operation === 'login') {
+      await dialog.getByLabel('メールアドレス', { exact: true }).fill('synthetic@example.invalid');
+      await dialog.getByLabel('パスワード', { exact: true }).fill('synthetic-password');
+      await dialog.getByRole('button', { name: 'ログイン', exact: true }).click();
+    }
+    await page.waitForFunction("fixture.auth().phase === 'checking'");
+    expect(await dialog.getByRole('button', { name: 'ログアウト', exact: true }).isDisabled()).toBe(true);
+    const before = await page.evaluate<number>('fixture.calls.logout');
+    await dialog.getByRole('button', { name: 'ログアウト', exact: true }).dispatchEvent('click');
+    expect(await page.evaluate('fixture.calls.logout')).toBe(before);
+    await page.evaluate(`fixture.releaseAuth('${operation}')`);
+    await page.locator('#product-cloud-items').waitFor();
+    expect(await page.evaluate('fixture.auth().phase')).toBe('authenticated');
+    expect(await page.evaluate('fixture.target().target')).toBe('cloud');
+    expect(await page.evaluate('fixture.calls.logout')).toBe(before);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    await writeFile(new URL(`.product/auth-events-delayed-${operation}.json`, root), JSON.stringify(await page.evaluate('fixture.authTrace'), null, 2));
+  } finally { await context.close(); }
+}, 20000);
+
+it.each(['before-in', 'before-out', 'before-in-out', 'after-in', 'after-out', 'same-in-out', 'same-out-in', 'separate-in-out', 'separate-out-in', 'login-after'])('Auth再現イベント：%s', async scenario => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit-auth-events'); await page.locator('#product-cloud-items').waitFor();
+    await page.locator('#product-cloud-items .open-card').first().click();
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('合成の未保存追記');
+    // payloadはlogout前に固定。通知時に変化する共有sessionを参照しない。
+    await page.evaluate("window.authIn = fixture.captureAuthEvent('in'); window.authOut = fixture.captureAuthEvent('out'); fixture.holdAuth('logout')");
+    await page.locator('#product-auth-open').click();
+    const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+    await dialog.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await dialog.getByRole('button', { name: '確認してログアウト', exact: true }).click();
+    await page.waitForFunction('fixture.calls.logout === 1');
+    if (scenario.startsWith('before-')) await page.evaluate(scenario === 'before-in' ? 'authIn()' : scenario === 'before-out' ? 'authOut()' : 'authIn(); authOut()');
+    await page.evaluate("fixture.releaseAuth('logout')");
+    await page.waitForFunction("fixture.auth().phase === 'signed-out'");
+    await page.locator('#product-auth-open').click();
+    const observe = async () => ({
+      phase: await page.evaluate<string>('fixture.auth().phase'), target: await page.evaluate<string>('fixture.target().target'),
+      confirmation: await dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible(),
+      loginDisabled: await dialog.getByRole('button', { name: 'ログイン', exact: true }).isDisabled(),
+      logoutDisabled: await dialog.getByRole('button', { name: 'ログアウト', exact: true }).isDisabled(),
+      dialogOpen: await dialog.isVisible(),
+    });
+    const completed = await observe();
+    expect(completed).toMatchObject({ phase: 'signed-out', target: 'local', confirmation: false, loginDisabled: false, logoutDisabled: true });
+    if (scenario.startsWith('after-')) await page.evaluate(scenario === 'after-in' ? 'authIn()' : 'authOut()');
+    if (scenario.startsWith('same-')) await page.evaluate(scenario === 'same-in-out' ? 'authIn(); authOut()' : 'authOut(); authIn()');
+    if (scenario.startsWith('separate-')) {
+      await page.evaluate(scenario === 'separate-in-out' ? 'authIn()' : 'authOut()');
+      await observe();
+      await page.evaluate(scenario === 'separate-in-out' ? 'authOut()' : 'authIn()');
+    }
+    if (scenario === 'login-after') {
+      await dialog.getByLabel('メールアドレス', { exact: true }).fill('synthetic@example.invalid');
+      await dialog.getByLabel('パスワード', { exact: true }).fill('synthetic-password');
+      await dialog.getByRole('button', { name: 'ログイン', exact: true }).click();
+      await page.waitForFunction("fixture.target().target === 'cloud' && fixture.calls.readCompleted === 2");
+      await page.locator('#product-auth-open').click();
+    }
+    const final = await observe();
+    const trace = await page.evaluate<{ step: number; event: string; result?: string }[]>('fixture.authTrace');
+    const requests = trace.filter(row => row.event === 'target.request.cloud');
+    if (scenario === 'login-after') {
+      expect(final).toMatchObject({ phase: 'authenticated', target: 'cloud', confirmation: false, loginDisabled: true, logoutDisabled: false });
+      expect(requests.at(-1)?.result).toBe('changed');
+      const latest = [...trace].reverse();
+      expect(latest.find(row => row.event === 'ui.login.return')!.step).toBeLessThan(latest.find(row => row.event === 'target.request.cloud')!.step);
+    } else {
+      expect(final.confirmation).toBe(false);
+      expect(requests).toHaveLength(1); // 起動restoreによる初回選択だけ。通知から追加要求なし。
+      expect(final.target).toBe('local');
+      const expected = scenario.endsWith('out-in') || scenario === 'after-in' ? 'authenticated'
+        : scenario === 'same-in-out' || scenario === 'separate-in-out' ? 'blocked' : 'signed-out';
+      expect(final.phase).toBe(expected);
+    }
+    expect(await page.evaluate('fixture.calls.logout')).toBe(1);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(scenario === 'login-after' ? ['memo_load_snapshot', 'memo_load_snapshot'] : ['memo_load_snapshot']);
+    const summary = { scenario, completed, final, trace };
+    const serialized = JSON.stringify(summary, null, 2);
+    for (const secret of ['synthetic-token-private', 'synthetic-password', 'synthetic@example.invalid', 'access_token', '00000000-0000']) expect(serialized).not.toContain(secret);
+    await writeFile(new URL(`.product/auth-events-${scenario}.json`, root), serialized);
+  } finally { await context.close(); }
+}, 20000);
+
+it('UAT-07：dirty cloud logout承認後に再表示しても保存先確認が残らない', async () => {
+  const context = await browser.newContext({ viewport: { width: 1200, height: 950 }, serviceWorkers: 'block' });
+  try {
+    const page = await fakeProduct(context, 'cloud-edit'); await page.locator('#product-cloud-items').waitFor();
+    await page.locator('#product-cloud-items .open-card').first().click();
+    await page.getByLabel('クラウドの本文', { exact: true }).fill('logout後も保護する未保存追記');
+    await page.locator('#product-auth-open').click();
+    const dialog = page.getByRole('dialog', { name: 'ログイン / 保存先', exact: true });
+    await dialog.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await dialog.getByRole('button', { name: 'ログアウトをキャンセル', exact: true }).click();
+    expect(await page.getByLabel('クラウドの本文', { exact: true }).inputValue()).toBe('logout後も保護する未保存追記');
+    await page.locator('#product-auth-open').click();
+    await dialog.getByRole('button', { name: 'ログアウト', exact: true }).click();
+    await dialog.getByRole('button', { name: '確認してログアウト', exact: true }).click();
+    await page.locator('#product-auth-open').click();
+    expect(await page.evaluate('fixture.calls.logout')).toBe(1);
+    expect(await page.evaluate('fixture.auth().phase')).toBe('signed-out');
+    expect(await page.evaluate('fixture.target().target')).toBe('local');
+    expect(await dialog.getByRole('button', { name: '確認して保存先を変更', exact: true }).isVisible()).toBe(false);
+    expect(await dialog.getByRole('button', { name: 'ログイン', exact: true }).isEnabled()).toBe(true);
+    expect(await dialog.getByRole('button', { name: 'ログアウト', exact: true }).isDisabled()).toBe(true);
+    expect(await page.evaluate('fixture.calls.writes + fixture.calls.fetch')).toBe(0);
+    expect(await page.evaluate('fixture.rpcNames')).toEqual(['memo_load_snapshot']);
+  } finally { await context.close(); }
+}, 20000);
+
 it.each([1200, 390, 320])('UAT-07：logout確認の余白・赤いlogin案内・取消通知なし：幅%s', async width => {
   const context = await browser.newContext({ viewport: { width, height: 950 }, serviceWorkers: 'block' });
   try {
