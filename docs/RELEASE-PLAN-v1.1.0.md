@@ -21,6 +21,14 @@ build:product-productionで公開URL/キーをbuild時注入し、本番入口�
 
 本番Project Refはオーナー確認待ち。今回のbuild/試験は合成URL/公開キーのみで、k-life-logへの接続先確定やキー真正性の確認ではない。実設定使用・公開は別途承認。詳細は[製品UI統合契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)のR04節。関連回帰9ファイル/443件＋SDK標準Auth/通知/RPC境界3ファイル/29件、計472件PASS（終了コード0）。typecheck・local/dev cloud/合成本番候補build・dev/本番SDK成果物検査・diff check PASS。本番入口2件と不正設定拒否15件を追加し、devの既存14件もPASS。全Vitest/Playwright CLI・Human UATの再実施は今回行わない。前節の実装案/未承認記述は提案時の履歴であり、今回承認範囲はこの実装とoffline検証まで。Q05 COMPLETE/実スマホ・実音声の延期/CLI既知課題は維持。
 
+### R04 STEP 2：本番適用前の確認準備（未接続・未実行）
+
+[最小読取専用preflight](../tools/memo/doc/v1.1.0/memo_v1_1_production_preflight.sql)をproduction_applyの事前条件から作成。5結果のうち1〜4は各1行・全判定true、5の対象名衝突は0行を期待する。projectの識別はSQLで代用せず、オーナーがk-life-logのGeneralのProject RefとProject URLのhostを照合。API Keysでは同じprojectのsb_publishable_キーであることを確認し、値をチャット/Gitへ転記しない。anon JWT/secret/service_roleだけしかない場合は設定を変えず報告する。本番設定確定・キー取得/利用は別途承認。
+
+現環境のPATHにpsql/postgres/initdb/dockerは見当たらず、既存Pythonのpglast/pg_queryもなし（起動/接続なしで可用性のみ確認）。既存dev-sandboxはメモ構築済みで、新規適用候補の衝突停止が想定される。それを全体エンジン検証PASSに数えず、ガード解除・既存表DROP・既存dev再構成は行わない。既に所有する空の隔離Supabase互換環境があるかは未確認。あれば対象/実行方法を別途承認し、候補全体/transaction/事後ガードを検証する。なければエンジン検証未実施の残存リスクを先生・オーナー判断へ戻す。新基盤を自動追加しない。
+
+停止条件：project/キー種別が不明、不一致/非publishable、PostgreSQL17/UTF8以外、pgcrypto配置/所属不一致、必要権限不足、対象オブジェクトあり、結果欠落/NULL/エラー、同時DDL/権限変更、本番適用の個別承認なし。自動補完/GRANT/再試行なし。今回の成果物は確認準備だけで、読取SQL実行も承認していない。
+
 ### UAT-07表示修正：Playwright終了処理の未解決課題
 
 今回のoffline Playwrightは初回・許可された1回の再実行とも83件のテストがPASS。初回のコマンド終了コード1の原因は未確定。再実行もテスト後にpreviewサーバーが残り、手動停止後のネイティブ終了コード取得値が空だったため、コマンド正常終了は未確認。後片付け後の該当Playwright/previewプロセス・4173番待受の残存はなし。終了コード取得・previewサーバー終了処理を未解決の技術的課題として残す。製品不具合と確定したわけではなく、製品への影響が完全に否定されたとも扱わない。
