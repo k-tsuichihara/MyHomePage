@@ -1,8 +1,13 @@
 # TypeScript製品UI統合：最初のlocal接続単位
 
+## Q05 UAT-08：バックアップモーダルの表示調整
+
+backup-dialog内のbutton/downloadリンクとfile入力・機能section・確認領域へ余白を設け、狭幅で自然に折り返す。追加復元の既存checkboxはタイトル左、比較結果と警告は次行へ表示する。選択イベント・比較/復元処理・保存契約は変更しない。Humanは元メモ保持・上書き防止を含む機能を確認済みで先生が08正式PASSと判定。今回の表示修正もオーナー最終確認OK報告に基づき先生がHuman受入PASSと判定。機能再試験は要求しない。正式結果は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照。
+
+
 ## Q05 UAT-07：logout離脱承認済みcloud draftの重複確認省略
 
-Humanの固定コード記録ではlogoutはapplied/signed-out、元pendingも解除済み。再表示後の明示login完了→自動cloud選択が新しいpendingを作った。logout所有権の修正案は見送り、以下の限定修正とする。UAT-01〜06 PASS、07は修正後Human受入待ちのFAILを維持する。以降の旧進捗記述より[UAT正本](HUMAN-UAT-v1.1.0.md)を優先する。
+Humanの固定コード記録ではlogoutはapplied/signed-out、元pendingも解除済み。再表示後の明示login完了→自動cloud選択が新しいpendingを作った。logout所有権の修正案は見送り、以下の限定修正とする。PR #130後のHuman報告5点と先生判定によりUAT-01〜07正式PASS。08も正式PASS（機能受入）、表示修正の最終Human受入もPASS。以降の旧進捗記述より[UAT正本](HUMAN-UAT-v1.1.0.md)を優先する。
 
 - UI内だけで、不変EditorState参照・cloud owner・確定前/確定済みを1件保持する。logout確認の現在性とC05変更が成功した場合だけ候補を渡し、Auth logoutのapplied・実signed-out・同じeditor・idle/savedのdirty・unresolvedなしを満たす時だけ確定する。候補の所有者はAuth userと現在cloud ownerの一致が必要。
 - local選択中・有効な同一user・同じ参照・現在も単純dirty・cloud保存中でない場合だけcloud editorを保存先変更評価から外す。共通判定をdepartureとC05 dirty算出の両方に使用し、評価対象の変化もcache再評価条件に含める。local保管editorのPR #126契約は変更しない。

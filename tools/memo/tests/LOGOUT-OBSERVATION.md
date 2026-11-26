@@ -16,6 +16,6 @@ cloud切替成功時に承認記録を消費し、現在editorの通常保護を
 
 先生レビュー承認後、固定コード記録器、パネル、専用フック、観測build・起動経路、診断専用テスト12件を撤去した。通常build方式へ戻し、合成イベントfixture、不具合回帰試験、EditorState不変性試験は維持する。旧観測成果物も削除し、旧起動手順は提供しない。
 
-実装・offline検証とHuman受入は区別する。UAT集計はPASS6/FAIL1/NOT STARTED1/SKIP2を維持し、Human残確認は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照する。Playwright CLI終了処理課題は未解決・今回対象外。
+実装・offline検証とHuman受入は区別する。PR #130後のHuman受入で07正式PASS、UAT集計はPASS8/FAIL0/NOT STARTED0/SKIP2（08も機能・最終レイアウト受入済み）。受入記録は[UAT正本](HUMAN-UAT-v1.1.0.md)を参照する。Playwright CLI終了処理課題は未解決・今回対象外。
 
 撤去・最終offline検証の実施時点では、実通信・Human操作・DB操作・commit/push/PR作成・公開は行っていない。その後、別途承認に基づきcommit/pushし、Draft PR #130を作成した。これは作業段階ごとの履歴であり、実通信・Human操作・DB操作・公開は引き続き実施していない。

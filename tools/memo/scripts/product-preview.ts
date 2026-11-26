@@ -7,7 +7,7 @@ export const PRODUCT_PREVIEW_PATH = '/tools/memo/memo.html';
 
 /** 両previewは通常のウィンドウサイズに追従。dead proxyは外部通信禁止のlocalだけで併用する。 */
 export function productPreviewOptions(cloud: boolean) {
-  return { headless: false, viewport: null, serviceWorkers: 'block' as const, acceptDownloads: false,
+  return { headless: false, viewport: null, serviceWorkers: 'block' as const, acceptDownloads: !cloud,
     args: ['--disable-background-networking', '--disable-sync', '--no-first-run'],
     ...(!cloud ? { proxy: { server: 'http://127.0.0.1:9', bypass: '127.0.0.1' } } : {}) };
 }

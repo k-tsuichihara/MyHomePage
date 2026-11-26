@@ -75,9 +75,19 @@
 }
 /* バックアップ・復元内だけの見出しと操作グループ間隔。 */
 #backup-dialog>.dialog-heading h2{font-size:22px;line-height:1.4}
-#backup-dialog section[aria-label="保存領域喪失時の初期復元"]>div>button:last-child{margin-inline-start:24px}
+#backup-dialog #product-backup-slot>section{min-width:0;margin-block:16px;padding-block:8px}
+#backup-dialog #product-backup-slot :is(button,a[download]){max-width:100%;white-space:normal;overflow-wrap:anywhere;margin:6px 10px 6px 0}
+#backup-dialog #product-backup-slot input[type=file]{max-width:100%;margin-block:10px}
+#backup-dialog #product-backup-slot [role=dialog]{margin-block:12px;padding:10px}
+#backup-dialog #product-backup-slot .restore-selection-row{display:grid;grid-template-columns:20px minmax(0,1fr);gap:10px;align-items:start;margin-block:12px}
+#backup-dialog #product-backup-slot .restore-selection-row input[type=checkbox]{width:18px;height:18px;margin:3px 0 0}
+#backup-dialog .restore-selection-text{min-width:0;overflow-wrap:anywhere}
+#backup-dialog :is(.restore-selection-title,.restore-selection-detail){display:block}
+#backup-dialog .restore-selection-detail{margin-top:6px;font-size:13px;color:#68768a}
+
+#backup-dialog #product-backup-slot section[aria-label="保存領域喪失時の初期復元"]>div>button:last-child{margin-inline-start:24px}
 @media(max-width:650px){
-#backup-dialog section[aria-label="保存領域喪失時の初期復元"]>div>button:last-child{display:block;margin:20px 0 0}
+#backup-dialog #product-backup-slot section[aria-label="保存領域喪失時の初期復元"]>div>button:last-child{display:block;margin:20px 0 0}
 }
 /* 新製品候補のメモ領域だけに適用し、共通ヘッダー・フッターを変更しない。 */
 html[data-product-layout] body:has(.memo-product){height:100dvh;overflow:hidden;display:flex;flex-direction:column;background:#f7f9fc;color:#273449}
