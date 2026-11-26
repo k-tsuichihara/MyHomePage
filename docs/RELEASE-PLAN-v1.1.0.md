@@ -15,6 +15,12 @@ Q05 COMPLETE。PR #131マージ後、先生がレビュー結果・Human受入�
 - 予定変更箇所：build-product.mjs（本番モード/公開設定検証/CSP）、cloud-rpc-sender.ts（本番build時だけ固定originを注入、dev defaultを維持）、product-cloud-app.ts（本番のみdev入力画面なしで既存composition生成）、product-entry.ts（本番分岐）、package.json（本番buildコマンド）、既存build/entry/sender回帰。Auth SDK・C03/C04/C05・SQL/RLS/保存契約は変更不要。設定欠落はdevへfallbackさせずbuild失敗。preview:product-cloudは既存dev挙動を維持する。
 - 今回はSQLファイル作成・静的照合と案の記録だけ。本番実行、本番設定実装、実通信、追加テスト基盤、commit/push/公開は未承認。適用後確認は5表/12関数/RLS/最小権限のカタログだけで、ユーザー行やRPCを実行しない。devの既存監査/Q04/Q05は再利用し、本番への適用結果とは区別する。
 
+### R04 STEP 2：本番接続設定の実装（合成設定のみ・未公開）
+
+build:product-productionで公開URL/キーをbuild時注入し、本番入口ではdevキー入力UIを使わず既存の通常login/session復元へ接続する。本番候補の出力は.product/production、local/dev cloudの成果物・previewは既存のまま。設定不足/不正/dev originはbuild失敗、Auth/RPC/CSPは同一origin固定。SDK/認証・D05/C05・永続化・C04/RPC仕様・SQLは変更なし。
+
+本番Project Refはオーナー確認待ち。今回のbuild/試験は合成URL/公開キーのみで、k-life-logへの接続先確定やキー真正性の確認ではない。実設定使用・公開は別途承認。詳細は[製品UI統合契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)のR04節。関連回帰9ファイル/443件＋SDK標準Auth/通知/RPC境界3ファイル/29件、計472件PASS（終了コード0）。typecheck・local/dev cloud/合成本番候補build・dev/本番SDK成果物検査・diff check PASS。本番入口2件と不正設定拒否15件を追加し、devの既存14件もPASS。全Vitest/Playwright CLI・Human UATの再実施は今回行わない。前節の実装案/未承認記述は提案時の履歴であり、今回承認範囲はこの実装とoffline検証まで。Q05 COMPLETE/実スマホ・実音声の延期/CLI既知課題は維持。
+
 ### UAT-07表示修正：Playwright終了処理の未解決課題
 
 今回のoffline Playwrightは初回・許可された1回の再実行とも83件のテストがPASS。初回のコマンド終了コード1の原因は未確定。再実行もテスト後にpreviewサーバーが残り、手動停止後のネイティブ終了コード取得値が空だったため、コマンド正常終了は未確認。後片付け後の該当Playwright/previewプロセス・4173番待受の残存はなし。終了コード取得・previewサーバー終了処理を未解決の技術的課題として残す。製品不具合と確定したわけではなく、製品への影響が完全に否定されたとも扱わない。
