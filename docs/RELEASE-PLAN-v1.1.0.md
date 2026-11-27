@@ -1,14 +1,71 @@
 # メモツール v1.1.0 リリース進捗管理
 
-Q05 COMPLETE。PR #131マージ後、先生がレビュー結果・Human受入結果に基づき完了を承認。最新origin/mainの34282d7でPR #131反映を確認。UAT-01〜08と最終レイアウトはHuman PASS、PASS8/FAIL0/NOT STARTED0/SKIP2。実スマホ・実音声は未確認の承認済みSKIPとして本番配置後へ引き継ぐ。Playwright CLI終了処理課題は未解決、今回の限定例外マージ/完了判断を恒久的Gate緩和とはしない。次はR04準備、公開・本番操作は未承認。[UAT正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)参照。
+Q05 COMPLETE。PR #131マージ後、先生がレビュー結果・Human受入結果に基づき完了を承認。最新origin/mainの34282d7でPR #131反映を確認。UAT-01〜08と最終レイアウトはHuman PASS、PASS8/FAIL0/NOT STARTED0/SKIP2。実スマホ・実音声は未確認の承認済みSKIPとして本番配置後へ引き継ぐ。Playwright CLI終了処理課題は未解決、今回の限定例外マージ/完了判断を恒久的Gate緩和とはしない。R04の本番DB適用・事後確認、本番build・環境変数解除はHuman PASS。生成資産の静的確認も完了し、次は最終公開前判断。公開・追加の本番操作は別途承認。[UAT正本](../tools/memo/tests/HUMAN-UAT-v1.1.0.md)参照。
 
-### R04 STEP 1：公開環境のHuman確認結果
+### R04最新進捗：本番DB適用・事後確認完了
+
+次のレビュー済み成果物の整備完了を記録する。
+| PR | 完了内容 |
+| --- | --- |
+| #132 | 本番適用SQL・事後確認SQLの整備 |
+| #133 | 本番接続設定の最小実装（offlineでは合成設定のみ使用） |
+| #134 | 本番preflight SQLの整備 |
+| #135 | preflight結果を単一表へ統合 |
+| #136 | verifyを単一表へ統合し、通常テーブル種別/実行主体所有を検査 |
+
+**Human報告を根拠にR04の本番DB適用・事後確認を完了とする。** k-life-logでproduction_apply.sql全体の実行成功、production_verify.sqlは24行すべてPASS、checked_rows=23 / failed_rows=0。PostgreSQL17.11・UTF8・実行主体postgres。5テーブル・12関数・RLS・権限・policyを確認済み。Project Ref/URL一致・Publishable key存在のHuman確認も維持し、値や未報告の実施日時は記録しない。AIによるDB接続/SQL実行・実Auth/RPC確認ではない。
+
+**STEP 3完了状況**：実設定production build・環境変数解除はHuman PASS、成功buildの参照資産の静的確認は下記のとおり完了。生成物の起動・実通信・公開資産切替は未実施。R04全体は最終公開前ゲート等が残るため完了扱いにせず、R05は未着手を維持する。
+
+### R04 STEP 3：本番build Human PASS・生成資産の静的確認
+
+Human報告：初回はURL形式不正でbuildが停止し、URL末尾修正後の`npm run build:product-production`は正常終了。先生は本番buildをHuman PASSと判定。環境変数解除確認は両方Falseで、解除もHuman PASS。実値・未報告日時は記録しない。
+
+AIは今回の成功buildの既存成果物だけを読み取り、再buildせず確認した。
+
+| 静的確認項目 | 結果・証拠 |
+| --- | --- |
+| HTML/JS/CSSと参照 | HTMLと参照するJS1件/CSS2件が存在。各資産のSHA-256がファイル名・HTMLのSRIと一致し、crossorigin=anonymousを確認。CSS2件は現在のソースとバイト一致 |
+| Auth/RPC/CSP | CSPのconnect-srcとbundleのMEMO_RPC_ORIGINが一致。本番形式・dev以外を確認。同じ定数をAuth client生成とRPC senderへ渡す既存compositionと照合。実接続先がオーナーの意図したprojectかの根拠は既存Human設定確認であり、今回の静的照合だけでprojectの実設定を再検証したものではない |
+| dev/合成設定・入口 | 現行4資産にdev origin・既知合成URL/キー/資格情報を検出せず。本番入口はコンパイル済みのif(true)で通常製品compositionへ進む。dev setup定義/公開exportと到達不能else内の呼出は残るが、本番入口から実行されない。残存だけを理由とする修正なし |
+| SDK/manifest | 既存verifyAuthArtifactが終了コード0でPASS。SDK/Auth 2.119.0、原本patch条件、bundle SHAとmanifestを照合。HTML参照のハッシュ付きJSもmanifest対象の非ハッシュJSとバイト一致 |
+| 混入確認 | 配置候補4件に診断・既知fixture資格情報・sourcemap参照・secret key/秘密鍵/JWTのリテラルを検出せず。意図したpublishable keyは公開設定としてJSへ含まれる。静的パターン検査は任意の秘密情報の完全不存在証明ではない。manifest/非ハッシュJS/試験資産/profile/ログ/環境ファイルは配置対象外 |
+| 共通資産 | 既存rootのstyle.css、bootstrap-4.0.0.css、jquery-3.5.0.min.js、popper.min.js、menuScroll.js、shared-menu.jsへの相対参照が解決。共通資産変更なし。CSS2件に外部HTTP URL参照なし。実ブラウザの描画・公開後配信は今回未確認 |
+
+Pagesへの配置候補は`.product/production/site/`内の次の4件だけ（既存の同じ相対パスへ配置する想定、今回は置換しない）。
+
+- `tools/memo/memo.html`
+- `tools/memo/js/memo-app.cb3bb2b8513726a2ff3106b8a751390b9a8c1ae6f6e4727339d6ccf1ecf641b7.js`
+- `tools/memo/css/memo.d61bc29140fe59e9755c9f04b265ca0cef48e283bd4c5469e1460b27112b9747.css`
+- `tools/memo/css/memo-product.94c5b054af9ed71dcbe149adc0f4b7942799e77d623ad4938e1daedfca67af9e.css`
+
+出力siteには現行HTMLが参照しない旧ハッシュJSが1件残存する。内容の採用・削除は行わず、ディレクトリ丸ごとの配置を避け、上記4件に限定する。候補確認は公開・実Auth/RPC成功の証拠や公開承認ではない。次は最終公開前判断と、別途承認された場合の資産切替。Playwright CLI終了処理、SQL事前隔離検証の未実施、公開後の実スマホ/実音声等の既知事項は維持する。
+
+### R04 STEP 4：公開準備Draft PR・最終判断待ち
+
+先生はSTEP 3の静的確認を承認し、STEP 3完了。上記の成功buildの4ファイルだけを作業ブランチの公開用パスへバイト同一で配置した。memo.htmlの従来URLを維持し、旧memo.js/旧CSS・共通資産・他ツールは変更/削除しない。未参照旧JS・manifest・非ハッシュbundle・試験資産は配置対象外。配置後も3資産の参照、SHA-256ファイル名、SRI、共通資産参照を確認。再build・ブラウザ起動・実Auth/RPC・DB操作は行わない。公開キーは配信に必要な公開設定としてJSへ含まれるが、値は本文へ転記しない。
+
+本PRは公開準備であり、R04全体の完了・公開承認ではない。Pagesはmain/root配信のため、オーナーによるマージが公開へつながる点を最終レビューで確認する。mainへの直接push・AIによるマージ・公開切替は行わない。
+
+配置後のGit indexでも参照3資産のSHA-256/SRIと成功buildとのバイト一致を確認。git diff --checkは生成JSに元から含まれる5か所のtrailing whitespaceを検出して終了コード2。成功buildの指定資産を変更しない条件に従い、空白除去・再build・ハッシュ変更は行わない。文書差分のdiff checkは別途確認し、この生成物の検出を無条件PASSにしない。
+
+**公開後の代表確認（別途承認後）**：従来URLのHTTPS起動、HTML/JS/CSSの同じ版の配信・SRIエラーなし、共通メニュー/他ツールへの導線、local既存データ保持・基本表示を確認する。本番login→cloud保存先表示→既存データ読取は実Auth/RPCの明示承認範囲で確認し、write/削除は含めない。実スマホ/実音声は既存の公開後引継ぎとして扱い、SKIPを自動PASSにしない。UAT全体の再実施は要求しない。
+
+**問題時の停止・復旧**：起動/資産不一致、Auth/所有者境界の異常、データ不整合等を観測したら操作・書込を止め、自動再試行や暗黙fallbackを行わずオーナーへ報告する。対象版と影響を確認し、承認後に既存のv2対応保守版へ切り替えるか、問題が配信資産だけなら本PRの公開4ファイルだけを既知の直前版へ戻す追加commitをレビューする。ハッシュ資産とHTMLは同版の組として扱い、共通資産や無関係な変更を巻き戻さない。旧版へのコードrollbackはv2/cloudデータの復旧・移行ではなく、旧版から新版データは扱えない。保守版の準備/配信も今回の自動実行対象外。localStorage/profile/バックアップ/DBを削除・初期化せず、SQL/RLSを戻さず、データ修復と書込再開は別途判断・承認する。詳細の安全方針は[既存切替設計](../tools/memo/tests/RELEASE-TRANSITION.md)を参照し、その旧時点の未実装記述と現在のQ05 COMPLETEを混同しない。
+
+Playwright CLI終了処理課題は未解決で、全Gate正常終了や製品影響なしとは断定しない。過去の限定例外は今回の公開判断に自動適用しない。SQLの本番適用前の隔離エンジン検証未実施等の残存リスクも維持し、先生レビューとオーナーの公開判断を待つ。UAT集計はPASS8/FAIL0/NOT STARTED0/SKIP2のまま。
+
+**残存リスク**：適用SQL全体を本番実行前に隔離SQLエンジンで検証していなかったこと、および独立した異常/ロールバック分岐のエンジン検証未実施を維持する。今回のHuman本番適用・verify成功は実行結果の証拠だが、過去の未実施検証を実施済みへ書き換えない。Playwright CLI終了処理課題、実スマホ/実音声の公開後引継ぎ、single-rpc/完全provenance未認定・延期も維持。今回の記録更新は追加実行・公開の承認ではない。
+
+以下のSTEP 1〜適用手順案は当時の状態・判断履歴。未実行/未確認/未承認との記述を、上記の最新Human完了結果と混同しない。
+
+### R04 STEP 1：公開環境のHuman確認結果（当時の記録）
 
 オーナー報告：GitHub PagesはDeploy from a branch / main / /(root)、独自ドメインなし、HTTPS有効。本番Supabaseはk-life-log、Healthy、Email認証有効。メモ用テーブルは存在しない。RPC/RLS/GRANTは未確認。これはHumanの実設定確認結果であり、AIによる外部接続・SQL実行の結果ではない。公開URLの実表示・配信内容、本番メモDB適用は今回未確認/未実施。
 
 次はSTEP 2の本番接続・DB準備の範囲/適用順序をレビューする。既存の開発schema→review8競合patch→S04 helper権限制限を根拠に、対象名衝突・pgcrypto配置・必要権限を本番適用前に確認する。本番実行の承認はまだない。既存読書管理/Auth/データへの変更は対象外。dev-sandbox候補の入口・固定origin/CSPを、本番の同一固定接続設定へ最小限整合する必要がある。既存Q04/Q05の再実施は要求しない。
 
-### R04 STEP 2：本番適用候補と接続設定案（未実行・実装前）
+### R04 STEP 2：本番適用候補と接続設定案（当時の未実行・実装前記録）
 
 - SQL候補：[新規導入・単一transaction](../tools/memo/doc/v1.1.0/memo_v1_1_production_apply.sql)、[適用後の読取専用確認](../tools/memo/doc/v1.1.0/memo_v1_1_production_verify.sql)。原本3ファイルのSHA256を記載し、schema本文→競合6関数patch本文→S04 DOを再利用。原本は変更しない。pgcrypto作成/移設は除き、既存extensions/digestの所属・権限が正しい場合だけ進む。PostgreSQL17/UTF8、対象名不存在、実行主体権限を事前確認し、対象表RLS/権限・RPC等をCOMMIT前確認。seed/読書管理/Authユーザー/既存データの変更なし。SQL自身はprojectを証明しないので実行前にオーナーがk-life-log/Project Refを照合。ファイルはREVIEW ONLYでDB実行・構文実行検証はしていない。
 - 接続設定の実装案（今回は実装しない）：新しい本番buildモードだけでMEMO_PRODUCTION_SUPABASE_URL / MEMO_PRODUCTION_SUPABASE_PUBLISHABLE_KEYをbuildプロセスから取得し、未設定/不正なら失敗。本番Project Refのオーナー確認後に固定originを確定し、dev originを拒否する。同じ検証済みoriginをAuth/RPC/CSPへ注入。キーはsb_publishable_のみを受け、secret/service_roleを拒否。公開キーは配信JSから読める公開設定であり秘密と扱わない。値をログ・Gitへ保存しない。
@@ -21,7 +78,7 @@ build:product-productionで公開URL/キーをbuild時注入し、本番入口�
 
 本番Project RefとURLの一致・Publishable keyの存在は、その後のHuman確認で報告済み（値は記録しない）。実build/試験は合成URL/公開キーのみで、実設定のbuild注入・接続は未実施。実設定使用・公開は別途承認。詳細は[製品UI統合契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)のR04節。関連回帰9ファイル/443件＋SDK標準Auth/通知/RPC境界3ファイル/29件、計472件PASS（終了コード0）。typecheck・local/dev cloud/合成本番候補build・dev/本番SDK成果物検査・diff check PASS。本番入口2件と不正設定拒否15件を追加し、devの既存14件もPASS。全Vitest/Playwright CLI・Human UATの再実施は今回行わない。前節の実装案/未承認記述は提案時の履歴であり、今回承認範囲はこの実装とoffline検証まで。Q05 COMPLETE/実スマホ・実音声の延期/CLI既知課題は維持。
 
-### R04 STEP 2：本番適用前の確認準備（未接続・未実行）
+### R04 STEP 2：本番適用前の確認準備（当時の未接続・未実行記録）
 
 [最小読取専用preflight](../tools/memo/doc/v1.1.0/memo_v1_1_production_preflight.sql)をproduction_applyの事前条件から作成。単一結果表の5行すべてpassed=true、行5のcollision_count=0（衝突時はdetails.objectsに対象名/種別）を期待する。従来の判定条件は維持。旧版では権限7項目だけをHuman確認した。その後、PR #135の単一結果表版をHumanが本番で実行し、先生は全5項目PASSと判定。詳細は次節。projectの識別はSQLで代用せず、オーナーがk-life-logのGeneralのProject RefとProject URLのhostを照合。API Keysでは同じprojectのsb_publishable_キーであることを確認し、値をチャット/Gitへ転記しない。anon JWT/secret/service_roleだけしかない場合は設定を変えず報告する。本番設定確定・キー取得/利用は別途承認。
 
@@ -29,7 +86,7 @@ build:product-productionで公開URL/キーをbuild時注入し、本番入口�
 
 停止条件：project/キー種別が不明、不一致/非publishable、PostgreSQL17/UTF8以外、pgcrypto配置/所属不一致、必要権限不足、対象オブジェクトあり、結果欠落/NULL/エラー、同時DDL/権限変更、本番適用の個別承認なし。自動補完/GRANT/再試行なし。今回の成果物は確認準備だけで、読取SQL実行も承認していない。
 
-### R04 STEP 2：本番preflight Human PASS・適用手順案（適用未承認）
+### R04 STEP 2：本番preflight Human PASS・適用手順案（当時の適用未承認記録）
 
 オーナー報告を根拠に先生が全5項目PASSと判定：k-life-log、PostgreSQL17.11/UTF8/read_only=true、execution_role=postgres、Supabase前提すべてtrue、pgcryptoすべてtrue、権限7項目すべてtrue、衝突0件/objects=[]。Project RefとURLの一致・Publishable keyの存在もHuman確認済み。値・未報告日時は記録しない。AIによる接続/SQL実行ではない。これは本番適用や実Auth/RPC成功の証拠ではなく、production_apply全体のSQLエンジン検証は依然未実施の残存リスク。
 
@@ -57,7 +114,7 @@ build:product-productionで公開URL/キーをbuild時注入し、本番入口�
 
 | 対象 | 残作業 | 必要なオーナー判断 |
 | --- | --- | --- |
-| R04（要確認） | Pages公開元はSTEP 1でmain/(root)のbranch配信とHuman確認済み。残りは公開資産・本番接続設定/権限・最終公開前ゲートの確認。旧「未結線/進行中」文書のSSOT整合を必要範囲で整理 | 公開URL/方式・本番対象と設定・必要な権限対応・今回のCLI未解決課題を含む公開可否。既存dev監査を理由なく再実行しない |
+| R04（要確認） | Pages公開元はSTEP 1でmain/(root)のbranch配信とHuman確認済み。本番DB適用・権限事後確認、本番build・環境変数解除はHuman PASS。生成資産の静的確認完了。残りは最終公開前ゲートの確認。旧「未結線/進行中」文書のSSOT整合を必要範囲で整理 | 公開URL/方式・本番対象と設定・必要な権限対応・今回のCLI未解決課題を含む公開可否。既存dev監査を理由なく再実行しない |
 | R05（未着手） | 承認済み資産切替、公開後のURL/起動/キャッシュ確認、停止保守版・復旧手順の既存実装/設計との照合 | 公開・本番操作の個別承認、停止/復旧へ移る判断。コードrollbackとデータ復旧を混同しない |
 | O02/O03（要確認） | 障害時案内・停止復旧運用、バックアップ平文保管/履歴喪失の利用者案内を既存仕様から整理 | 案内内容と運用担当の受入。新しい機構を機械的に追加しない |
 | O04（要確認） | 監査/ACL原本の保管・廃棄方針とT02完全性判断の残件 | 原本はオーナーのみ確認。実廃棄は別途承認、今回原本へアクセスしない |
@@ -205,7 +262,7 @@ Q04 Step 4第6単位：通常cloudメモ1件のゴミ箱移動を既存C04 chang
 | R01 | 全体進捗表の初期作成と人間レビュー | 完了 | 本ファイル、[PR #47](https://github.com/k-tsuichihara/MyHomePage/pull/47)、今回のオーナー合意 | 必要。PR #47マージにより初期作成・レビューの範囲は完了。今回の方針反映はレビュー待ち。以後も運用ルールに従い更新する |
 | R02 | TS製品入口・ビルド配信・既存公開UI統合 | 完了 | [製品UI統合契約](../tools/memo/tests/PRODUCT-UI-INTEGRATION.md)、package.json、PR #69〜#77と今回の初期復元/保守候補 | local製品候補のAI実装・オフライン検証範囲でCOMPLETE、今回差分はレビュー待ち。音声・v3導入・バックアップ/各復元と停止保守候補、資産整合性を接続。公開HTML実切替はR05、実データはR03、公開構成/受入はR04/Q05、Auth/cloud製品接続はC03〜C05へ残す。single-rpc未認定。権限課題R02とは別 |
 | R03 | 既存データ移行の準備・確認 | 完了 | 既存v3/移行/原値退避のAI検証、オーナー完了判断 | 実利用データの形式確認・実データ移行試験はリリース条件から除外。必要な既存データはオーナーが必要に応じ対応。既存保護機構は維持。実データ移行を実施済みと認定したものではない。公開資産切替/配信確認はR04/R05へ |
-| R04 | Pages設定・公開資産・本番DB/権限・公開前ゲート確認 | 要確認 | 切替設計、AGENTS.md§14・15、DB監査記録、今回のオーナー合意 | 必要。AIは検証準備、人間は本番設定確認・公開承認。STEP 1でPagesはmain/(root)のbranch配信とHuman確認済み。本番k-life-logはHealthy/Email有効、メモ表なし、RPC/RLS/GRANT未確認。開発監査成功は本番適用承認ではない |
+| R04 | Pages設定・公開資産・本番DB/権限・公開前ゲート確認 | 要確認 | 切替設計、AGENTS.md§14・15、DB監査記録、今回のオーナー合意 | 必要。AIは検証準備、人間は本番設定確認・公開承認。STEP 1でPagesはmain/(root)のbranch配信とHuman確認済み。本番k-life-logはHumanがapply成功・verify24行PASS（23件確認/失敗0）を報告し、5表/12関数/RLS/権限/policyの適用・事後確認完了。次は実設定production build/生成資産の静的確認。公開資産・公開前ゲートは残る。CLI課題と事前隔離SQLエンジン検証未実施の履歴は維持 |
 | R05 | 承認済み公開切替・停止保守版・復旧手順の製品化/適用 | 未着手 | 切替設計、v3契約、今回のオーナー合意 | 必要。公開切替・公開後確認を含む。v3対応の書込停止保守版とコードrollback/データ復旧の分離が必要。AIは準備を担当し、公開・移行・権限変更の実行は人間の別承認後に限る |
 
 ## 8. リリース後の運用・改善
